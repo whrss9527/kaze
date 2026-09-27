@@ -298,6 +298,16 @@ struct SharePage: View {
                             .lineLimit(1)
                             .frame(minWidth: 60, alignment: .trailing)
                     }
+                    .contentShape(Rectangle())
+                    .contextMenu {
+                        if !connection.host.isEmpty {
+                            ForEach(RulePolicy.allCases) { policy in
+                                Button("让 \(connection.host) \(policy.title)") {
+                                    engine.addCustomRule(pattern: connection.host, policy: policy)
+                                }
+                            }
+                        }
+                    }
                 }
                 HStack(alignment: .top) {
                     Text("PS5 的代理设置只对系统流量（联网测试、PSN、商店）和浏览器生效。如果打开 YouTube 这类应用时这里没有出现 youtube.com、googlevideo.com 的连接，说明那个应用用的是自己的网络栈、没走代理；用 PS5 的浏览器打开同一个网站可以对照。域名一栏如果是 IP，说明设备自己解析的 DNS 被污染了，内核会从 TLS 握手里取回域名再分流。")

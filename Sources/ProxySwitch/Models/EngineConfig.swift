@@ -138,6 +138,98 @@ enum RulePresets {
     }
 }
 
+/// 自定义规则的去向。
+enum RulePolicy: String, Codable, CaseIterable, Identifiable {
+    case proxy
+    case direct
+    case reject
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .proxy: return "走节点"
+        case .direct: return "直连"
+        case .reject: return "拦截"
+        }
+    }
+
+    /// 内核里的策略名。
+    var target: String {
+        switch self {
+        case .proxy: return RuleConverter.proxyGroup
+        case .direct: return "DIRECT"
+        case .reject: return "REJECT"
+        }
+    }
+}
+
+/// 一条自定义分流规则：域名（含子域名）或 IP / 网段固定走某个去向。排在预设规则前面，全局模式下也生效。
+struct CustomRule: Codable, Identifiable, Equatable, Hashable {
+    var id: UUID = UUID()
+    var pattern: String = ""
+    var policy: RulePolicy = .proxy
+    var enabled: Bool = true
+
+    init(pattern: String, policy: RulePolicy) {
+        self.pattern = CustomRule.normalize(pattern)
+        self.policy = policy
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, pattern, policy, enabled
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        pattern = try container.decodeIfPresent(String.self, forKey: .pattern) ?? ""
+        policy = try container.decodeIfPresent(RulePolicy.self, forKey: .policy) ?? .proxy
+        enabled = try container.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
+    }
+
+    /// 把「https://www.YouTube.com/watch」「*.youtube.com」「youtube.com:443」这样的输入整理成 youtube.com 形式；IP 和网段原样保留。
+    static func normalize(_ text: String) -> String {
+        var value = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        for scheme in ["http://", "https://", "socks5://"] where value.hasPrefix(scheme) {
+            value = String(value.dropFirst(scheme.count))
+        }
+        if let slash = value.firstIndex(of: "/"), IPPrefix.normalize(value) == nil {
+            value = String(value[..<slash])
+        }
+        if value.hasPrefix("*.") {
+            value = String(value.dropFirst(2))
+        } else if value.hasPrefix(".") {
+            value = String(value.dropFirst())
+        }
+        // 域名后面带的端口去掉；IPv6 里的冒号不算。
+        if !value.contains("]"), let colon = value.lastIndex(of: ":"), value[value.index(after: colon)...].allSatisfy(\.isNumber), value.filter({ $0 == ":" }).count == 1 {
+            value = String(value[..<colon])
+        }
+        return value.trimmingCharacters(in: CharacterSet(charactersIn: "."))
+    }
+
+    /// 校验输入，返回问题；没问题返回 nil。
+    static func validate(_ text: String) -> String? {
+        let value = normalize(text)
+        if value.isEmpty { return "请填写域名或 IP" }
+        if IPPrefix.normalize(value) != nil || RuleConverter.looksLikeDomain(value) { return nil }
+        return "认不出「\(value)」：填域名（比如 youtube.com）或 IP / 网段（比如 8.8.8.8、10.0.0.0/8）"
+    }
+
+    /// 内核规则行；认不出来的返回 nil。
+    var line: String? {
+        let value = CustomRule.normalize(pattern)
+        if let prefix = IPPrefix.normalize(value) {
+            return "\(prefix.contains(":") ? "IP-CIDR6" : "IP-CIDR"),\(prefix),\(policy.target),no-resolve"
+        }
+        if RuleConverter.looksLikeDomain(value) {
+            return "DOMAIN-SUFFIX,\(value),\(policy.target)"
+        }
+        return nil
+    }
+}
+
 /// 内置代理（内核）的设置。
 struct EngineConfig: Codable, Equatable {
     var enabled: Bool = true
@@ -150,11 +242,13 @@ struct EngineConfig: Codable, Equatable {
     var selectedNode: String?
     /// 订阅自动更新的间隔（小时）。
     var updateIntervalHours: Int = 24
+    /// 自定义规则，排在预设规则前面。
+    var customRules: [CustomRule] = []
 
     init() {}
 
     private enum CodingKeys: String, CodingKey {
-        case enabled, subscriptions, mode, ruleSource, mixedPort, apiPort, selectedNode, updateIntervalHours
+        case enabled, subscriptions, mode, ruleSource, mixedPort, apiPort, selectedNode, updateIntervalHours, customRules
     }
 
     init(from decoder: Decoder) throws {
@@ -167,10 +261,14 @@ struct EngineConfig: Codable, Equatable {
         apiPort = try container.decodeIfPresent(Int.self, forKey: .apiPort) ?? 9097
         selectedNode = try container.decodeIfPresent(String.self, forKey: .selectedNode)
         updateIntervalHours = try container.decodeIfPresent(Int.self, forKey: .updateIntervalHours) ?? 24
+        customRules = try container.decodeIfPresent([CustomRule].self, forKey: .customRules) ?? []
     }
 
     var activeSubscriptions: [Subscription] { subscriptions.filter { $0.enabled && !$0.url.isEmpty } }
 
     /// 有订阅且没关掉时内核才需要运行。
     var wantsCore: Bool { enabled && !activeSubscriptions.isEmpty }
+
+    /// 启用的自定义规则对应的内核规则行。
+    var customRuleLines: [String] { customRules.filter(\.enabled).compactMap(\.line) }
 }

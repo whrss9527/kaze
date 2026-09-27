@@ -198,7 +198,7 @@ enum RuleConverter {
         }
     }
 
-    private static func looksLikeDomain(_ text: String) -> Bool {
+    static func looksLikeDomain(_ text: String) -> Bool {
         guard text.contains("."), !text.contains(" "), !text.contains(":") else { return false }
         return text.allSatisfy { $0.isLetter || $0.isNumber || $0 == "." || $0 == "-" || $0 == "_" }
     }

@@ -697,6 +697,46 @@ final class SleepGuardTests: XCTestCase {
     }
 }
 
+/// 自定义规则：输入的整理、校验、生成的规则行和在配置里的位置。
+final class CustomRuleTests: XCTestCase {
+    func testNormalizeAndLines() throws {
+        XCTAssertEqual(CustomRule.normalize("https://www.YouTube.com/watch?v=1"), "www.youtube.com")
+        XCTAssertEqual(CustomRule.normalize("*.youtube.com"), "youtube.com")
+        XCTAssertEqual(CustomRule.normalize(" .Example.org. "), "example.org")
+        XCTAssertEqual(CustomRule.normalize("youtube.com:443"), "youtube.com")
+        XCTAssertEqual(CustomRule.normalize("10.0.0.0/8"), "10.0.0.0/8")
+        XCTAssertEqual(CustomRule.normalize("fe80::1"), "fe80::1")
+        XCTAssertEqual(CustomRule(pattern: "YouTube.com", policy: .proxy).line, "DOMAIN-SUFFIX,youtube.com,节点")
+        XCTAssertEqual(CustomRule(pattern: "8.8.8.8", policy: .direct).line, "IP-CIDR,8.8.8.8/32,DIRECT,no-resolve")
+        XCTAssertEqual(CustomRule(pattern: "10.0.0.0/8", policy: .reject).line, "IP-CIDR,10.0.0.0/8,REJECT,no-resolve")
+        XCTAssertEqual(CustomRule(pattern: "fe80::/10", policy: .direct).line, "IP-CIDR6,fe80::/10,DIRECT,no-resolve")
+        XCTAssertNil(CustomRule(pattern: "not a domain", policy: .proxy).line)
+        XCTAssertNil(CustomRule.validate("youtube.com"))
+        XCTAssertNil(CustomRule.validate("8.8.8.8"))
+        XCTAssertNotNil(CustomRule.validate(""))
+        XCTAssertNotNil(CustomRule.validate("not a domain"))
+        // 配置里的位置：局域网直连之后、预设规则之前；停用的不出现；全局模式下也在。
+        var engine = EngineConfig()
+        engine.customRules = [CustomRule(pattern: "youtube.com", policy: .proxy), CustomRule(pattern: "bank.example", policy: .direct)]
+        engine.customRules[1].enabled = false
+        let input = CoreConfigBuilder.Input(engine: engine, secret: "s", directory: URL(fileURLWithPath: "/tmp/core"), testURL: "https://t", rules: RuleConverter.chinaDirectRules)
+        let yaml = CoreConfigBuilder.yaml(input)
+        XCTAssertTrue(yaml.contains("  - \"IP-CIDR6,fe80::/10,DIRECT,no-resolve\"\n  - \"DOMAIN-SUFFIX,youtube.com,节点\"\n  - \"DOMAIN-SUFFIX,cn,DIRECT\"\n"))
+        XCTAssertFalse(yaml.contains("bank.example"))
+        var global = input
+        global.rules = RuleConverter.globalRules
+        XCTAssertTrue(CoreConfigBuilder.yaml(global).contains("  - \"DOMAIN-SUFFIX,youtube.com,节点\"\n  - \"MATCH,节点\"\n"))
+        // 共享给设备时同样带着自定义规则。
+        var shared = input
+        shared.share = ShareInputs(port: 7892, allowedPrefixes: ["127.0.0.0/8"], upstream: .engine)
+        XCTAssertTrue(CoreConfigBuilder.yaml(shared).contains("    - \"DOMAIN-SUFFIX,youtube.com,节点\"\n"))
+        // 存取。
+        let decoded = try JSONDecoder().decode(EngineConfig.self, from: try JSONEncoder().encode(engine))
+        XCTAssertEqual(decoded, engine)
+        XCTAssertTrue(try JSONDecoder().decode(EngineConfig.self, from: Data("{}".utf8)).customRules.isEmpty)
+    }
+}
+
 /// 局域网共享：设置的解析、上游的判断、内核配置里的入口，以及连接列表的归并。
 final class ShareTests: XCTestCase {
     func testShareConfig() throws {

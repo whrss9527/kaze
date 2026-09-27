@@ -15,6 +15,9 @@ struct NodesPage: View {
     @State private var showLog = false
     @State private var logText = ""
     @State private var nodeFilter = ""
+    @State private var newRulePattern = ""
+    @State private var newRulePolicy: RulePolicy = .proxy
+    @State private var ruleProblem: String?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -24,6 +27,7 @@ struct NodesPage: View {
                 subscriptionsSection
                 nodesSection
                 modeSection
+                customRulesSection
                 portsSection
                 if showLog {
                     logSection
@@ -308,6 +312,83 @@ struct NodesPage: View {
         guard !url.isEmpty else { return }
         customMode = false
         engine.setRuleSource(.url(url))
+    }
+
+    // MARK: - 自定义规则
+
+    private var customRulesSection: some View {
+        Section("自定义规则") {
+            if state.config.engine.customRules.isEmpty {
+                Text("让某个网站固定走节点、直连或者拦截。排在预设规则前面，全局模式下也生效。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            ForEach(state.config.engine.customRules) { rule in
+                HStack(spacing: 10) {
+                    Toggle("", isOn: Binding(get: { rule.enabled }, set: { value in
+                        var updated = rule
+                        updated.enabled = value
+                        engine.updateCustomRule(updated)
+                    }))
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                    Text(rule.pattern)
+                        .font(.system(size: 12, design: .monospaced))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Spacer()
+                    Picker("", selection: Binding(get: { rule.policy }, set: { value in
+                        var updated = rule
+                        updated.policy = value
+                        engine.updateCustomRule(updated)
+                    })) {
+                        ForEach(RulePolicy.allCases) { policy in
+                            Text(policy.title).tag(policy)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(width: 96)
+                    Button(role: .destructive) {
+                        engine.removeCustomRule(rule.id)
+                    } label: {
+                        Image(systemName: "trash")
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                    .help("删除这条规则")
+                }
+            }
+            HStack(spacing: 10) {
+                TextField("", text: $newRulePattern, prompt: Text("域名（含子域名）或 IP / 网段，比如 youtube.com、8.8.8.8、10.0.0.0/8"))
+                    .labelsHidden()
+                    .onSubmit { addRule() }
+                Picker("", selection: $newRulePolicy) {
+                    ForEach(RulePolicy.allCases) { policy in
+                        Text(policy.title).tag(policy)
+                    }
+                }
+                .labelsHidden()
+                .frame(width: 96)
+                Button("添加") { addRule() }
+                    .disabled(newRulePattern.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+            if let ruleProblem {
+                Text(ruleProblem)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+            Text("规则立刻生效，不用重启内核。「走节点」用面板里选中的节点。共享给 PS5 等设备的流量同样遵守这些规则；在「局域网共享」页的「最近的连接」上右键也能直接加。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func addRule() {
+        ruleProblem = engine.addCustomRule(pattern: newRulePattern, policy: newRulePolicy)
+        if ruleProblem == nil {
+            newRulePattern = ""
+        }
     }
 
     // MARK: - 端口

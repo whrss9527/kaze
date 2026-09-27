@@ -115,7 +115,8 @@ enum CoreConfigBuilder {
         lines.append("    lazy: true")
         lines.append("    proxies: [\"DIRECT\"]")
         if !useLine.isEmpty { lines.append(useLine) }
-        var rules = RuleConverter.lanRules + input.rules
+        // 局域网直连 → 用户自定义 → 预设规则；自定义规则在全局模式下也生效（全局 = 除局域网和你的例外之外都走节点）。
+        var rules = RuleConverter.lanRules + engine.customRuleLines + input.rules
         if !(rules.last?.hasPrefix("MATCH,") ?? false) {
             rules.append("MATCH,\(selectorGroup)")
         }

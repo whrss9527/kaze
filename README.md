@@ -27,7 +27,7 @@ Windows 版在 [proxyswitch](https://github.com/whrss9527/proxyswitch)，两边�
 
 1. 设置 → 节点与订阅，粘上机场给的订阅地址点「添加」。内核会下载解析，配置列表里自动多一条「节点代理」。
 2. 面板里开关「节点代理」就是开关它：开启后系统代理指向 `127.0.0.1:7890`（HTTP 和 SOCKS 同一个端口）。节点卡片里可以选节点、自动选择、测速、切换全局 / 规则。
-3. 规则分流的来源可以选内置的「国内直连」、johnshall 的几套小火箭规则，或者填自己的规则地址。小火箭 `.conf` 里的 `[Rule]` 段会转成内核规则：`DOMAIN-SUFFIX`、`DOMAIN-KEYWORD`、`IP-CIDR`、`GEOIP`、`RULE-SET`（下载后内联）、`FINAL` 都支持，`USER-AGENT`、`URL-REGEX` 这类内核不支持的会跳过；`Proxy` 类策略走面板里选中的节点。
+3. 「自定义规则」可以让某个域名（含子域名）或 IP / 网段固定走节点、直连或拦截，排在预设规则前面，全局模式下也生效，改了立刻生效。规则分流的来源可以选内置的「国内直连」、johnshall 的几套小火箭规则，或者填自己的规则地址。小火箭 `.conf` 里的 `[Rule]` 段会转成内核规则：`DOMAIN-SUFFIX`、`DOMAIN-KEYWORD`、`IP-CIDR`、`GEOIP`、`RULE-SET`（下载后内联）、`FINAL` 都支持，`USER-AGENT`、`URL-REGEX` 这类内核不支持的会跳过；`Proxy` 类策略走面板里选中的节点。
 4. 内核是 [mihomo](https://github.com/MetaCubeX/mihomo)（Clash Meta，GPL-3.0），以独立程序的形式打包在 `ProxySwitch.app/Contents/MacOS/mihomo`，默认只监听本机端口（开了局域网共享才多一个给局域网设备的入口），配置在 `~/Library/Application Support/ProxySwitch/core/`。GeoIP 数据来自 [MetaCubeX/meta-rules-dat](https://github.com/MetaCubeX/meta-rules-dat)。
 5. 不支持 TUN 模式：只有走系统代理（或环境变量）的程序会经过它，和小火箭 Mac 版的默认行为一样。
 

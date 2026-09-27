@@ -569,6 +569,38 @@ final class Engine: ObservableObject {
         writeEngine?(engine)
     }
 
+    // MARK: - 自定义规则
+
+    /// 加一条自定义规则；已有同样的域名就改它的去向。返回问题描述，成功返回 nil。
+    @discardableResult
+    func addCustomRule(pattern: String, policy: RulePolicy) -> String? {
+        if let problem = CustomRule.validate(pattern) { return problem }
+        var engine = engineConfig
+        let rule = CustomRule(pattern: pattern, policy: policy)
+        if let index = engine.customRules.firstIndex(where: { $0.pattern == rule.pattern }) {
+            engine.customRules[index].policy = policy
+            engine.customRules[index].enabled = true
+        } else {
+            engine.customRules.append(rule)
+        }
+        writeEngine?(engine)
+        Log.info("自定义规则：\(rule.pattern) \(policy.title)")
+        return nil
+    }
+
+    func updateCustomRule(_ rule: CustomRule) {
+        var engine = engineConfig
+        guard let index = engine.customRules.firstIndex(where: { $0.id == rule.id }) else { return }
+        engine.customRules[index] = rule
+        writeEngine?(engine)
+    }
+
+    func removeCustomRule(_ id: UUID) {
+        var engine = engineConfig
+        engine.customRules.removeAll { $0.id == id }
+        writeEngine?(engine)
+    }
+
     @discardableResult
     func addSubscription(name: String, url: String) -> String? {
         if let problem = Subscription.validate(url: url) { return problem }

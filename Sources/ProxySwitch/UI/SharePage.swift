@@ -20,6 +20,7 @@ struct SharePage: View {
                 addressSection
                 accessSection
                 clientsSection
+                recentSection
             }
             .formStyle(.grouped)
             .scrollContentBackground(.hidden)
@@ -29,10 +30,10 @@ struct SharePage: View {
             clientsText = state.share.allowedClients
         }
         .task {
-            // 页面开着时每几秒读一次连接列表，能看到 PS5 连上来了没有。
+            // 页面开着时每两秒读一次连接列表：能看到 PS5 连上来了没有，短连接也会记进「最近的连接」。
             while !Task.isCancelled {
                 clients = await engine.shareClients()
-                try? await Task.sleep(for: .seconds(3))
+                try? await Task.sleep(for: .seconds(2))
             }
         }
     }
@@ -219,7 +220,49 @@ struct SharePage: View {
         if !client.lastHost.isEmpty {
             text += " · 最近 \(client.lastHost)"
         }
+        if !client.lastOutbound.isEmpty {
+            text += " → \(client.lastOutbound)"
+        }
         return text
+    }
+
+    // MARK: - 最近的连接
+
+    private var recentSection: some View {
+        Section("最近的连接") {
+            if engine.shareConnections.isEmpty {
+                Text("设备经共享入口发起的连接会按时间列在这里：访问了哪个域名、走的是哪个节点还是直连、命中了哪条规则。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(engine.shareConnections.prefix(20)) { connection in
+                    HStack(spacing: 8) {
+                        Text(connection.target)
+                            .font(.system(size: 11, design: .monospaced))
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        Spacer()
+                        Text(connection.rule)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                        Text(connection.outbound)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(connection.outbound == "DIRECT" ? Color.secondary : Color.accentColor)
+                            .lineLimit(1)
+                            .frame(minWidth: 60, alignment: .trailing)
+                    }
+                }
+                HStack(alignment: .top) {
+                    Text("PS5 的代理设置只对系统流量（联网测试、PSN、商店）和浏览器生效。如果打开 YouTube 这类应用时这里没有出现 youtube.com、googlevideo.com 的连接，说明那个应用用的是自己的网络栈、没走代理；用 PS5 的浏览器打开同一个网站可以对照。域名一栏如果是 IP，说明设备自己解析的 DNS 被污染了，内核会从 TLS 握手里取回域名再分流。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button("清空") { engine.clearShareHistory() }
+                        .controlSize(.small)
+                }
+            }
+        }
     }
 
     // MARK: - 操作

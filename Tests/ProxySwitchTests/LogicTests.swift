@@ -696,11 +696,13 @@ final class ShareTests: XCTestCase {
     func testCoreConfigWithShare() {
         var engine = EngineConfig()
         var input = CoreConfigBuilder.Input(engine: engine, secret: "s", directory: URL(fileURLWithPath: "/tmp/core"), testURL: "https://t", rules: RuleConverter.chinaDirectRules)
-        // 没开共享：没有入口，也没有名单。
+        // 没开共享：没有入口，也没有名单。域名嗅探总是开着（设备按假 IP 来连时也能按域名分流）。
         let plain = CoreConfigBuilder.yaml(input)
         XCTAssertFalse(plain.contains("listeners:"))
         XCTAssertFalse(plain.contains("lan-allowed-ips:"))
         XCTAssertFalse(plain.contains("sub-rules:"))
+        XCTAssertTrue(plain.contains("\nsniffer:\n  enable: true\n  parse-pure-ip: true\n  override-destination: true\n"))
+        XCTAssertTrue(plain.contains("    TLS:\n      ports: [443, 8443]\n"))
         // 只为共享而运行：本机的代理端口关掉，共享入口在 0.0.0.0，流量直连。
         input.share = ShareInputs(port: 7892, allowedPrefixes: ["127.0.0.0/8", "192.168.0.0/16"], upstream: .direct)
         let direct = CoreConfigBuilder.yaml(input)
@@ -758,9 +760,18 @@ final class ShareTests: XCTestCase {
         XCTAssertEqual(clients[0].upload, 11)
         XCTAssertEqual(clients[0].download, 102)
         XCTAssertEqual(clients[0].lastHost, "store.playstation.com")
+        XCTAssertEqual(clients[0].lastOutbound, "DIRECT")
         XCTAssertEqual(clients[1].lastHost, "example.org")
+        XCTAssertEqual(clients[1].lastOutbound, "上游代理")
         // 内核在没有连接时给的是 null。
         XCTAssertTrue(ShareClient.group([], listener: "lan-share").isEmpty)
+        // 「最近的连接」里的一条：目标、出口、规则。
+        let recent = ShareConnection(connections[0])
+        XCTAssertEqual(recent.target, "store.playstation.com:443")
+        XCTAssertEqual(recent.outbound, "DIRECT")
+        XCTAssertEqual(recent.rule, "Match")
+        XCTAssertEqual(recent.client, "192.168.1.20")
+        XCTAssertEqual(ShareConnection(connections[1]).target, "5.6.7.8:443")
     }
 
     func testShareURLCommands() {

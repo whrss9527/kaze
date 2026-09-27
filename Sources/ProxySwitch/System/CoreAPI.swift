@@ -74,7 +74,17 @@ struct CoreConnection: Decodable, Equatable {
     var upload: Int64
     var download: Int64
     var start: String?
+    /// 第一个是实际用的出口（节点名、DIRECT 或上游代理），最后一个是最外层的策略组。
     var chains: [String]?
+    var rule: String?
+    var rulePayload: String?
+
+    var outbound: String { chains?.first ?? "" }
+
+    /// 命中的规则，比如「Match」「GeoIP CN」「DomainSuffix cn」。
+    var ruleText: String {
+        [rule ?? "", rulePayload ?? ""].filter { !$0.isEmpty }.joined(separator: " ")
+    }
 }
 
 /// 正在经共享入口上网的一台设备（按来源 IP 归并的连接）。
@@ -85,6 +95,8 @@ struct ShareClient: Identifiable, Equatable {
     var download: Int64
     /// 最近一个连接访问的主机。
     var lastHost: String
+    /// 最近一个连接走的出口。
+    var lastOutbound: String
 
     var id: String { ip }
 
@@ -101,14 +113,39 @@ struct ShareClient: Identifiable, Equatable {
                 client.upload += connection.upload
                 client.download += connection.download
                 if !host.isEmpty { client.lastHost = host }
+                if !connection.outbound.isEmpty { client.lastOutbound = connection.outbound }
                 byIP[ip] = client
             } else {
                 order.append(ip)
-                byIP[ip] = ShareClient(ip: ip, connections: 1, upload: connection.upload, download: connection.download, lastHost: host)
+                byIP[ip] = ShareClient(ip: ip, connections: 1, upload: connection.upload, download: connection.download, lastHost: host, lastOutbound: connection.outbound)
             }
         }
         return order.compactMap { byIP[$0] }
     }
+}
+
+/// 经共享入口的一条连接的摘要，「最近的连接」列表用：哪台设备访问了什么、走了哪里、命中了哪条规则。
+struct ShareConnection: Identifiable, Equatable {
+    var id: String
+    var client: String
+    var host: String
+    var port: String
+    var outbound: String
+    var rule: String
+    var start: String
+
+    init(_ connection: CoreConnection) {
+        id = connection.id
+        client = connection.metadata.sourceIP ?? ""
+        host = connection.metadata.displayHost
+        port = connection.metadata.destinationPort ?? ""
+        outbound = connection.outbound
+        rule = connection.ruleText
+        start = connection.start ?? ""
+    }
+
+    /// host:port。
+    var target: String { port.isEmpty ? host : "\(host):\(port)" }
 }
 
 enum CoreAPIError: LocalizedError {

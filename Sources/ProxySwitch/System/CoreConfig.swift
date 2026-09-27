@@ -44,6 +44,18 @@ enum CoreConfigBuilder {
         lines.append("profile:")
         lines.append("  store-selected: true")
         lines.append("  store-fake-ip: false")
+        // 域名嗅探：设备自己解析 DNS 被污染后会按（假）IP 来连（PS5 这类设备常见），从 TLS / HTTP 握手里取回域名，
+        // 按域名分流，并把域名而不是假 IP 交给节点去解析。本机的流量同样受益。
+        lines.append("sniffer:")
+        lines.append("  enable: true")
+        lines.append("  parse-pure-ip: true")
+        lines.append("  override-destination: true")
+        lines.append("  force-dns-mapping: true")
+        lines.append("  sniff:")
+        lines.append("    HTTP:")
+        lines.append("      ports: [80, 8080-8880]")
+        lines.append("    TLS:")
+        lines.append("      ports: [443, 8443]")
         if let share = input.share {
             // 谁能连进来：这份名单对所有入口生效，所以本机回环也在里面。
             lines.append("lan-allowed-ips:")

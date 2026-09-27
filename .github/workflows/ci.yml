@@ -111,6 +111,7 @@ jobs:
           grep -q "局域网共享已开启" "$support/proxyswitch.log" || { echo "局域网共享没有开启"; exit 1; }
           grep -q 'name: "lan-share"' "$support/core/config.yaml" || { echo "内核配置里没有共享入口"; exit 1; }
           grep -q 'MATCH,DIRECT' "$support/core/config.yaml" || { echo "本机没开代理，共享入口应该直连"; exit 1; }
+          grep -q '^sniffer:' "$support/core/config.yaml" || { echo "内核配置里没有开域名嗅探"; exit 1; }
           nc -z 127.0.0.1 7892 || { echo "共享端口没有监听"; exit 1; }
           pkill -x ProxySwitch || true
           sleep 3

@@ -48,8 +48,12 @@ final class Engine: ObservableObject {
 
     @Published private(set) var status: Status = .off
     @Published private(set) var shareStatus: ShareStatus = .off
+    /// 最近经共享入口的连接（新的在前），共享页开着时轮询累积；内核停止时清空。
+    @Published private(set) var shareConnections: [ShareConnection] = []
     /// 局域网共享的参数，AppState 按本机的代理状态算出来；nil 表示没开。
     private(set) var shareInputs: ShareInputs?
+    private var seenShareConnections = Set<String>()
+    static let shareHistoryLimit = 60
     @Published private(set) var nodes: [Node] = []
     /// 「节点」组当前选中的：某个节点、自动选择或 DIRECT。
     @Published private(set) var currentSelection: String?
@@ -264,6 +268,7 @@ final class Engine: ObservableObject {
         lastConfigText = nil
         status = .off
         shareStatus = shareInputs == nil ? .off : .starting
+        clearShareHistory()
         nodes = []
         currentSelection = nil
         autoNode = nil
@@ -395,11 +400,36 @@ final class Engine: ObservableObject {
         onStatusChanged?()
     }
 
-    /// 正在经共享入口上网的设备。
+    /// 正在经共享入口上网的设备；顺便把新出现的连接记到「最近的连接」里。
     func shareClients() async -> [ShareClient] {
         guard let api, isRunning, shareInputs != nil else { return [] }
         let connections = (try? await api.connections()) ?? []
+        recordShareConnections(connections)
         return ShareClient.group(connections, listener: CoreConfigBuilder.shareListener)
+    }
+
+    func clearShareHistory() {
+        shareConnections = []
+        seenShareConnections = []
+    }
+
+    /// /connections 只列出还开着的连接，短连接一闪就没了，所以每次轮询把没见过的记下来。
+    private func recordShareConnections(_ connections: [CoreConnection]) {
+        let fresh = connections
+            .filter { $0.metadata.inboundName == CoreConfigBuilder.shareListener && !seenShareConnections.contains($0.id) }
+            .sorted { ($0.start ?? "") < ($1.start ?? "") }
+        guard !fresh.isEmpty else { return }
+        for connection in fresh {
+            seenShareConnections.insert(connection.id)
+            shareConnections.insert(ShareConnection(connection), at: 0)
+        }
+        if shareConnections.count > Self.shareHistoryLimit {
+            shareConnections.removeLast(shareConnections.count - Self.shareHistoryLimit)
+        }
+        // 见过的 id 别无限涨：够多了就只留列表里的和现在还开着的。
+        if seenShareConnections.count > 2000 {
+            seenShareConnections = Set(shareConnections.map(\.id)).union(connections.map(\.id))
+        }
     }
 
     private func rules(for engine: EngineConfig) async throws -> [String] {

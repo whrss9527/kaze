@@ -13,11 +13,15 @@ struct ShareConfig: Codable, Equatable {
     var port: Int = ShareConfig.defaultPort
     /// 只允许这些设备使用（IP 或 CIDR，逗号分隔）；空表示局域网里的所有设备。
     var allowedClients: String = ""
+    /// 共享期间不让 Mac 进入空闲睡眠（显示器照常可以关）。
+    var keepAwake: Bool = true
+    /// 电池供电时也保持；默认只在接电源时。
+    var keepAwakeOnBattery: Bool = false
 
     init() {}
 
     private enum CodingKeys: String, CodingKey {
-        case enabled, port, allowedClients
+        case enabled, port, allowedClients, keepAwake, keepAwakeOnBattery
     }
 
     init(from decoder: Decoder) throws {
@@ -25,6 +29,8 @@ struct ShareConfig: Codable, Equatable {
         enabled = try container.decodeIfPresent(Bool.self, forKey: .enabled) ?? false
         port = try container.decodeIfPresent(Int.self, forKey: .port) ?? ShareConfig.defaultPort
         allowedClients = try container.decodeIfPresent(String.self, forKey: .allowedClients) ?? ""
+        keepAwake = try container.decodeIfPresent(Bool.self, forKey: .keepAwake) ?? true
+        keepAwakeOnBattery = try container.decodeIfPresent(Bool.self, forKey: .keepAwakeOnBattery) ?? false
     }
 
     /// 内核 lan-allowed-ips 里的网段：用户填的设备，或者默认的局域网网段；回环总在里面。

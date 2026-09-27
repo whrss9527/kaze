@@ -112,6 +112,8 @@ jobs:
           grep -q 'name: "lan-share"' "$support/core/config.yaml" || { echo "内核配置里没有共享入口"; exit 1; }
           grep -q 'MATCH,DIRECT' "$support/core/config.yaml" || { echo "本机没开代理，共享入口应该直连"; exit 1; }
           grep -q '^sniffer:' "$support/core/config.yaml" || { echo "内核配置里没有开域名嗅探"; exit 1; }
+          # 共享开着时应该在阻止空闲睡眠（runner 没有电池，算接电源）。
+          pmset -g assertions | grep -q "ProxySwitch" || { pmset -g assertions; echo "共享期间没有阻止睡眠"; exit 1; }
           nc -z 127.0.0.1 7892 || { echo "共享端口没有监听"; exit 1; }
           pkill -x ProxySwitch || true
           sleep 3

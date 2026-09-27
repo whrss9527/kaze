@@ -5,6 +5,7 @@ import SwiftUI
 struct SharePage: View {
     @ObservedObject var state: AppState
     @ObservedObject var engine: Engine
+    @ObservedObject var sleepGuard: SleepGuard
     @State private var portText = ""
     @State private var clientsText = ""
     @State private var clients: [ShareClient] = []
@@ -17,6 +18,7 @@ struct SharePage: View {
             PageHeader(title: "局域网共享", subtitle: "让 PS5、Switch、手机这些同一局域网里的设备把这台 Mac 当代理服务器，享受和本机一样的网络")
             Form {
                 shareSection
+                sleepSection
                 addressSection
                 accessSection
                 clientsSection
@@ -91,6 +93,50 @@ struct SharePage: View {
             Label(message, systemImage: "xmark.circle")
                 .foregroundStyle(.red)
                 .multilineTextAlignment(.trailing)
+        }
+    }
+
+    // MARK: - 保持唤醒
+
+    private var sleepSection: some View {
+        Section("保持唤醒") {
+            Toggle("共享期间不让 Mac 睡眠（显示器可以关）", isOn: Binding(
+                get: { state.share.keepAwake },
+                set: { value in
+                    var share = state.share
+                    share.keepAwake = value
+                    state.setShare(share)
+                }
+            ))
+            if state.share.keepAwake {
+                Toggle("电池供电时也保持", isOn: Binding(
+                    get: { state.share.keepAwakeOnBattery },
+                    set: { value in
+                        var share = state.share
+                        share.keepAwakeOnBattery = value
+                        state.setShare(share)
+                    }
+                ))
+            }
+            LabeledContent("状态") { sleepStatusView }
+            Text("Mac 一睡，设备的网就断了，所以共享开着时阻止空闲睡眠；默认只在接电源时保持，免得忘了关把电用光。合盖仍然会睡眠：接上电源和外接显示器（合盖模式）可以合着盖子用。程序退出或关掉共享后恢复正常，「活动监视器 → 能耗」里能看到是 ProxySwitch 在阻止睡眠。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder
+    private var sleepStatusView: some View {
+        switch sleepGuard.status {
+        case .holding:
+            Label("正在保持唤醒", systemImage: "cup.and.saucer")
+                .foregroundStyle(.green)
+        case .pausedOnBattery:
+            Label("电池供电，已暂停保持唤醒", systemImage: "battery.50")
+                .foregroundStyle(.orange)
+        case .off:
+            Text(state.share.enabled && state.share.keepAwake ? "未保持" : "共享开启后生效")
+                .foregroundStyle(.secondary)
         }
     }
 

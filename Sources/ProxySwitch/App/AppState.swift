@@ -46,6 +46,7 @@ final class AppState: ObservableObject {
     let sync = CloudSync()
     let engine = Engine()
     let speed = SpeedMeter()
+    let sleepGuard = SleepGuard()
     /// 更新后正在重新启动：退出时不要按「退出时关闭代理」清理。
     var relaunching = false
 
@@ -124,7 +125,8 @@ final class AppState: ObservableObject {
             .sink { [weak self] _ in Task { @MainActor in self?.engineConfigChanged() } }
             .store(in: &cancellables)
         ensureEngineProfile()
-        engine.setShare(shareInputs)
+        sleepGuard.start()
+        shareStateChanged()
         engine.start()
         // 本机的代理状态、共享设置、配置任何一个变了，都重新算一遍共享的上游，内核跟着热加载。
         Publishers.CombineLatest3($snapshot, $persisted, $config)
@@ -259,6 +261,7 @@ final class AppState: ObservableObject {
 
     private func shareStateChanged() {
         engine.setShare(shareInputs)
+        sleepGuard.update(wanted: share.enabled && share.keepAwake, allowOnBattery: share.keepAwakeOnBattery)
     }
 
     // MARK: - 开关
@@ -551,6 +554,7 @@ final class AppState: ObservableObject {
 
     /// 退出时按设置关闭代理，并停掉内核。
     func handleExit() {
+        sleepGuard.release()
         defer { engine.shutdown() }
         guard !relaunching, config.disableOnExit, case .on(let profile) = status else { return }
         let desired = DesiredProxy(offWithAutoDiscovery: persisted.original?.autoDiscovery ?? snapshot.autoDiscovery, bypassDomains: snapshot.exceptions)

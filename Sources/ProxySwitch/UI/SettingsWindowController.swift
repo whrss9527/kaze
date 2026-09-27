@@ -132,7 +132,7 @@ struct SettingsRootView: View {
         switch navigation.page {
         case .profiles: ProfilesPage(state: state, navigation: navigation)
         case .nodes: NodesPage(state: state, engine: state.engine)
-        case .share: SharePage(state: state, engine: state.engine)
+        case .share: SharePage(state: state, engine: state.engine, sleepGuard: state.sleepGuard)
         case .general: GeneralPage(state: state)
         case .hotkey: HotkeyPage(state: state)
         case .sync: SyncPage(state: state, sync: state.sync)

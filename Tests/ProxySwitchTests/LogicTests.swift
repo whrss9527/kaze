@@ -672,6 +672,31 @@ final class ParsingTests: XCTestCase {
     }
 }
 
+/// 共享期间防睡眠：决定逻辑，以及真的向系统要一条断言再释放。
+final class SleepGuardTests: XCTestCase {
+    func testShouldHold() {
+        XCTAssertTrue(PowerAssertion.shouldHold(wanted: true, onBattery: false, allowOnBattery: false))
+        XCTAssertFalse(PowerAssertion.shouldHold(wanted: true, onBattery: true, allowOnBattery: false))
+        XCTAssertTrue(PowerAssertion.shouldHold(wanted: true, onBattery: true, allowOnBattery: true))
+        XCTAssertFalse(PowerAssertion.shouldHold(wanted: false, onBattery: false, allowOnBattery: true))
+    }
+
+    @MainActor
+    func testAssertionIsCreatedAndReleased() {
+        let guardian = SleepGuard()
+        guardian.update(wanted: true, allowOnBattery: true)
+        XCTAssertEqual(guardian.status, .holding)
+        XCTAssertTrue(PowerAssertion.currentNames().contains(PowerAssertion.name))
+        guardian.update(wanted: false, allowOnBattery: true)
+        XCTAssertEqual(guardian.status, .off)
+        XCTAssertFalse(PowerAssertion.currentNames().contains(PowerAssertion.name))
+        // 共享设置里的默认值：保持，但只在接电源时。
+        let share = ShareConfig()
+        XCTAssertTrue(share.keepAwake)
+        XCTAssertFalse(share.keepAwakeOnBattery)
+    }
+}
+
 /// 局域网共享：设置的解析、上游的判断、内核配置里的入口，以及连接列表的归并。
 final class ShareTests: XCTestCase {
     func testShareConfig() throws {

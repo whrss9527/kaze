@@ -697,6 +697,110 @@ final class SleepGuardTests: XCTestCase {
     }
 }
 
+/// 网址诊断：网址的整理、内核日志行的解析、结论引擎的每个场景。
+final class DiagnoseTests: XCTestCase {
+    func testTargetNormalize() {
+        XCTAssertEqual(DiagnoseTarget.normalize("youtube.com")?.absoluteString, "https://youtube.com")
+        XCTAssertEqual(DiagnoseTarget.normalize(" http://a.b/c?d=1 ")?.absoluteString, "http://a.b/c?d=1")
+        XCTAssertNil(DiagnoseTarget.normalize("ftp://x"))
+        XCTAssertNil(DiagnoseTarget.normalize(""))
+        XCTAssertNil(DiagnoseTarget.normalize("not a url"))
+        let https = DiagnoseTarget(url: DiagnoseTarget.normalize("youtube.com")!, perspective: .mac)
+        XCTAssertEqual(https.host, "youtube.com")
+        XCTAssertEqual(https.port, 443)
+        let http = DiagnoseTarget(url: DiagnoseTarget.normalize("http://example.com:8080/x")!, perspective: .device)
+        XCTAssertEqual(http.port, 8080)
+        XCTAssertEqual(DiagnoseTarget(url: DiagnoseTarget.normalize("http://example.com")!, perspective: .mac).port, 80)
+    }
+
+    func testRouteTraceParse() throws {
+        let matched = try XCTUnwrap(RouteTrace.parse("[TCP] 192.168.1.20:52011 --> www.youtube.com:443 match DomainSuffix(youtube.com) using 节点[香港 01]"))
+        XCTAssertEqual(matched.host, "www.youtube.com")
+        XCTAssertEqual(matched.port, 443)
+        XCTAssertEqual(matched.rule, "DomainSuffix(youtube.com)")
+        XCTAssertEqual(matched.chain, "节点[香港 01]")
+        XCTAssertEqual(matched.outbound, "香港 01")
+        XCTAssertFalse(matched.isDirect)
+        XCTAssertNil(matched.error)
+        let direct = try XCTUnwrap(RouteTrace.parse("[TCP] 127.0.0.1:60000 --> cp.cloudflare.com:443 match Match using DIRECT"))
+        XCTAssertEqual(direct.rule, "Match")
+        XCTAssertTrue(direct.isDirect)
+        let mode = try XCTUnwrap(RouteTrace.parse("[TCP] 127.0.0.1:60000(Safari) --> example.com:80 using GLOBAL"))
+        XCTAssertEqual(mode.rule, "")
+        XCTAssertEqual(mode.chain, "GLOBAL")
+        XCTAssertEqual(mode.port, 80)
+        let none = try XCTUnwrap(RouteTrace.parse("[TCP] 127.0.0.1:1 --> example.com:443 doesn't match any rule using DIRECT"))
+        XCTAssertEqual(none.rule, "没有命中任何规则")
+        XCTAssertTrue(none.isDirect)
+        let failed = try XCTUnwrap(RouteTrace.parse("[TCP] dial 节点 (match Match/) 192.168.1.20:52012 --> www.youtube.com:443 error: dial tcp 1.2.3.4:443: i/o timeout"))
+        XCTAssertEqual(failed.chain, "节点")
+        XCTAssertEqual(failed.rule, "Match/")
+        XCTAssertEqual(failed.host, "www.youtube.com")
+        XCTAssertEqual(failed.error, "dial tcp 1.2.3.4:443: i/o timeout")
+        let failedNoRule = try XCTUnwrap(RouteTrace.parse("[TCP] dial DIRECT 127.0.0.1:2 --> [::1]:443 error: connection refused"))
+        XCTAssertEqual(failedNoRule.chain, "DIRECT")
+        XCTAssertEqual(failedNoRule.host, "::1")
+        XCTAssertEqual(failedNoRule.rule, "")
+        XCTAssertNil(RouteTrace.parse("[UDP] 127.0.0.1:1 --> 1.1.1.1:53 match Match using DIRECT"))
+        XCTAssertNil(RouteTrace.parse("time=... level=info msg=something else"))
+    }
+
+    func testVerdicts() {
+        var facts = DiagnoseFacts(perspective: .mac, host: "youtube.com")
+        // 本机没开代理：直连通就是正常，不通就让开代理。
+        facts.direct = ProbeResult(ok: true, status: 200, latencyMs: 120, failure: nil)
+        XCTAssertEqual(Verdict.make(facts).headline, "直连正常，本机没开代理")
+        facts.direct = ProbeResult(ok: false, status: nil, latencyMs: nil, failure: .timeout)
+        facts.engineHasNodes = true
+        XCTAssertEqual(Verdict.make(facts).actions.first, .turnOnEngine)
+        facts.engineHasNodes = false
+        XCTAssertEqual(Verdict.make(facts).actions.first, .openNodes)
+        // 经节点访问成功：链路正常。
+        facts.engineHasNodes = true
+        facts.macRoute = .engine
+        facts.proxiedVia = "节点代理"
+        facts.proxied = ProbeResult(ok: true, status: 200, latencyMs: 310, failure: nil)
+        facts.trace = RouteTrace(host: "youtube.com", port: 443, rule: "Match", chain: "节点[香港 01]", error: nil)
+        XCTAssertEqual(Verdict.make(facts).headline, "链路正常")
+        // 规则分到直连但直连不通：让它走节点。
+        facts.proxied = ProbeResult(ok: false, status: nil, latencyMs: nil, failure: .timeout)
+        facts.trace = RouteTrace(host: "youtube.com", port: 443, rule: "GeoIP(CN)", chain: "DIRECT", error: "dial tcp 1.2.3.4:443: i/o timeout")
+        let pinned = Verdict.make(facts)
+        XCTAssertEqual(pinned.headline, "规则把它分到了直连，但直连不通")
+        XCTAssertEqual(pinned.actions.first, .pinToProxy("youtube.com"))
+        // 节点连不上：自动选择。
+        facts.trace = RouteTrace(host: "youtube.com", port: 443, rule: "Match", chain: "节点[香港 01]", error: "i/o timeout")
+        facts.nodeDelay = 0
+        XCTAssertEqual(Verdict.make(facts).actions.first, .autoSelect)
+        // 节点能通但这个网站不通：换节点。
+        facts.nodeDelay = 86
+        XCTAssertEqual(Verdict.make(facts).headline, "节点能通，但这个网站经它打不开")
+        // 转发给上游代理失败。
+        facts.trace = RouteTrace(host: "youtube.com", port: 443, rule: "Match", chain: "上游代理", error: "connection refused")
+        XCTAssertEqual(Verdict.make(facts).headline, "转发给上游代理失败")
+        // 设备视角：入口没监听；链路通但设备没有连接记录。
+        var device = DiagnoseFacts(perspective: .device, host: "youtube.com")
+        XCTAssertEqual(Verdict.make(device).actions, [.openShare])
+        device.shareListening = true
+        device.proxiedVia = "共享入口"
+        device.proxied = ProbeResult(ok: true, status: 200, latencyMs: 300, failure: nil)
+        device.deviceRecentConnections = 0
+        XCTAssertTrue(Verdict.make(device).headline.contains("设备最近没有对它的连接"))
+        device.deviceRecentConnections = 3
+        XCTAssertEqual(Verdict.make(device).headline, "链路正常")
+        XCTAssertEqual(Verdict.Action.pinToProxy("a.b").title, "让 a.b 走节点")
+    }
+
+    func testDiagnoseURLCommand() {
+        XCTAssertEqual(URLCommand.parse(URL(string: "proxyswitch://diagnose?url=https://youtube.com&from=device")!), .diagnose(url: "https://youtube.com", device: true))
+        XCTAssertEqual(URLCommand.parse(URL(string: "proxyswitch://diagnose")!), .diagnose(url: nil, device: false))
+        XCTAssertEqual(URLCommand.parse(URL(string: "proxyswitch://settings?page=diagnose")!), .settings(.diagnose))
+        XCTAssertEqual(ProbeResult(ok: true, status: 204, latencyMs: 88, failure: nil).summary, "HTTP 204，88 ms")
+        XCTAssertEqual(ProbeResult(ok: false, status: nil, latencyMs: nil, failure: .reset).summary, "连接被中断（常见于被屏蔽）")
+        XCTAssertFalse(DNSProbe.resolve("localhost").isEmpty)
+    }
+}
+
 /// 自定义规则：输入的整理、校验、生成的规则行和在配置里的位置。
 final class CustomRuleTests: XCTestCase {
     func testNormalizeAndLines() throws {

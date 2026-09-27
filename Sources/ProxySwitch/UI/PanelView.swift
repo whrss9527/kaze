@@ -407,6 +407,9 @@ struct PanelView: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(3)
             Spacer(minLength: 0)
+            Button("诊断") { actions.openSettings(.diagnose) }
+                .controlSize(.small)
+                .help("把链路走一遍，找出打不开的原因")
             Button {
                 state.lastError = nil
             } label: {
@@ -461,6 +464,14 @@ struct PanelView: View {
                     .font(.system(size: 11))
                     .foregroundStyle(.tertiary)
             }
+
+            Button {
+                actions.openSettings(.diagnose)
+            } label: {
+                Image(systemName: "stethoscope")
+            }
+            .buttonStyle(IconButtonStyle())
+            .help("网址诊断：某个网站打不开时查原因")
 
             Button {
                 actions.openSettings(nil)

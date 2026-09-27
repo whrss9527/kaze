@@ -196,6 +196,17 @@ final class CoreAPI {
         return bytes
     }
 
+    /// 内核日志流：每行 {"type":"info","payload":"..."}。级别在 API 侧过滤，不受配置里 log-level 的限制。
+    func logBytes(level: String) async throws -> URLSession.AsyncBytes {
+        var request = URLRequest(url: URL(string: "/logs?level=\(level)", relativeTo: baseURL)!.absoluteURL)
+        request.setValue("Bearer \(secret)", forHTTPHeaderField: "Authorization")
+        let (bytes, response) = try await streamSession.bytes(for: request)
+        if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+            throw CoreAPIError.status(http.statusCode, "")
+        }
+        return bytes
+    }
+
     func version() async throws -> String {
         let json = try await request("GET", "/version")
         return (json["version"] as? String) ?? "?"

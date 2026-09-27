@@ -98,6 +98,14 @@ jobs:
           screencapture -x screenshots/share.png || true
           share_code=$(curl -s -m 15 -x http://127.0.0.1:7892 -o /dev/null -w '%{http_code}' https://cp.cloudflare.com/generate_204 || true)
           echo "经共享端口访问外网：$share_code"
+          # 网址诊断：本机没开代理，应该得出「直连正常」之类的结论并写进日志。
+          open "proxyswitch://diagnose?url=https://cp.cloudflare.com/generate_204"
+          for i in $(seq 1 40); do
+            grep -q "诊断完成" "$support/proxyswitch.log" && break
+            sleep 1
+          done
+          sleep 2
+          screencapture -x screenshots/diagnose.png || true
           # 经内核的代理端口访问外网（假节点都连不上，自动选择会退回 DIRECT）。
           echo "经内核访问外网：$(curl -s -m 10 -x http://127.0.0.1:7890 -o /dev/null -w '%{http_code}' https://cp.cloudflare.com/generate_204 || true)"
           echo "===== 内核配置 ====="; cat "$support/core/config.yaml" | head -60
@@ -114,6 +122,7 @@ jobs:
           grep -q '^sniffer:' "$support/core/config.yaml" || { echo "内核配置里没有开域名嗅探"; exit 1; }
           # 共享开着时应该在阻止空闲睡眠（runner 没有电池，算接电源）。
           pmset -g assertions | grep -q "ProxySwitch" || { pmset -g assertions; echo "共享期间没有阻止睡眠"; exit 1; }
+          grep -q "诊断完成：cp.cloudflare.com" "$support/proxyswitch.log" || { echo "网址诊断没有跑完"; exit 1; }
           nc -z 127.0.0.1 7892 || { echo "共享端口没有监听"; exit 1; }
           pkill -x ProxySwitch || true
           sleep 3
@@ -237,7 +246,7 @@ jobs:
             sips -Z 560 -s format jpeg -s formatOptions 65 panel-update-crop.png --out panel-update.jpg >/dev/null
           fi
           # 设置窗口居中，裁到窗口附近再缩小，日志里放得下、看得清。
-          for name in settings sync nodes share about about-after about-relocate; do
+          for name in settings sync nodes share diagnose about about-after about-relocate; do
             [ -f "$name.png" ] || continue
             width=$(sips -g pixelWidth "$name.png" | awk '/pixelWidth/{print $2}')
             height=$(sips -g pixelHeight "$name.png" | awk '/pixelHeight/{print $2}')
@@ -247,7 +256,7 @@ jobs:
             fi
             sips -Z 1000 -s format jpeg -s formatOptions 60 "$name-crop.png" --out "$name.jpg" >/dev/null
           done
-          for name in settings sync nodes share about-after panel about panel-update about-relocate; do
+          for name in settings sync nodes share diagnose about-after panel about panel-update about-relocate; do
             [ -f "$name.jpg" ] || continue
             echo "=====BEGIN $name.jpg====="
             base64 -b 76 -i "$name.jpg"

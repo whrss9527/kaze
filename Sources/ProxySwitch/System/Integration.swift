@@ -109,6 +109,8 @@ enum URLCommand: Equatable {
     case update
     /// 局域网共享：开、关，nil 是切换。
     case share(Bool?)
+    /// 网址诊断：url 可以为空（只打开页面），device 表示从局域网设备的视角。
+    case diagnose(url: String?, device: Bool)
 
     static func parse(_ url: URL) -> URLCommand? {
         guard url.scheme?.lowercased() == "proxyswitch" else { return nil }
@@ -130,6 +132,10 @@ enum URLCommand: Equatable {
             case "off", "disable", "0", "false": return .share(false)
             default: return .share(nil)
             }
+        case "diagnose", "check":
+            let target = query.first { $0.name == "url" }?.value
+            let device = (query.first { $0.name == "from" }?.value ?? "").lowercased() == "device"
+            return .diagnose(url: target?.isEmpty == false ? target : nil, device: device)
         case "use", "switch":
             var name = query.first { $0.name == "name" }?.value ?? ""
             if name.isEmpty {

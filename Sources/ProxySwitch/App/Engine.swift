@@ -542,6 +542,50 @@ final class Engine: ObservableObject {
         }
     }
 
+    /// 测一个节点的延迟（毫秒）；连不上或内核没跑是 0。
+    func delay(of name: String) async -> Int {
+        guard let api else { return 0 }
+        let delay = (try? await api.delay(node: name, url: readConfig().testURL)) ?? 0
+        if let index = nodes.firstIndex(where: { $0.name == name }) {
+            nodes[index].delay = delay
+        }
+        return delay
+    }
+
+    /// 经内核的某个入口访问一次，同时从内核日志里抓这次连接的判定：命中哪条规则、走了哪个出口、有没有出错。
+    /// 内核在拨号时就写这行日志；订阅日志流要先于访问开始，最多再等一秒半。
+    func traceConnection(url: URL, host: String, port: Int, viaPort: Int) async -> (probe: ProbeResult, trace: RouteTrace?) {
+        let proxy = ProbeResult.proxyDictionary(port: viaPort)
+        guard let api, isRunning else {
+            return (await ProbeResult.probe(url: url, proxy: proxy, timeout: 10), nil)
+        }
+        let reader = Task { @MainActor () -> RouteTrace? in
+            do {
+                let bytes = try await api.logBytes(level: "info")
+                for try await line in bytes.lines {
+                    if Task.isCancelled { return nil }
+                    guard let data = line.data(using: .utf8),
+                          let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                          let payload = json["payload"] as? String,
+                          let trace = RouteTrace.parse(payload), trace.host == host, trace.port == port else { continue }
+                    return trace
+                }
+            } catch {
+                // 被取消或者流断了：没抓到就是没抓到。
+            }
+            return nil
+        }
+        try? await Task.sleep(for: .milliseconds(300))
+        let probe = await ProbeResult.probe(url: url, proxy: proxy, timeout: 10)
+        let deadline = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(1500))
+            reader.cancel()
+        }
+        let trace = await reader.value
+        deadline.cancel()
+        return (probe, trace)
+    }
+
     // MARK: - 设置
 
     func setEnabled(_ enabled: Bool) {

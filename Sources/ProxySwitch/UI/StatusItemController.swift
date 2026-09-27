@@ -132,6 +132,9 @@ final class StatusItemController: NSObject {
             Task { await state.updater.checkAndInstall() }
         case .share(let enabled):
             state.setShareEnabled(enabled ?? !state.share.enabled)
+        case .diagnose(let url, let device):
+            SettingsWindowController.shared.navigation.diagnoseRequest = DiagnoseRequest(url: url ?? "", device: device)
+            SettingsWindowController.shared.show(page: .diagnose)
         }
     }
 

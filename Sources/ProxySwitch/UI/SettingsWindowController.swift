@@ -5,6 +5,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
     case profiles
     case nodes
     case share
+    case diagnose
     case general
     case hotkey
     case sync
@@ -18,6 +19,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         case .profiles: return "代理配置"
         case .nodes: return "节点与订阅"
         case .share: return "局域网共享"
+        case .diagnose: return "网址诊断"
         case .general: return "通用"
         case .hotkey: return "快捷键"
         case .sync: return "iCloud 同步"
@@ -31,6 +33,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         case .profiles: return "point.3.connected.trianglepath.dotted"
         case .nodes: return "antenna.radiowaves.left.and.right"
         case .share: return "wifi.router"
+        case .diagnose: return "stethoscope"
         case .general: return "gearshape"
         case .hotkey: return "keyboard"
         case .sync: return "icloud"
@@ -44,6 +47,8 @@ enum SettingsPage: String, CaseIterable, Identifiable {
 final class SettingsNavigation: ObservableObject {
     @Published var page: SettingsPage = .profiles
     @Published var selectedProfileID: UUID?
+    /// 从别处发起的诊断（proxyswitch://diagnose 等），诊断页拿走后清空。
+    @Published var diagnoseRequest: DiagnoseRequest?
 }
 
 /// 设置窗口：透明标题栏、全尺寸内容，内容是 SwiftUI。
@@ -133,6 +138,7 @@ struct SettingsRootView: View {
         case .profiles: ProfilesPage(state: state, navigation: navigation)
         case .nodes: NodesPage(state: state, engine: state.engine)
         case .share: SharePage(state: state, engine: state.engine, sleepGuard: state.sleepGuard)
+        case .diagnose: DiagnosePage(state: state, engine: state.engine, navigation: navigation)
         case .general: GeneralPage(state: state)
         case .hotkey: HotkeyPage(state: state)
         case .sync: SyncPage(state: state, sync: state.sync)

@@ -32,6 +32,12 @@ final class StatusItemController: NSObject {
             .sink { [weak self] _ in Task { @MainActor in self?.resizePanelIfVisible() } }
             .store(in: &cancellables)
         state.speed.onUpdate = { [weak self] in self?.updateSpeedLabel() }
+        state.$config
+            .map(\.speedSide)
+            .removeDuplicates()
+            .dropFirst()
+            .sink { [weak self] _ in Task { @MainActor in self?.updateSpeedLabel() } }
+            .store(in: &cancellables)
         updateSpeedLabel()
     }
 
@@ -44,7 +50,7 @@ final class StatusItemController: NSObject {
         if meter.mode == .none {
             button.image = StatusIcon.image(for: iconState)
         } else {
-            button.image = StatusIcon.image(for: iconState, upload: SpeedFormatter.compact(bytesPerSecond: meter.upload), download: SpeedFormatter.compact(bytesPerSecond: meter.download), textColor: labelColor(for: button))
+            button.image = StatusIcon.image(for: iconState, upload: SpeedFormatter.compact(bytesPerSecond: meter.upload), download: SpeedFormatter.compact(bytesPerSecond: meter.download), textColor: labelColor(for: button), speedSide: state.config.speedSide)
         }
         button.imagePosition = .imageOnly
     }

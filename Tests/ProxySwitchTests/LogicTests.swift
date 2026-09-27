@@ -512,27 +512,42 @@ final class ParsingTests: XCTestCase {
             let upload = SpeedFormatter.compact(bytesPerSecond: up)
             let download = SpeedFormatter.compact(bytesPerSecond: down)
             for state in [StatusIconState.off, .on(NSColor.systemGreen), .external] {
-                let image = StatusIcon.image(for: state, upload: upload, download: download, textColor: NSColor.black.cgColor)
-                XCTAssertEqual(image.size.height, StatusIcon.speedHeight)
-                XCTAssertEqual(image.isTemplate, state == .off)
-                let scale: CGFloat = 2
-                let bitmap = try XCTUnwrap(StatusIcon.bitmap(of: image, scale: scale))
-                let iconWidth = Int(StatusIcon.iconSize.width * scale)
-                let textStart = iconWidth + Int(StatusIcon.speedGap * scale) / 2
-                let icon = try XCTUnwrap(inkRows(bitmap, xRange: 0..<iconWidth))
-                let text = try XCTUnwrap(inkRows(bitmap, xRange: textStart..<bitmap.pixelsWide))
-                let iconCenter = Double(icon.min + icon.max) / 2
-                let textCenter = Double(text.min + text.max) / 2
-                XCTAssertLessThanOrEqual(abs(iconCenter - textCenter), 1.5, "\(upload)/\(download) \(state)：开关中线 \(iconCenter)，网速中线 \(textCenter)（像素，2x）")
-                // 两行都画出来了，而且没有贴到边上被裁掉。
-                XCTAssertGreaterThan(text.max - text.min, Int(StatusIcon.speedLinePitch * scale))
-                XCTAssertGreaterThan(text.min, 0)
-                XCTAssertLessThan(text.max, bitmap.pixelsHigh - 1)
-                // 箭头单独占左边一列：上下两行最左边的墨迹（就是箭头）在同一列。
-                let half = bitmap.pixelsHigh / 2
-                let top = try XCTUnwrap(inkColumns(bitmap, xRange: textStart..<bitmap.pixelsWide, yRange: 0..<half))
-                let bottom = try XCTUnwrap(inkColumns(bitmap, xRange: textStart..<bitmap.pixelsWide, yRange: half..<bitmap.pixelsHigh))
-                XCTAssertLessThanOrEqual(abs(top.min - bottom.min), 1, "\(upload)/\(download)：上行箭头 x=\(top.min)，下行箭头 x=\(bottom.min)")
+                for side in SpeedSide.allCases {
+                    let image = StatusIcon.image(for: state, upload: upload, download: download, textColor: NSColor.black.cgColor, speedSide: side)
+                    XCTAssertEqual(image.size.height, StatusIcon.speedHeight)
+                    XCTAssertEqual(image.isTemplate, state == .off)
+                    let scale: CGFloat = 2
+                    let bitmap = try XCTUnwrap(StatusIcon.bitmap(of: image, scale: scale))
+                    let iconWidth = Int(StatusIcon.iconSize.width * scale)
+                    let gapHalf = Int(StatusIcon.speedGap * scale) / 2
+                    // 网速在左边时开关在最右边，反之开关在最左边。
+                    let iconRange = side == .left ? (bitmap.pixelsWide - iconWidth)..<bitmap.pixelsWide : 0..<iconWidth
+                    let textRange = side == .left ? 0..<(bitmap.pixelsWide - iconWidth - gapHalf) : (iconWidth + gapHalf)..<bitmap.pixelsWide
+                    let icon = try XCTUnwrap(inkRows(bitmap, xRange: iconRange))
+                    let text = try XCTUnwrap(inkRows(bitmap, xRange: textRange))
+                    let iconCenter = Double(icon.min + icon.max) / 2
+                    let textCenter = Double(text.min + text.max) / 2
+                    XCTAssertLessThanOrEqual(abs(iconCenter - textCenter), 1.5, "\(upload)/\(download) \(state) \(side)：开关中线 \(iconCenter)，网速中线 \(textCenter)（像素，2x）")
+                    // 两行都画出来了，而且没有贴到边上被裁掉。
+                    XCTAssertGreaterThan(text.max - text.min, Int(StatusIcon.speedLinePitch * scale))
+                    XCTAssertGreaterThan(text.min, 0)
+                    XCTAssertLessThan(text.max, bitmap.pixelsHigh - 1)
+                    // 箭头单独占一列：上下两行网速最左边的墨迹（就是箭头）在同一列。
+                    let half = bitmap.pixelsHigh / 2
+                    let top = try XCTUnwrap(inkColumns(bitmap, xRange: textRange, yRange: 0..<half))
+                    let bottom = try XCTUnwrap(inkColumns(bitmap, xRange: textRange, yRange: half..<bitmap.pixelsHigh))
+                    XCTAssertLessThanOrEqual(abs(top.min - bottom.min), 1, "\(upload)/\(download) \(side)：上行箭头 x=\(top.min)，下行箭头 x=\(bottom.min)")
+                    // 数字紧跟箭头：每行里相邻墨迹之间最大的空隙（箭头和数字之间）不超过几个像素，不会空出一截补位的空格。
+                    XCTAssertLessThanOrEqual(largestGap(bitmap, xRange: textRange, yRange: 0..<half), 8, "\(upload) \(side)：箭头和数字之间空得太大")
+                    XCTAssertLessThanOrEqual(largestGap(bitmap, xRange: textRange, yRange: half..<bitmap.pixelsHigh), 8, "\(download) \(side)：箭头和数字之间空得太大")
+                    // 开关和网速之间留着间距，没有画到一起。
+                    let iconColumns = try XCTUnwrap(inkColumns(bitmap, xRange: iconRange, yRange: 0..<bitmap.pixelsHigh))
+                    if side == .left {
+                        XCTAssertGreaterThan(iconColumns.min, top.max)
+                    } else {
+                        XCTAssertLessThan(iconColumns.max, top.min)
+                    }
+                }
             }
         }
         // 数值变了图标宽度不变（图标不会跟着跳）。
@@ -540,6 +555,27 @@ final class ParsingTests: XCTestCase {
                        StatusIcon.image(for: .off, upload: SpeedFormatter.compact(bytesPerSecond: 1_000_000_000), download: SpeedFormatter.compact(bytesPerSecond: 999_000), textColor: NSColor.black.cgColor).size.width)
         // 没有网速时还是原来的小开关。
         XCTAssertEqual(StatusIcon.image(for: .off).size, StatusIcon.iconSize)
+    }
+
+    /// 某个区域里相邻两列墨迹之间最大的空白宽度（像素）。
+    private func largestGap(_ bitmap: NSBitmapImageRep, xRange: Range<Int>, yRange: Range<Int>) -> Int {
+        var previous: Int?
+        var largest = 0
+        for x in xRange where x >= 0 && x < bitmap.pixelsWide {
+            var inked = false
+            for y in yRange where y >= 0 && y < bitmap.pixelsHigh {
+                if let color = bitmap.colorAt(x: x, y: y), color.alphaComponent > 0.25 {
+                    inked = true
+                    break
+                }
+            }
+            guard inked else { continue }
+            if let previous {
+                largest = max(largest, x - previous - 1)
+            }
+            previous = x
+        }
+        return largest
     }
 
     /// 位图里某个区域内有墨迹（不透明）的最左和最右一列。
@@ -697,6 +733,9 @@ final class ParsingTests: XCTestCase {
         // 缺少 toggleHotkey 键时用默认快捷键。
         let minimal = try JSONDecoder().decode(AppConfig.self, from: Data("{}".utf8))
         XCTAssertEqual(minimal.toggleHotkey, HotkeyBinding.defaultToggle)
+        XCTAssertEqual(minimal.speedSide, .left)
+        config.speedSide = .right
+        XCTAssertEqual(try JSONDecoder().decode(AppConfig.self, from: try JSONEncoder().encode(config)).speedSide, .right)
     }
 }
 

@@ -73,6 +73,21 @@ enum SpeedDisplay: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+/// 网速显示在菜单栏图标的哪一边。
+enum SpeedSide: String, Codable, CaseIterable, Identifiable {
+    case left
+    case right
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .left: return "图标左边"
+        case .right: return "图标右边"
+        }
+    }
+}
+
 struct AppConfig: Codable, Equatable {
     static let defaultTestURL = "https://cp.cloudflare.com/generate_204"
 
@@ -88,11 +103,13 @@ struct AppConfig: Codable, Equatable {
     /// 内置代理（订阅、节点、模式）。
     var engine = EngineConfig()
     var speedDisplay: SpeedDisplay = .system
+    /// 网速在图标的左边还是右边；默认在左边，开关在右边。
+    var speedSide: SpeedSide = .left
 
     init() {}
 
     private enum CodingKeys: String, CodingKey {
-        case profiles, clickAction, toggleHotkey, offMode, notifyLevel, healthCheck, disableOnExit, testURL, autoCheckUpdates, engine, speedDisplay
+        case profiles, clickAction, toggleHotkey, offMode, notifyLevel, healthCheck, disableOnExit, testURL, autoCheckUpdates, engine, speedDisplay, speedSide
     }
 
     init(from decoder: Decoder) throws {
@@ -112,6 +129,7 @@ struct AppConfig: Codable, Equatable {
         autoCheckUpdates = try container.decodeIfPresent(Bool.self, forKey: .autoCheckUpdates) ?? true
         engine = try container.decodeIfPresent(EngineConfig.self, forKey: .engine) ?? EngineConfig()
         speedDisplay = try container.decodeIfPresent(SpeedDisplay.self, forKey: .speedDisplay) ?? .system
+        speedSide = try container.decodeIfPresent(SpeedSide.self, forKey: .speedSide) ?? .left
     }
 
     func encode(to encoder: Encoder) throws {
@@ -128,6 +146,7 @@ struct AppConfig: Codable, Equatable {
         try container.encode(autoCheckUpdates, forKey: .autoCheckUpdates)
         try container.encode(engine, forKey: .engine)
         try container.encode(speedDisplay, forKey: .speedDisplay)
+        try container.encode(speedSide, forKey: .speedSide)
     }
 
     func profile(id: UUID?) -> Profile? {

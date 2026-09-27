@@ -39,19 +39,22 @@ enum StatusIcon {
     /// 箭头和数字之间的间距。
     static let arrowGap: CGFloat = 1.5
 
-    /// 开关加两行网速（上行、下行）。箭头单独占左边一列、数字靠右对齐，数值位数不同时两个箭头仍然上下对齐。
-    /// textColor 是菜单栏当前外观下的文字颜色；关闭状态是模板图，颜色由系统决定。
-    static func image(for state: StatusIconState, upload: String, download: String, textColor: CGColor) -> NSImage {
+    /// 开关加两行网速（上行、下行），网速在开关的左边或右边。箭头单独占一列，数字紧跟在箭头后面：数值位数不同时两个箭头仍然上下对齐，
+    /// 箭头和数字之间也不会空出一截，多出来的空隙落在数字和开关之间。textColor 是菜单栏当前外观下的文字颜色；关闭状态是模板图，颜色由系统决定。
+    static func image(for state: StatusIconState, upload: String, download: String, textColor: CGColor, speedSide: SpeedSide = .left) -> NSImage {
         let arrows = [makeLine("↑"), makeLine("↓")]
-        let values = [makeLine(upload), makeLine(download)]
+        // compact() 用数字宽度的空格补位是为了以前整行右对齐；现在数字紧跟箭头，补位去掉。
+        let values = [makeLine(trimmed(upload)), makeLine(trimmed(download))]
         let arrowWidth = ceil(arrows.map { width($0) }.max() ?? 0)
         // 数字一栏按最宽的可能值（四位数加 M）定宽，图标不会随数值跳动。
         let valueWidth = ceil(max(width(makeLine("0000M")), values.map { width($0) }.max() ?? 0))
-        let textLeft = iconSize.width + speedGap
-        let size = NSSize(width: textLeft + arrowWidth + arrowGap + valueWidth, height: speedHeight)
+        let textWidth = arrowWidth + arrowGap + valueWidth
+        let size = NSSize(width: textWidth + speedGap + iconSize.width, height: speedHeight)
         let image = NSImage(size: size, flipped: false) { rect in
             guard let context = NSGraphicsContext.current?.cgContext else { return false }
-            let iconRect = NSRect(x: rect.minX, y: rect.midY - iconSize.height / 2, width: iconSize.width, height: iconSize.height)
+            let textLeft = speedSide == .left ? rect.minX : rect.minX + iconSize.width + speedGap
+            let iconX = speedSide == .left ? rect.maxX - iconSize.width : rect.minX
+            let iconRect = NSRect(x: iconX, y: rect.midY - iconSize.height / 2, width: iconSize.width, height: iconSize.height)
             draw(state, in: iconRect)
             // 文字：先量出两行（箭头加数字）的墨迹范围，让墨迹的整体中线正好落在开关的中线上，不依赖字体的名义行高。
             context.saveGState()
@@ -63,9 +66,9 @@ enum StatusIcon {
             let baselines = [bottomBaseline + speedLinePitch, bottomBaseline]
             context.setFillColor(state == .off ? NSColor.black.cgColor : textColor)
             for index in 0..<2 {
-                context.textPosition = CGPoint(x: rect.minX + textLeft, y: baselines[index])
+                context.textPosition = CGPoint(x: textLeft, y: baselines[index])
                 CTLineDraw(arrows[index], context)
-                context.textPosition = CGPoint(x: rect.maxX - width(values[index]), y: baselines[index])
+                context.textPosition = CGPoint(x: textLeft + arrowWidth + arrowGap, y: baselines[index])
                 CTLineDraw(values[index], context)
             }
             context.restoreGState()
@@ -77,6 +80,11 @@ enum StatusIcon {
 
     private static func width(_ line: CTLine) -> CGFloat {
         CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil))
+    }
+
+    /// 去掉补位用的空格（普通空格和数字宽度的空格）。
+    static func trimmed(_ text: String) -> String {
+        text.trimmingCharacters(in: CharacterSet(charactersIn: " \u{2007}"))
     }
 
     private static func makeLine(_ text: String) -> CTLine {

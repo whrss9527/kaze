@@ -195,7 +195,13 @@ struct GeneralPage: View {
                             Text(display.title).tag(display)
                         }
                     }
-                    Text("显示在图标右边，上行在上、下行在下。「系统网络总速度」统计有线和 Wi‑Fi 网卡的全部流量；「只算内置代理」是经过内核的流量。")
+                    Picker("网速位置", selection: $state.config.speedSide) {
+                        ForEach(SpeedSide.allCases) { side in
+                            Text(side.title).tag(side)
+                        }
+                    }
+                    .disabled(state.config.speedDisplay == .none)
+                    Text("上行在上、下行在下，默认显示在图标左边、开关在右边。「系统网络总速度」统计有线和 Wi‑Fi 网卡的全部流量；「只算内置代理」是经过内核的流量。")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

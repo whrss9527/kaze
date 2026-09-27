@@ -65,7 +65,8 @@ jobs:
           JSON
           # runner 上未签名程序连本机端口会被系统的「本地网络」权限拦住（超时），所以 CI 里用本机文件当订阅。
           sed -i '' "s|file://SUBFILE|file://$(pwd)/feed0/sub.txt|" "$cloud/config.json"
-          echo '{"syncEnabled":true}' > "$support/state.json"
+          # 本机状态里同时开着局域网共享：内核会在 0.0.0.0:7892 多开一个给 PS5 这类设备用的入口。
+          echo '{"syncEnabled":true,"share":{"enabled":true,"port":7892}}' > "$support/state.json"
           echo "PROXYSWITCH_SYNC_DIR=$cloud" >> "$GITHUB_ENV"
           # 直接运行 .app 里的二进制，环境变量才能传进去；系统仍把它当作 dist/ProxySwitch.app 在运行，proxyswitch:// 命令照常送达。
           PROXYSWITCH_SYNC_DIR="$cloud" dist/ProxySwitch.app/Contents/MacOS/ProxySwitch >/dev/null 2>&1 &
@@ -88,6 +89,15 @@ jobs:
           done
           open "proxyswitch://settings?page=nodes"; sleep 3
           screencapture -x screenshots/nodes.png || true
+          # 局域网共享的入口应该已经监听起来；本机没开代理，所以经它出去的流量直连。
+          for i in $(seq 1 20); do
+            grep -q "局域网共享已开启" "$support/proxyswitch.log" && break
+            sleep 1
+          done
+          open "proxyswitch://settings?page=share"; sleep 3
+          screencapture -x screenshots/share.png || true
+          share_code=$(curl -s -m 15 -x http://127.0.0.1:7892 -o /dev/null -w '%{http_code}' https://cp.cloudflare.com/generate_204 || true)
+          echo "经共享端口访问外网：$share_code"
           # 经内核的代理端口访问外网（假节点都连不上，自动选择会退回 DIRECT）。
           echo "经内核访问外网：$(curl -s -m 10 -x http://127.0.0.1:7890 -o /dev/null -w '%{http_code}' https://cp.cloudflare.com/generate_204 || true)"
           echo "===== 内核配置 ====="; cat "$support/core/config.yaml" | head -60
@@ -98,6 +108,10 @@ jobs:
           grep -q "内核已启动" "$support/proxyswitch.log" || { echo "内核没有启动"; exit 1; }
           grep -q "读取到 3 个节点" "$support/proxyswitch.log" || { echo "没有读到假订阅的 3 个节点"; exit 1; }
           grep -q '"name":"节点代理"' "$support/config.json" || grep -q '"name" : "节点代理"' "$support/config.json" || { echo "没有自动加上「节点代理」配置"; exit 1; }
+          grep -q "局域网共享已开启" "$support/proxyswitch.log" || { echo "局域网共享没有开启"; exit 1; }
+          grep -q 'name: "lan-share"' "$support/core/config.yaml" || { echo "内核配置里没有共享入口"; exit 1; }
+          grep -q 'MATCH,DIRECT' "$support/core/config.yaml" || { echo "本机没开代理，共享入口应该直连"; exit 1; }
+          nc -z 127.0.0.1 7892 || { echo "共享端口没有监听"; exit 1; }
           pkill -x ProxySwitch || true
           sleep 3
           pgrep -x mihomo && { echo "程序退出后内核还在运行"; exit 1; }
@@ -220,7 +234,7 @@ jobs:
             sips -Z 560 -s format jpeg -s formatOptions 65 panel-update-crop.png --out panel-update.jpg >/dev/null
           fi
           # 设置窗口居中，裁到窗口附近再缩小，日志里放得下、看得清。
-          for name in settings sync nodes about about-after about-relocate; do
+          for name in settings sync nodes share about about-after about-relocate; do
             [ -f "$name.png" ] || continue
             width=$(sips -g pixelWidth "$name.png" | awk '/pixelWidth/{print $2}')
             height=$(sips -g pixelHeight "$name.png" | awk '/pixelHeight/{print $2}')
@@ -230,7 +244,7 @@ jobs:
             fi
             sips -Z 1000 -s format jpeg -s formatOptions 60 "$name-crop.png" --out "$name.jpg" >/dev/null
           done
-          for name in settings sync nodes about-after panel about panel-update about-relocate; do
+          for name in settings sync nodes share about-after panel about panel-update about-relocate; do
             [ -f "$name.jpg" ] || continue
             echo "=====BEGIN $name.jpg====="
             base64 -b 76 -i "$name.jpg"

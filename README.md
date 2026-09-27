@@ -10,6 +10,7 @@ Windows 版在 [proxyswitch](https://github.com/whrss9527/proxyswitch)，两边�
 ## 功能
 
 - **内置节点代理**：填一个机场的订阅地址，节点就出现在面板里，可以选节点、自动选择延迟最低的、一键测速；支持全局代理和按规则分流，规则可以直接用 [johnshall 的小火箭规则](https://github.com/johnshall/Shadowrocket-ADBlock-Rules-Forever)（黑名单、白名单、去广告等预设）或任何小火箭 / Surge / Clash 格式的规则地址。不用再装 Clash 或小火箭。
+- **局域网共享**：打开后 PS5、Switch、手机等同一局域网里的设备把这台 Mac 当代理服务器（`Mac 的 IP:7892`），就能享受和本机一样的网络：本机走节点它们就走同样的节点和规则，本机用公司代理它们就转发给公司代理，本机没开代理就经这台 Mac 直连，切换配置时几秒内跟着变。默认只允许局域网网段里的设备，也可以只允许指定的 IP。
 - **菜单栏面板**：点图标弹出，大开关、配置列表和每个配置的延迟、复制在当前终端里用代理的命令、一键测速、进设置。右键或 Control + 点击是简洁菜单。
 - **多套配置**：HTTP / SOCKS5 / PAC 三种。每套可以选生效范围：系统代理、环境变量、git、npm。
 - **系统代理**：读取和监听用 SystemConfiguration，别的程序（Clash、Surge、公司脚本）改了代理会立刻反映在图标上，可以一键保存成配置。写入用 `networksetup`。
@@ -18,7 +19,7 @@ Windows 版在 [proxyswitch](https://github.com/whrss9527/proxyswitch)，两边�
 - **自动检测**：找出本机正在运行的代理软件监听的端口，确认能用后一键添加。
 - **全局快捷键**：默认 ⌃⌥P 开关代理，可以在设置里录制新的。
 - **登录时启动**：系统设置的「登录项」里可以看到和关闭。
-- **命令**：`open proxyswitch://toggle`、`proxyswitch://on`、`proxyswitch://off`、`proxyswitch://use?name=配置名`、`proxyswitch://settings`、`proxyswitch://update`，可以接快捷指令和脚本。
+- **命令**：`open proxyswitch://toggle`、`proxyswitch://on`、`proxyswitch://off`、`proxyswitch://use?name=配置名`、`proxyswitch://share`（`share/on`、`share/off`）、`proxyswitch://settings`、`proxyswitch://update`，可以接快捷指令和脚本。
 - **iCloud 同步**：打开后代理配置和设置通过 iCloud 云盘（`iCloud 云盘/ProxySwitch/config.json`）在多台 Mac 之间同步，几秒内生效；另一台 Mac 开启时可以选用 iCloud 的、用本机的或合并，两边同时改以改动时间晚的为准。
 - **检查更新与一键更新**：启动后和每 6 小时检查一次 GitHub 上的新版本（可以关掉），有新版本时通知（通知上直接有「立即更新」按钮），面板里出现更新条。点一下「更新」就会下载本机芯片的精简包、比对 SHA-256、替换 `ProxySwitch.app` 并自动重新启动，不用去下载页。内置代理在运行时经它下载，失败再试系统代理和直连。直接在下载文件夹里打开的程序会被装进「应用程序」，旧的那份移到废纸篓。
 
@@ -27,8 +28,17 @@ Windows 版在 [proxyswitch](https://github.com/whrss9527/proxyswitch)，两边�
 1. 设置 → 节点与订阅，粘上机场给的订阅地址点「添加」。内核会下载解析，配置列表里自动多一条「节点代理」。
 2. 面板里开关「节点代理」就是开关它：开启后系统代理指向 `127.0.0.1:7890`（HTTP 和 SOCKS 同一个端口）。节点卡片里可以选节点、自动选择、测速、切换全局 / 规则。
 3. 规则分流的来源可以选内置的「国内直连」、johnshall 的几套小火箭规则，或者填自己的规则地址。小火箭 `.conf` 里的 `[Rule]` 段会转成内核规则：`DOMAIN-SUFFIX`、`DOMAIN-KEYWORD`、`IP-CIDR`、`GEOIP`、`RULE-SET`（下载后内联）、`FINAL` 都支持，`USER-AGENT`、`URL-REGEX` 这类内核不支持的会跳过；`Proxy` 类策略走面板里选中的节点。
-4. 内核是 [mihomo](https://github.com/MetaCubeX/mihomo)（Clash Meta，GPL-3.0），以独立程序的形式打包在 `ProxySwitch.app/Contents/MacOS/mihomo`，只监听本机端口，配置在 `~/Library/Application Support/ProxySwitch/core/`。GeoIP 数据来自 [MetaCubeX/meta-rules-dat](https://github.com/MetaCubeX/meta-rules-dat)。
+4. 内核是 [mihomo](https://github.com/MetaCubeX/mihomo)（Clash Meta，GPL-3.0），以独立程序的形式打包在 `ProxySwitch.app/Contents/MacOS/mihomo`，默认只监听本机端口（开了局域网共享才多一个给局域网设备的入口），配置在 `~/Library/Application Support/ProxySwitch/core/`。GeoIP 数据来自 [MetaCubeX/meta-rules-dat](https://github.com/MetaCubeX/meta-rules-dat)。
 5. 不支持 TUN 模式：只有走系统代理（或环境变量）的程序会经过它，和小火箭 Mac 版的默认行为一样。
+
+## 局域网共享（PS5 / Switch）
+
+1. 设置 → 局域网共享，打开「允许局域网里的设备经这台 Mac 上网」。页面上会显示要在设备上填的地址，比如 `192.168.1.5 : 7892`。
+2. PS5：设置 → 网络 → 设置 → 设置互联网连接 → 选中正在用的网络 → 高级设置 → 代理服务器 → 「使用」，填 Mac 的 IP 和端口。Switch：设置 → 互联网 → 互联网设置 → 选中网络 → 更改设置 → 代理服务器设置。手机、电脑在 Wi‑Fi 的手动代理里填同样的地址。
+3. 之后设备的流量跟着本机走：本机开着「节点代理」，设备就用同样的节点和分流规则（全局 / 规则跟着切）；本机用公司代理或者别的代理软件，就转发给它；本机没开代理，就经这台 Mac 直连。面板里切换配置，设备几秒内跟着变。PAC 脚本没法转发，这时设备直连并在页面上提示。
+4. 共享由内置的内核完成：它在 `0.0.0.0:7892` 多开一个入口，用 mihomo 的 `lan-allowed-ips` 只放行局域网网段（10.x、172.16–31.x、192.168.x）；页面上可以改成只允许指定的 IP 或网段。公共 Wi‑Fi 上建议关掉。没有订阅也能开共享，只为共享运行时本机的 7890 端口不占用。
+5. 页面上能看到正在使用的设备（来源 IP、连接数、流量、最近访问的站点），还可以从本机经共享端口自测。建议在路由器里给 Mac 固定 IP，不然 IP 变了设备就连不上。PS5 只把 HTTP / HTTPS 流量（商店、下载、登录）交给代理，游戏联机的 UDP 流量仍然直连。开着 macOS 防火墙时第一次会询问是否允许 mihomo 接受传入连接，要允许。
+6. 共享是本机的设置（放在 `state.json`），不跟着 iCloud 同步；右键菜单和 `open proxyswitch://share` 也能开关。
 
 ## 安装
 
@@ -64,7 +74,7 @@ VERSION=0.1.0 Scripts/build-app.sh   # 组装通用二进制的 dist/ProxySwitch
 | --- | --- |
 | `Sources/ProxySwitch/App` | 入口、`AppState`（配置、状态、开关逻辑） |
 | `Sources/ProxySwitch/Models` | 配置、系统代理快照、networksetup 命令的生成 |
-| `Sources/ProxySwitch/System` | 系统代理、环境变量、git / npm、测速、快捷键、登录项、通知、URL 命令、更新、iCloud 文件、内核进程与 API、规则转换 |
+| `Sources/ProxySwitch/System` | 系统代理、环境变量、git / npm、测速、快捷键、登录项、通知、URL 命令、更新、iCloud 文件、内核进程与 API、规则转换、局域网地址 |
 | `Sources/ProxySwitch/UI` | 菜单栏图标与面板、设置窗口各页、毛玻璃样式、快捷键录制 |
 | `Tests` | XCTest |
 | `Scripts/build-app.sh` | 组装 .app（下载 mihomo 合成通用二进制、GeoIP 数据库）、签名、打 zip |

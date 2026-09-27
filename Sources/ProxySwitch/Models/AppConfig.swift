@@ -143,11 +143,13 @@ struct PersistedState: Codable, Equatable {
     var original: ProxySnapshot?
     /// iCloud 同步的开关是本机的，不跟着配置同步。
     var syncEnabled: Bool = false
+    /// 局域网共享也是本机的：由这台 Mac 共享给 PS5 等设备，不跟着配置同步。
+    var share = ShareConfig()
 
     init() {}
 
     private enum CodingKeys: String, CodingKey {
-        case lastProfileID, enabledByUs, original, syncEnabled
+        case lastProfileID, enabledByUs, original, syncEnabled, share
     }
 
     init(from decoder: Decoder) throws {
@@ -156,5 +158,6 @@ struct PersistedState: Codable, Equatable {
         enabledByUs = try container.decodeIfPresent(Bool.self, forKey: .enabledByUs) ?? false
         original = try container.decodeIfPresent(ProxySnapshot.self, forKey: .original)
         syncEnabled = try container.decodeIfPresent(Bool.self, forKey: .syncEnabled) ?? false
+        share = try container.decodeIfPresent(ShareConfig.self, forKey: .share) ?? ShareConfig()
     }
 }

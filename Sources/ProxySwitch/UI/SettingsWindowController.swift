@@ -4,6 +4,7 @@ import SwiftUI
 enum SettingsPage: String, CaseIterable, Identifiable {
     case profiles
     case nodes
+    case share
     case general
     case hotkey
     case sync
@@ -16,6 +17,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         switch self {
         case .profiles: return "代理配置"
         case .nodes: return "节点与订阅"
+        case .share: return "局域网共享"
         case .general: return "通用"
         case .hotkey: return "快捷键"
         case .sync: return "iCloud 同步"
@@ -28,6 +30,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         switch self {
         case .profiles: return "point.3.connected.trianglepath.dotted"
         case .nodes: return "antenna.radiowaves.left.and.right"
+        case .share: return "wifi.router"
         case .general: return "gearshape"
         case .hotkey: return "keyboard"
         case .sync: return "icloud"
@@ -129,6 +132,7 @@ struct SettingsRootView: View {
         switch navigation.page {
         case .profiles: ProfilesPage(state: state, navigation: navigation)
         case .nodes: NodesPage(state: state, engine: state.engine)
+        case .share: SharePage(state: state, engine: state.engine)
         case .general: GeneralPage(state: state)
         case .hotkey: HotkeyPage(state: state)
         case .sync: SyncPage(state: state, sync: state.sync)
@@ -248,7 +252,7 @@ struct HotkeyPage: View {
                     Text("终端里可以用 open 命令控制：")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    ForEach(["open proxyswitch://toggle", "open proxyswitch://on", "open proxyswitch://off", "open \"proxyswitch://use?name=配置名\"", "open proxyswitch://update"], id: \.self) { command in
+                    ForEach(["open proxyswitch://toggle", "open proxyswitch://on", "open proxyswitch://off", "open \"proxyswitch://use?name=配置名\"", "open proxyswitch://share/on", "open proxyswitch://update"], id: \.self) { command in
                         HStack {
                             Text(command)
                                 .font(.system(size: 12, design: .monospaced))

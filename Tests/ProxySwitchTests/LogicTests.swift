@@ -631,3 +631,152 @@ final class ParsingTests: XCTestCase {
         XCTAssertEqual(minimal.toggleHotkey, HotkeyBinding.defaultToggle)
     }
 }
+
+/// 局域网共享：设置的解析、上游的判断、内核配置里的入口，以及连接列表的归并。
+final class ShareTests: XCTestCase {
+    func testShareConfig() throws {
+        let parsed = ShareConfig.parseClients("192.168.1.20, 192.168.2.0/24; fe80::1\n10.0.0.256 bad/8 10.0.0.0/33 192.168.1.20")
+        XCTAssertEqual(parsed.prefixes, ["192.168.1.20/32", "192.168.2.0/24", "fe80::1/128"])
+        XCTAssertEqual(parsed.invalid, ["10.0.0.256", "bad/8", "10.0.0.0/33"])
+        var share = ShareConfig()
+        XCTAssertFalse(share.enabled)
+        XCTAssertEqual(share.port, 7892)
+        XCTAssertEqual(share.allowedPrefixes, ShareConfig.loopbackPrefixes + ShareConfig.lanPrefixes)
+        XCTAssertNil(share.validate())
+        // 填了设备就只允许它们，回环仍然在（内核自己的端口也受这份名单限制）。
+        share.allowedClients = "192.168.1.20"
+        XCTAssertEqual(share.allowedPrefixes, ["127.0.0.0/8", "::1/128", "192.168.1.20/32"])
+        share.port = 80
+        XCTAssertNotNil(share.validate())
+        share.port = 7892
+        share.allowedClients = "abc"
+        XCTAssertNotNil(share.validate())
+        // 本机状态里带着共享设置；旧文件没有这一项时用默认值。
+        let old = try JSONDecoder().decode(PersistedState.self, from: Data(#"{"syncEnabled":true}"#.utf8))
+        XCTAssertEqual(old.share, ShareConfig())
+        XCTAssertTrue(old.syncEnabled)
+        var persisted = PersistedState()
+        persisted.share.enabled = true
+        persisted.share.port = 8899
+        persisted.share.allowedClients = "192.168.1.20"
+        let decoded = try JSONDecoder().decode(PersistedState.self, from: try JSONEncoder().encode(persisted))
+        XCTAssertEqual(decoded.share, persisted.share)
+    }
+
+    func testShareUpstreamFollowsTheMac() {
+        let http = Profile(name: "公司", color: "#000", kind: .http, host: "proxy.corp", port: 8080)
+        let socks = Profile(name: "隧道", color: "#000", kind: .socks5, host: "127.0.0.1", port: 1080)
+        let pac = Profile(name: "PAC", color: "#000", kind: .pac, pacURL: "http://x/p.pac")
+        let engine = Profile.engineProfile(port: 7890)
+        let off = ProxySnapshot()
+        XCTAssertEqual(ShareUpstream(status: .off(next: http), snapshot: off), .direct)
+        XCTAssertEqual(ShareUpstream(status: .on(engine), snapshot: off), .engine)
+        XCTAssertEqual(ShareUpstream(status: .on(http), snapshot: off), .proxy(kind: .http, host: "proxy.corp", port: 8080))
+        XCTAssertEqual(ShareUpstream(status: .on(socks), snapshot: off), .proxy(kind: .socks5, host: "127.0.0.1", port: 1080))
+        XCTAssertNotNil(ShareUpstream(status: .on(pac), snapshot: off).warning)
+        XCTAssertEqual(ShareUpstream(status: .on(pac), snapshot: off).title, "直接连接（PAC 没法转发）")
+        // 别的程序设置的系统代理：转发给它；PAC 优先，没法转发。
+        var external = ProxySnapshot()
+        external.httpsEnabled = true
+        external.httpsHost = "10.0.0.8"
+        external.httpsPort = 8888
+        XCTAssertEqual(ShareUpstream(status: .external(external.summary), snapshot: external), .proxy(kind: .http, host: "10.0.0.8", port: 8888))
+        external.pacEnabled = true
+        external.pacURL = "http://x/p.pac"
+        XCTAssertNotNil(ShareUpstream(status: .external(external.summary), snapshot: external).warning)
+        var socksOnly = ProxySnapshot()
+        socksOnly.socksEnabled = true
+        socksOnly.socksHost = "127.0.0.1"
+        socksOnly.socksPort = 1086
+        XCTAssertEqual(ShareUpstream(status: .external(socksOnly.summary), snapshot: socksOnly), .proxy(kind: .socks5, host: "127.0.0.1", port: 1086))
+        XCTAssertEqual(ShareUpstream.proxy(kind: .socks5, host: "h", port: 1).title, "socks5://h:1")
+        XCTAssertEqual(ShareUpstream.direct.summary, "设备经这台 Mac 直连")
+    }
+
+    func testCoreConfigWithShare() {
+        var engine = EngineConfig()
+        var input = CoreConfigBuilder.Input(engine: engine, secret: "s", directory: URL(fileURLWithPath: "/tmp/core"), testURL: "https://t", rules: RuleConverter.chinaDirectRules)
+        // 没开共享：没有入口，也没有名单。
+        let plain = CoreConfigBuilder.yaml(input)
+        XCTAssertFalse(plain.contains("listeners:"))
+        XCTAssertFalse(plain.contains("lan-allowed-ips:"))
+        XCTAssertFalse(plain.contains("sub-rules:"))
+        // 只为共享而运行：本机的代理端口关掉，共享入口在 0.0.0.0，流量直连。
+        input.share = ShareInputs(port: 7892, allowedPrefixes: ["127.0.0.0/8", "192.168.0.0/16"], upstream: .direct)
+        let direct = CoreConfigBuilder.yaml(input)
+        XCTAssertTrue(direct.contains("\nmixed-port: 0\n"))
+        XCTAssertTrue(direct.contains("lan-allowed-ips:\n  - \"127.0.0.0/8\"\n  - \"192.168.0.0/16\"\n"))
+        XCTAssertTrue(direct.contains("listeners:\n  - name: \"lan-share\"\n    type: mixed\n    listen: \"0.0.0.0\"\n    port: 7892\n    rule: \"lan-share\"\n"))
+        XCTAssertTrue(direct.hasSuffix("sub-rules:\n  \"lan-share\":\n    - \"MATCH,DIRECT\"\n"))
+        XCTAssertFalse(direct.contains("proxies:\n"))
+        XCTAssertFalse(direct.contains("proxy-providers:"))
+        // 本机用公司代理：局域网直连，其余转发给它。
+        input.share?.upstream = .proxy(kind: .http, host: "proxy.corp", port: 3128)
+        let relay = CoreConfigBuilder.yaml(input)
+        XCTAssertTrue(relay.contains("proxies:\n  - name: \"上游代理\"\n    type: http\n    server: \"proxy.corp\"\n    port: 3128\n"))
+        XCTAssertTrue(relay.contains("  \"lan-share\":\n    - \"DOMAIN-SUFFIX,local,DIRECT\"\n"))
+        XCTAssertTrue(relay.contains("    - \"IP-CIDR,192.168.0.0/16,DIRECT,no-resolve\"\n    - \"IP-CIDR,169.254.0.0/16,DIRECT,no-resolve\"\n"))
+        XCTAssertTrue(relay.hasSuffix("    - \"MATCH,上游代理\"\n"))
+        input.share?.upstream = .proxy(kind: .socks5, host: "127.0.0.1", port: 1080)
+        XCTAssertTrue(CoreConfigBuilder.yaml(input).contains("    type: socks5\n    server: \"127.0.0.1\"\n    port: 1080\n"))
+        // 本机用内置代理：共享入口按和本机一样的规则分流，本机的代理端口照常开着。
+        engine.subscriptions = [Subscription(name: "a", url: "https://x/y")]
+        input.engine = engine
+        input.share?.upstream = .engine
+        let mirrored = CoreConfigBuilder.yaml(input)
+        XCTAssertTrue(mirrored.contains("\nmixed-port: 7890\n"))
+        XCTAssertTrue(mirrored.contains("proxy-providers:"))
+        XCTAssertFalse(mirrored.contains("proxies:\n"))
+        XCTAssertTrue(mirrored.contains("  \"lan-share\":\n    - \"DOMAIN-SUFFIX,local,DIRECT\"\n"))
+        XCTAssertTrue(mirrored.hasSuffix("    - \"GEOIP,CN,DIRECT\"\n    - \"MATCH,节点\"\n"))
+        XCTAssertEqual(CoreConfigBuilder.shareRules(upstream: .unsupported("x"), mainRules: ["MATCH,节点"]), ["MATCH,DIRECT"])
+        XCTAssertEqual(CoreConfigBuilder.shareRules(upstream: .engine, mainRules: ["MATCH,节点"]), ["MATCH,节点"])
+        // 内置代理停用时不加载订阅，只做共享。
+        engine.enabled = false
+        input.engine = engine
+        let disabled = CoreConfigBuilder.yaml(input)
+        XCTAssertFalse(disabled.contains("proxy-providers:"))
+        XCTAssertTrue(disabled.contains("\nmixed-port: 0\n"))
+    }
+
+    func testShareClientsGrouping() throws {
+        let json = """
+        {"downloadTotal":1,"uploadTotal":1,"connections":[
+          {"id":"1","metadata":{"network":"tcp","type":"Mixed","sourceIP":"192.168.1.20","destinationIP":"1.2.3.4","sourcePort":"1","destinationPort":"443","host":"store.playstation.com","inboundName":"lan-share"},"upload":10,"download":100,"start":"2026-09-27T10:00:01Z","chains":["DIRECT"],"rule":"Match","rulePayload":""},
+          {"id":"2","metadata":{"network":"tcp","type":"Mixed","sourceIP":"192.168.1.20","destinationIP":"5.6.7.8","sourcePort":"2","destinationPort":"443","host":"","inboundName":"lan-share"},"upload":1,"download":2,"start":"2026-09-27T10:00:00Z","chains":["DIRECT"],"rule":"Match","rulePayload":""},
+          {"id":"3","metadata":{"network":"tcp","type":"Mixed","sourceIP":"192.168.1.30","destinationIP":"","sourcePort":"9","destinationPort":"80","host":"example.org","inboundName":"lan-share"},"upload":0,"download":0,"start":"2026-09-27T10:00:05Z","chains":["上游代理"],"rule":"Match","rulePayload":""},
+          {"id":"4","metadata":{"network":"tcp","type":"Mixed","sourceIP":"127.0.0.1","destinationIP":"","sourcePort":"3","destinationPort":"80","host":"example.com","inboundName":""},"upload":5,"download":5,"start":"2026-09-27T10:00:02Z","chains":["节点"],"rule":"Match","rulePayload":""}
+        ]}
+        """
+        struct Envelope: Decodable { var connections: [CoreConnection] }
+        let connections = try JSONDecoder().decode(Envelope.self, from: Data(json.utf8)).connections
+        XCTAssertEqual(connections.count, 4)
+        XCTAssertEqual(connections[1].metadata.displayHost, "5.6.7.8")
+        let clients = ShareClient.group(connections, listener: "lan-share")
+        XCTAssertEqual(clients.map(\.ip), ["192.168.1.20", "192.168.1.30"])
+        XCTAssertEqual(clients[0].connections, 2)
+        XCTAssertEqual(clients[0].upload, 11)
+        XCTAssertEqual(clients[0].download, 102)
+        XCTAssertEqual(clients[0].lastHost, "store.playstation.com")
+        XCTAssertEqual(clients[1].lastHost, "example.org")
+        // 内核在没有连接时给的是 null。
+        XCTAssertTrue(ShareClient.group([], listener: "lan-share").isEmpty)
+    }
+
+    func testShareURLCommands() {
+        XCTAssertEqual(URLCommand.parse(URL(string: "proxyswitch://share")!), .share(nil))
+        XCTAssertEqual(URLCommand.parse(URL(string: "proxyswitch://share/on")!), .share(true))
+        XCTAssertEqual(URLCommand.parse(URL(string: "proxyswitch://share/off")!), .share(false))
+        XCTAssertEqual(URLCommand.parse(URL(string: "proxyswitch://share?state=on")!), .share(true))
+        XCTAssertEqual(URLCommand.parse(URL(string: "proxyswitch://settings?page=share")!), .settings(.share))
+    }
+
+    func testLocalNetworkAddresses() {
+        // 只看有线、Wi‑Fi 和网桥，不含回环和链路本地地址。
+        let addresses = LocalNetwork.ipv4Addresses()
+        XCTAssertFalse(addresses.values.contains("127.0.0.1"))
+        XCTAssertFalse(addresses.values.contains { $0.hasPrefix("169.254.") })
+        XCTAssertTrue(addresses.keys.allSatisfy { $0.hasPrefix("en") || $0.hasPrefix("bridge") })
+        XCTAssertEqual(LocalNetwork.addresses().map(\.ip).sorted(), Array(addresses.values).sorted())
+    }
+}

@@ -1,11 +1,11 @@
 import AppKit
 import Combine
 
-/// 内置代理：管内核进程、节点列表、模式和订阅。只在主线程上用。
+/// 内置代理：管内核进程、节点列表、模式和订阅，以及给局域网设备用的共享入口。只在主线程上用。
 @MainActor
 final class Engine: ObservableObject {
     enum Status: Equatable {
-        /// 没启用，或者还没有订阅。
+        /// 没启用，或者既没有订阅也没开局域网共享。
         case off
         case starting
         /// 内核在跑，附带版本号。
@@ -34,10 +34,22 @@ final class Engine: ObservableObject {
         var updatedAt: Date?
     }
 
+    /// 局域网共享入口的状态。
+    enum ShareStatus: Equatable {
+        case off
+        case starting
+        /// 正在监听这个端口。
+        case listening(Int)
+        case failed(String)
+    }
+
     static let selectorGroup = CoreConfigBuilder.selectorGroup
     static let autoGroup = CoreConfigBuilder.autoGroup
 
     @Published private(set) var status: Status = .off
+    @Published private(set) var shareStatus: ShareStatus = .off
+    /// 局域网共享的参数，AppState 按本机的代理状态算出来；nil 表示没开。
+    private(set) var shareInputs: ShareInputs?
     @Published private(set) var nodes: [Node] = []
     /// 「节点」组当前选中的：某个节点、自动选择或 DIRECT。
     @Published private(set) var currentSelection: String?
@@ -60,12 +72,17 @@ final class Engine: ObservableObject {
     private var refreshTimer: Timer?
     private var restartAttempts = 0
     private var reconcileTask: Task<Void, Never>?
+    /// 正在执行的 reconcile；后来的排在它后面，同一时间只有一个在动内核。
+    private var reconcileChain: Task<Void, Never>?
     private var ruleCache: (source: RuleSource, rules: [String])?
 
     static var directory: URL { Store.directory.appendingPathComponent("core", isDirectory: true) }
     var configURL: URL { Self.directory.appendingPathComponent("config.yaml") }
     var engineConfig: EngineConfig { readConfig().engine }
     var coreAvailable: Bool { CoreBinary.executableURL != nil }
+
+    /// 有订阅，或者开了局域网共享，内核才需要运行。
+    var wantsCore: Bool { engineConfig.wantsCore || shareInputs != nil }
 
     var isRunning: Bool {
         if case .running = status { return true }
@@ -106,6 +123,7 @@ final class Engine: ObservableObject {
     func shutdown() {
         runner.stop()
         api = nil
+        shareStatus = .off
     }
 
     /// 配置变了：该跑就跑（配置内容变了就重新加载），不该跑就停。多次调用合并成一次。
@@ -118,9 +136,22 @@ final class Engine: ObservableObject {
         }
     }
 
+    /// 同一时间只让一个 reconcile 动内核：启动内核要等它响应，期间再来的（比如本机代理状态变了）排在后面执行。
     func reconcile() async {
+        let previous = reconcileChain
+        let task = Task { @MainActor [weak self] in
+            if let previous {
+                await previous.value
+            }
+            await self?.performReconcile()
+        }
+        reconcileChain = task
+        await task.value
+    }
+
+    private func performReconcile() async {
         let engine = engineConfig
-        guard engine.wantsCore else {
+        guard wantsCore else {
             if api != nil || runner.isRunning {
                 stopCore()
             } else if status != .off {
@@ -141,7 +172,10 @@ final class Engine: ObservableObject {
                         lastConfigText = text
                         Log.info("内核配置已重新加载")
                         await refresh()
+                        await verifyShare()
                     }
+                } else if shareInputs != nil, shareStatus == .starting {
+                    await verifyShare()
                 }
             } else {
                 try await startCore(with: text)
@@ -150,20 +184,36 @@ final class Engine: ObservableObject {
         } catch {
             status = .failed(error.localizedDescription)
             lastError = error.localizedDescription
+            if shareInputs != nil {
+                shareStatus = .failed(error.localizedDescription)
+            }
             Log.error("内置代理出错：\(error.localizedDescription)")
             onStatusChanged?()
         }
     }
 
-    /// 开启内置配置前确保内核在跑。
+    /// 开启内置配置前确保内核在跑，而且加载了订阅（只为共享而跑的内核没有代理端口）。
     func ensureRunning() async throws {
-        if isRunning, runner.isRunning { return }
+        guard engineConfig.wantsCore else {
+            throw CoreRunnerError.notReady(engineConfig.enabled ? "还没有添加订阅" : "内置代理已停用")
+        }
+        if isRunning, runner.isRunning, loadedMixedPort == engineConfig.mixedPort { return }
         reconcileTask?.cancel()
         await reconcile()
         guard isRunning else {
             if case .failed(let message) = status { throw CoreRunnerError.notReady(message) }
-            throw CoreRunnerError.notReady(engineConfig.wantsCore ? "内核没有启动" : "还没有添加订阅")
+            throw CoreRunnerError.notReady("内核没有启动")
         }
+    }
+
+    /// 内核现在加载的配置里本机的代理端口；0 表示没开（只在做局域网共享）。
+    private var loadedMixedPort: Int? {
+        guard let text = lastConfigText else { return nil }
+        let prefix = "mixed-port: "
+        for line in text.split(separator: "\n") where line.hasPrefix(prefix) {
+            return Int(line.dropFirst(prefix.count))
+        }
+        return nil
     }
 
     func restartCore() async {
@@ -199,11 +249,12 @@ final class Engine: ObservableObject {
         lastConfigText = text
         restartAttempts = 0
         status = .running(version)
-        Log.info("内核已启动，版本 \(version)，代理端口 \(engineConfig.mixedPort)")
+        Log.info("内核已启动，版本 \(version)，" + (engineConfig.wantsCore ? "代理端口 \(engineConfig.mixedPort)" : "只用于局域网共享"))
         if let selected = engineConfig.selectedNode {
             try? await api.select(group: Self.selectorGroup, node: selected)
         }
         await refresh()
+        await verifyShare()
         onStatusChanged?()
     }
 
@@ -212,6 +263,7 @@ final class Engine: ObservableObject {
         api = nil
         lastConfigText = nil
         status = .off
+        shareStatus = shareInputs == nil ? .off : .starting
         nodes = []
         currentSelection = nil
         autoNode = nil
@@ -224,9 +276,12 @@ final class Engine: ObservableObject {
         guard api != nil, status != .starting else { return }
         api = nil
         lastConfigText = nil
-        if engineConfig.wantsCore && restartAttempts < 3 {
+        if wantsCore && restartAttempts < 3 {
             restartAttempts += 1
             status = .starting
+            if shareInputs != nil {
+                shareStatus = .starting
+            }
             Log.error("内核意外退出（状态 \(code)），第 \(restartAttempts) 次重新启动")
             Task { @MainActor [weak self] in
                 try? await Task.sleep(for: .seconds(1))
@@ -234,6 +289,9 @@ final class Engine: ObservableObject {
             }
         } else {
             status = .failed("内核退出了（状态 \(code)）：\(runner.logTail.split(separator: "\n").suffix(2).joined(separator: " "))")
+            if shareInputs != nil, case .failed(let message) = status {
+                shareStatus = .failed(message)
+            }
         }
         onStatusChanged?()
     }
@@ -283,8 +341,65 @@ final class Engine: ObservableObject {
     private func generateConfig(_ engine: EngineConfig) async throws -> String {
         try copyFileSubscriptions(engine)
         let rules = try await rules(for: engine)
-        let input = CoreConfigBuilder.Input(engine: engine, secret: secret, directory: Self.directory, testURL: readConfig().testURL, rules: rules)
+        let input = CoreConfigBuilder.Input(engine: engine, secret: secret, directory: Self.directory, testURL: readConfig().testURL, rules: rules, share: shareInputs)
         return CoreConfigBuilder.yaml(input)
+    }
+
+    // MARK: - 局域网共享
+
+    /// 本机的代理状态或共享设置变了：重新生成配置，内核热加载，共享的设备立刻跟着变。
+    func setShare(_ inputs: ShareInputs?) {
+        guard inputs != shareInputs else { return }
+        shareInputs = inputs
+        if inputs == nil {
+            shareStatus = .off
+        } else if shareStatus == .off {
+            shareStatus = .starting
+        }
+        scheduleReconcile()
+    }
+
+    /// 共享入口是不是真的监听起来了：端口被占用时内核只记一条日志，不会退出，所以自己连一下确认。
+    private func verifyShare() async {
+        guard let share = shareInputs else {
+            shareStatus = .off
+            return
+        }
+        guard isRunning else { return }
+        var reachable = false
+        for _ in 0..<10 {
+            if await ProxyTester.reachable(host: "127.0.0.1", port: share.port, timeout: 1) {
+                reachable = true
+                break
+            }
+            try? await Task.sleep(for: .milliseconds(200))
+        }
+        if reachable {
+            if shareStatus != .listening(share.port) {
+                Log.info("局域网共享已开启，端口 \(share.port)，\(share.upstream.summary)")
+            }
+            shareStatus = .listening(share.port)
+        } else {
+            var detail = "可能被别的程序占用了"
+            if let line = runner.logTail.split(separator: "\n").last(where: { $0.contains(CoreConfigBuilder.shareListener) && $0.contains("err") }) {
+                var text = String(line)
+                if let range = text.range(of: "msg=") {
+                    text = String(text[range.upperBound...]).trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+                }
+                detail = text
+            }
+            let message = "端口 \(share.port) 没有监听起来：\(detail)"
+            shareStatus = .failed(message)
+            Log.error("局域网共享出错：\(message)")
+        }
+        onStatusChanged?()
+    }
+
+    /// 正在经共享入口上网的设备。
+    func shareClients() async -> [ShareClient] {
+        guard let api, isRunning, shareInputs != nil else { return [] }
+        let connections = (try? await api.connections()) ?? []
+        return ShareClient.group(connections, listener: CoreConfigBuilder.shareListener)
     }
 
     private func rules(for engine: EngineConfig) async throws -> [String] {

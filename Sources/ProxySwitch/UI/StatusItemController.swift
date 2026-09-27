@@ -134,6 +134,8 @@ final class StatusItemController: NSObject {
         case .update:
             SettingsWindowController.shared.show(page: .about)
             Task { await state.updater.checkAndInstall() }
+        case .share(let enabled):
+            state.setShareEnabled(enabled ?? !state.share.enabled)
         }
     }
 
@@ -175,6 +177,13 @@ final class StatusItemController: NSObject {
             menu.addItem(nodesItem)
         }
         menu.addItem(.separator())
+        let shareItem = item("局域网共享（PS5 等设备）", action: #selector(menuToggleShare), key: "")
+        shareItem.state = state.share.enabled ? .on : .off
+        menu.addItem(shareItem)
+        if state.share.enabled, let address = state.lanAddress {
+            menu.addItem(header("设备上填 \(address.ip):\(state.share.port)"))
+        }
+        menu.addItem(.separator())
         let updater = state.updater
         if let release = updater.release, updater.isInstalling {
             menu.addItem(header("正在更新到 \(release.version)…"))
@@ -208,6 +217,7 @@ final class StatusItemController: NSObject {
 
     @objc private func menuTurnOff() { state.turnOff() }
     @objc private func menuSaveExternal() { state.saveExternalAsProfile() }
+    @objc private func menuToggleShare() { state.setShareEnabled(!state.share.enabled) }
     @objc private func menuSettings() { SettingsWindowController.shared.show(page: nil) }
     @objc private func menuQuit() { NSApp.terminate(nil) }
 

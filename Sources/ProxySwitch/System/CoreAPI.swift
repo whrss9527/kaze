@@ -52,6 +52,65 @@ struct CoreProvider: Decodable, Equatable {
     var updatedAt: String?
 }
 
+/// 内核里的一条连接（/connections）。
+struct CoreConnection: Decodable, Equatable {
+    struct Metadata: Decodable, Equatable {
+        var sourceIP: String?
+        var destinationIP: String?
+        var destinationPort: String?
+        var host: String?
+        /// 从哪个入口进来的；共享入口是 CoreConfigBuilder.shareListener。
+        var inboundName: String?
+
+        /// 显示用：域名，没有就目标 IP。
+        var displayHost: String {
+            if let host, !host.isEmpty { return host }
+            return destinationIP ?? ""
+        }
+    }
+
+    var id: String
+    var metadata: Metadata
+    var upload: Int64
+    var download: Int64
+    var start: String?
+    var chains: [String]?
+}
+
+/// 正在经共享入口上网的一台设备（按来源 IP 归并的连接）。
+struct ShareClient: Identifiable, Equatable {
+    var ip: String
+    var connections: Int
+    var upload: Int64
+    var download: Int64
+    /// 最近一个连接访问的主机。
+    var lastHost: String
+
+    var id: String { ip }
+
+    /// 从连接列表里挑出某个入口的连接，按来源 IP 归并；先连上来的设备排前面。
+    static func group(_ connections: [CoreConnection], listener: String) -> [ShareClient] {
+        var byIP: [String: ShareClient] = [:]
+        var order: [String] = []
+        let sorted = connections.sorted { ($0.start ?? "") < ($1.start ?? "") }
+        for connection in sorted where connection.metadata.inboundName == listener {
+            guard let ip = connection.metadata.sourceIP, !ip.isEmpty else { continue }
+            let host = connection.metadata.displayHost
+            if var client = byIP[ip] {
+                client.connections += 1
+                client.upload += connection.upload
+                client.download += connection.download
+                if !host.isEmpty { client.lastHost = host }
+                byIP[ip] = client
+            } else {
+                order.append(ip)
+                byIP[ip] = ShareClient(ip: ip, connections: 1, upload: connection.upload, download: connection.download, lastHost: host)
+            }
+        }
+        return order.compactMap { byIP[$0] }
+    }
+}
+
 enum CoreAPIError: LocalizedError {
     case status(Int, String)
     case badResponse
@@ -143,6 +202,13 @@ final class CoreAPI {
         let data = try await requestData("GET", "/providers/proxies")
         struct Envelope: Decodable { var providers: [String: CoreProvider] }
         return try JSONDecoder().decode(Envelope.self, from: data).providers
+    }
+
+    /// 当前所有连接。
+    func connections() async throws -> [CoreConnection] {
+        let data = try await requestData("GET", "/connections")
+        struct Envelope: Decodable { var connections: [CoreConnection]? }
+        return try JSONDecoder().decode(Envelope.self, from: data).connections ?? []
     }
 
     /// 让内核重新下载一条订阅。

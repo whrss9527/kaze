@@ -9,19 +9,26 @@ enum CoreConfigBuilder {
         var testURL: String
         /// 已经转换好的分流规则（不含局域网前缀，最后一条应是 MATCH）。
         var rules: [String]
+        /// 局域网共享；nil 表示没开。
+        var share: ShareInputs? = nil
     }
 
     static let selectorGroup = RuleConverter.proxyGroup
     static let autoGroup = "自动选择"
     static let providerUserAgent = "clash.meta"
+    /// 局域网共享的入口（listener）和它专用的规则组同名。
+    static let shareListener = "lan-share"
+    /// 本机用别的代理时，共享的流量转发给它：内核里叫这个名字。
+    static let upstreamProxy = "上游代理"
 
     static func yaml(_ input: Input) -> String {
         let engine = input.engine
-        let providers = engine.activeSubscriptions
+        // 只为共享而运行时不加载订阅，本机的代理端口也关掉（0 表示不监听），省得和别的代理软件抢端口。
+        let providers = engine.wantsCore ? engine.activeSubscriptions : []
         let providerNames = providers.map(\.providerName)
         var lines: [String] = []
         lines.append("# 由 ProxySwitch 生成，改动会被覆盖。")
-        lines.append("mixed-port: \(engine.mixedPort)")
+        lines.append("mixed-port: \(engine.wantsCore ? engine.mixedPort : 0)")
         lines.append("allow-lan: false")
         lines.append("bind-address: \"127.0.0.1\"")
         lines.append("mode: rule")
@@ -37,6 +44,27 @@ enum CoreConfigBuilder {
         lines.append("profile:")
         lines.append("  store-selected: true")
         lines.append("  store-fake-ip: false")
+        if let share = input.share {
+            // 谁能连进来：这份名单对所有入口生效，所以本机回环也在里面。
+            lines.append("lan-allowed-ips:")
+            for prefix in share.allowedPrefixes {
+                lines.append("  - \(quote(prefix))")
+            }
+            // 共享入口监听所有网卡，流量按 sub-rules 里同名的规则组分流；入口本身不随本机状态变，切换上游时只改规则、不断开连接。
+            lines.append("listeners:")
+            lines.append("  - name: \(quote(shareListener))")
+            lines.append("    type: mixed")
+            lines.append("    listen: \"0.0.0.0\"")
+            lines.append("    port: \(share.port)")
+            lines.append("    rule: \(quote(shareListener))")
+            if case .proxy(let kind, let host, let port) = share.upstream {
+                lines.append("proxies:")
+                lines.append("  - name: \(quote(upstreamProxy))")
+                lines.append("    type: \(kind == .socks5 ? "socks5" : "http")")
+                lines.append("    server: \(quote(host))")
+                lines.append("    port: \(port)")
+            }
+        }
         if !providers.isEmpty {
             lines.append("proxy-providers:")
             for subscription in providers {
@@ -75,15 +103,31 @@ enum CoreConfigBuilder {
         lines.append("    lazy: true")
         lines.append("    proxies: [\"DIRECT\"]")
         if !useLine.isEmpty { lines.append(useLine) }
-        lines.append("rules:")
         var rules = RuleConverter.lanRules + input.rules
         if !(rules.last?.hasPrefix("MATCH,") ?? false) {
             rules.append("MATCH,\(selectorGroup)")
         }
+        lines.append("rules:")
         for rule in rules {
             lines.append("  - \(quote(rule))")
         }
+        if let share = input.share {
+            lines.append("sub-rules:")
+            lines.append("  \(quote(shareListener)):")
+            for rule in shareRules(upstream: share.upstream, mainRules: rules) {
+                lines.append("    - \(quote(rule))")
+            }
+        }
         return lines.joined(separator: "\n") + "\n"
+    }
+
+    /// 共享入口的分流：本机开着内置代理时和本机完全一样；本机用别的代理时局域网直连、其余转发给它；本机没开代理时全部直连。
+    static func shareRules(upstream: ShareUpstream, mainRules: [String]) -> [String] {
+        switch upstream {
+        case .engine: return mainRules
+        case .proxy: return RuleConverter.lanRules + ["MATCH,\(upstreamProxy)"]
+        case .direct, .unsupported: return ["MATCH,DIRECT"]
+        }
     }
 
     /// 订阅在内核目录里的文件。

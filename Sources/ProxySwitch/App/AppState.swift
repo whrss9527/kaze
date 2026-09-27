@@ -40,6 +40,8 @@ final class AppState: ObservableObject {
     @Published var lastError: String?
     @Published var testResults: [UUID: TestResult] = [:]
     @Published var loginItemEnabled = false
+    /// 这台 Mac 在局域网里的地址，主网卡在前；PS5 等设备填代理服务器时用。
+    @Published private(set) var lanAddresses: [LocalNetwork.Address] = []
     let updater = Updater()
     let sync = CloudSync()
     let engine = Engine()
@@ -122,7 +124,24 @@ final class AppState: ObservableObject {
             .sink { [weak self] _ in Task { @MainActor in self?.engineConfigChanged() } }
             .store(in: &cancellables)
         ensureEngineProfile()
+        engine.setShare(shareInputs)
         engine.start()
+        // 本机的代理状态、共享设置、配置任何一个变了，都重新算一遍共享的上游，内核跟着热加载。
+        Publishers.CombineLatest3($snapshot, $persisted, $config)
+            .dropFirst()
+            .sink { [weak self] _ in Task { @MainActor in self?.shareStateChanged() } }
+            .store(in: &cancellables)
+        engine.$shareStatus
+            .removeDuplicates()
+            .dropFirst()
+            .sink { [weak self] status in
+                Task { @MainActor in
+                    if case .failed(let message) = status {
+                        self?.notify(title: "局域网共享出错", body: message, problem: true)
+                    }
+                }
+            }
+            .store(in: &cancellables)
         speed.coreTraffic = { [weak self] in try await self?.engine.trafficStream() }
         speed.setMode(config.speedDisplay)
         $config
@@ -198,9 +217,48 @@ final class AppState: ObservableObject {
         let current = SystemProxy.current()
         let changed = current != snapshot
         snapshot = current
+        let addresses = LocalNetwork.addresses()
+        if addresses != lanAddresses {
+            lanAddresses = addresses
+        }
         if changed {
             onStatusChanged?()
         }
+    }
+
+    // MARK: - 局域网共享
+
+    /// 局域网共享的设置（本机的，不同步）。
+    var share: ShareConfig { persisted.share }
+
+    /// 主网卡的地址，设备上填它。
+    var lanAddress: LocalNetwork.Address? { lanAddresses.first }
+
+    /// 共享出去的流量往哪走：跟着本机现在的代理状态。
+    var shareUpstream: ShareUpstream { ShareUpstream(status: status, snapshot: snapshot) }
+
+    /// 交给内核的共享参数；没开时是 nil。
+    var shareInputs: ShareInputs? {
+        guard share.enabled else { return nil }
+        return ShareInputs(port: share.port, allowedPrefixes: share.allowedPrefixes, upstream: shareUpstream)
+    }
+
+    func setShare(_ share: ShareConfig) {
+        guard share != persisted.share else { return }
+        persisted.share = share
+        Store.save(persisted)
+        Log.info(share.enabled ? "局域网共享：开启，端口 \(share.port)" : "局域网共享：关闭")
+        shareStateChanged()
+    }
+
+    func setShareEnabled(_ enabled: Bool) {
+        var updated = share
+        updated.enabled = enabled
+        setShare(updated)
+    }
+
+    private func shareStateChanged() {
+        engine.setShare(shareInputs)
     }
 
     // MARK: - 开关

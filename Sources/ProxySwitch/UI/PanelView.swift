@@ -31,6 +31,9 @@ struct PanelView: View {
             if state.config.engine.wantsCore {
                 nodeCard
             }
+            if state.share.enabled {
+                shareCard
+            }
             if !state.config.profiles.isEmpty {
                 profileList
             } else {
@@ -301,6 +304,61 @@ struct PanelView: View {
         if delay < 300 { return .green }
         if delay < 800 { return .orange }
         return .red
+    }
+
+    // MARK: - 局域网共享
+
+    private var shareCard: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "wifi.router")
+                .font(.system(size: 14))
+                .foregroundStyle(shareColor)
+                .frame(width: 20)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(shareTitle)
+                    .font(.system(size: 12, weight: .semibold))
+                    .lineLimit(1)
+                Text(shareSubtitle)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            .contentShape(Rectangle())
+            .onTapGesture { actions.openSettings(.share) }
+            .help("PS5、Switch 等设备把这台 Mac 当代理服务器，享受和本机一样的网络。点击查看设置")
+            Spacer(minLength: 4)
+            Toggle("", isOn: Binding(get: { state.share.enabled }, set: { state.setShareEnabled($0) }))
+                .toggleStyle(.switch)
+                .labelsHidden()
+                .controlSize(.mini)
+                .help("关闭局域网共享")
+        }
+        .padding(10)
+        .glassCard()
+    }
+
+    private var shareColor: Color {
+        switch engine.shareStatus {
+        case .listening: return .accentColor
+        case .failed: return .red
+        case .off, .starting: return .secondary
+        }
+    }
+
+    private var shareTitle: String {
+        if let address = state.lanAddress {
+            return "局域网共享 · \(address.ip):\(String(state.share.port))"
+        }
+        return "局域网共享 · 没有连上局域网"
+    }
+
+    private var shareSubtitle: String {
+        switch engine.shareStatus {
+        case .off: return "未运行"
+        case .starting: return "正在启动…"
+        case .failed(let message): return message
+        case .listening: return state.shareUpstream.summary
+        }
     }
 
     // MARK: - 配置列表

@@ -165,12 +165,13 @@ struct RouteTrace: Equatable {
         let middle = body[arrow.upperBound..<using.lowerBound]
         var target = middle
         var rule = ""
-        if let match = middle.range(of: " match ") {
-            target = middle[..<match.lowerBound]
-            rule = String(middle[match.upperBound...])
-        } else if let none = middle.range(of: " doesn't match any rule") {
+        // 「doesn't match any rule」里也含有「 match 」，先认它。
+        if let none = middle.range(of: " doesn't match any rule") {
             target = middle[..<none.lowerBound]
             rule = "没有命中任何规则"
+        } else if let match = middle.range(of: " match ") {
+            target = middle[..<match.lowerBound]
+            rule = String(middle[match.upperBound...])
         }
         guard let (host, port) = splitTarget(target) else { return nil }
         return RouteTrace(host: host, port: port, rule: rule, chain: String(body[using.upperBound...]).trimmingCharacters(in: .whitespaces), error: nil)

@@ -36,33 +36,47 @@ enum StatusIcon {
         return image
     }
 
-    /// 开关加两行网速（上行、下行）。textColor 是菜单栏当前外观下的文字颜色；关闭状态是模板图，颜色由系统决定。
+    /// 箭头和数字之间的间距。
+    static let arrowGap: CGFloat = 1.5
+
+    /// 开关加两行网速（上行、下行）。箭头单独占左边一列、数字靠右对齐，数值位数不同时两个箭头仍然上下对齐。
+    /// textColor 是菜单栏当前外观下的文字颜色；关闭状态是模板图，颜色由系统决定。
     static func image(for state: StatusIconState, upload: String, download: String, textColor: CGColor) -> NSImage {
-        let lines = [makeLine("↑" + upload), makeLine("↓" + download)]
-        let widths = lines.map { CGFloat(CTLineGetTypographicBounds($0, nil, nil, nil)) }
-        let textWidth = ceil(widths.max() ?? 0)
-        let size = NSSize(width: iconSize.width + speedGap + textWidth, height: speedHeight)
+        let arrows = [makeLine("↑"), makeLine("↓")]
+        let values = [makeLine(upload), makeLine(download)]
+        let arrowWidth = ceil(arrows.map { width($0) }.max() ?? 0)
+        // 数字一栏按最宽的可能值（四位数加 M）定宽，图标不会随数值跳动。
+        let valueWidth = ceil(max(width(makeLine("0000M")), values.map { width($0) }.max() ?? 0))
+        let textLeft = iconSize.width + speedGap
+        let size = NSSize(width: textLeft + arrowWidth + arrowGap + valueWidth, height: speedHeight)
         let image = NSImage(size: size, flipped: false) { rect in
             guard let context = NSGraphicsContext.current?.cgContext else { return false }
             let iconRect = NSRect(x: rect.minX, y: rect.midY - iconSize.height / 2, width: iconSize.width, height: iconSize.height)
             draw(state, in: iconRect)
-            // 文字：先量出两行的墨迹范围，让墨迹的整体中线正好落在开关的中线上，不依赖字体的名义行高。
+            // 文字：先量出两行（箭头加数字）的墨迹范围，让墨迹的整体中线正好落在开关的中线上，不依赖字体的名义行高。
             context.saveGState()
             context.textMatrix = .identity
             context.textPosition = .zero
-            let ink = lines.map { CTLineGetImageBounds($0, context) }
-            let bottomBaseline = rect.midY - (speedLinePitch + ink[0].maxY + ink[1].minY) / 2
+            let topInk = max(CTLineGetImageBounds(arrows[0], context).maxY, CTLineGetImageBounds(values[0], context).maxY)
+            let bottomInk = min(CTLineGetImageBounds(arrows[1], context).minY, CTLineGetImageBounds(values[1], context).minY)
+            let bottomBaseline = rect.midY - (speedLinePitch + topInk + bottomInk) / 2
             let baselines = [bottomBaseline + speedLinePitch, bottomBaseline]
             context.setFillColor(state == .off ? NSColor.black.cgColor : textColor)
-            for (index, line) in lines.enumerated() {
-                context.textPosition = CGPoint(x: rect.maxX - widths[index], y: baselines[index])
-                CTLineDraw(line, context)
+            for index in 0..<2 {
+                context.textPosition = CGPoint(x: rect.minX + textLeft, y: baselines[index])
+                CTLineDraw(arrows[index], context)
+                context.textPosition = CGPoint(x: rect.maxX - width(values[index]), y: baselines[index])
+                CTLineDraw(values[index], context)
             }
             context.restoreGState()
             return true
         }
         image.isTemplate = state == .off
         return image
+    }
+
+    private static func width(_ line: CTLine) -> CGFloat {
+        CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil))
     }
 
     private static func makeLine(_ text: String) -> CTLine {

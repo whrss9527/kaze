@@ -504,6 +504,46 @@ final class ParsingTests: XCTestCase {
         XCTAssertNotNil(InterfaceCounters.read())
     }
 
+    /// 菜单栏图标带网速时，两行小字的墨迹中线要和开关的中线重合（按像素检查真实渲染的结果）。
+    func testStatusIconSpeedAlignment() throws {
+        let upload = SpeedFormatter.compact(bytesPerSecond: 14_000_000)
+        let download = SpeedFormatter.compact(bytesPerSecond: 15_000_000)
+        for state in [StatusIconState.off, .on(NSColor.systemGreen), .external] {
+            let image = StatusIcon.image(for: state, upload: upload, download: download, textColor: NSColor.black.cgColor)
+            XCTAssertEqual(image.size.height, StatusIcon.speedHeight)
+            XCTAssertEqual(image.isTemplate, state == .off)
+            let scale: CGFloat = 2
+            let bitmap = try XCTUnwrap(StatusIcon.bitmap(of: image, scale: scale))
+            let iconWidth = Int(StatusIcon.iconSize.width * scale)
+            let icon = try XCTUnwrap(inkRows(bitmap, xRange: 0..<iconWidth))
+            let text = try XCTUnwrap(inkRows(bitmap, xRange: (iconWidth + Int(StatusIcon.speedGap * scale) / 2)..<bitmap.pixelsWide))
+            let iconCenter = Double(icon.min + icon.max) / 2
+            let textCenter = Double(text.min + text.max) / 2
+            XCTAssertLessThanOrEqual(abs(iconCenter - textCenter), 1.5, "\(state)：开关中线 \(iconCenter)，网速中线 \(textCenter)（像素，2x）")
+            // 两行都画出来了，而且没有贴到边上被裁掉。
+            XCTAssertGreaterThan(text.max - text.min, Int(StatusIcon.speedLinePitch * scale))
+            XCTAssertGreaterThan(text.min, 0)
+            XCTAssertLessThan(text.max, bitmap.pixelsHigh - 1)
+        }
+        // 没有网速时还是原来的小开关。
+        XCTAssertEqual(StatusIcon.image(for: .off).size, StatusIcon.iconSize)
+    }
+
+    /// 位图里某个横向范围内有墨迹（不透明）的最上和最下一行。
+    private func inkRows(_ bitmap: NSBitmapImageRep, xRange: Range<Int>) -> (min: Int, max: Int)? {
+        var minY = Int.max
+        var maxY = Int.min
+        for y in 0..<bitmap.pixelsHigh {
+            for x in xRange where x >= 0 && x < bitmap.pixelsWide {
+                if let color = bitmap.colorAt(x: x, y: y), color.alphaComponent > 0.25 {
+                    minY = min(minY, y)
+                    maxY = max(maxY, y)
+                }
+            }
+        }
+        return minY == Int.max ? nil : (minY, maxY)
+    }
+
     func testReleaseNotesCleaning() {
         let notes = "## 0.2.0\r\n\r\n- 一键更新\r\n  * 子项\r\n普通一行"
         XCTAssertEqual(ReleaseNotes.cleaned(notes), "0.2.0\n\n• 一键更新\n• 子项\n普通一行")

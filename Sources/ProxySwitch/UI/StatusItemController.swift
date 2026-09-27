@@ -35,48 +35,44 @@ final class StatusItemController: NSObject {
         updateSpeedLabel()
     }
 
-    // MARK: - 网速
+    // MARK: - 图标与网速
 
-    /// 图标右边两行小字：上行、下行。
+    /// 图标右边两行小字：上行、下行。和开关合成一张图，两行文字以开关的中线对齐。
     private func updateSpeedLabel() {
         guard let button = statusItem.button else { return }
         let meter = state.speed
-        guard meter.mode != .none else {
-            button.attributedTitle = NSAttributedString(string: "")
-            button.imagePosition = .imageOnly
-            return
+        if meter.mode == .none {
+            button.image = StatusIcon.image(for: iconState)
+        } else {
+            button.image = StatusIcon.image(for: iconState, upload: SpeedFormatter.compact(bytesPerSecond: meter.upload), download: SpeedFormatter.compact(bytesPerSecond: meter.download), textColor: labelColor(for: button))
         }
-        let text = "↑\(SpeedFormatter.compact(bytesPerSecond: meter.upload))\n↓\(SpeedFormatter.compact(bytesPerSecond: meter.download))"
-        let paragraph = NSMutableParagraphStyle()
-        paragraph.alignment = .right
-        paragraph.minimumLineHeight = 9
-        paragraph.maximumLineHeight = 9
-        paragraph.lineSpacing = 1
-        let attributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.monospacedDigitSystemFont(ofSize: 8.5, weight: .medium),
-            .paragraphStyle: paragraph,
-            .baselineOffset: -1,
-        ]
-        button.attributedTitle = NSAttributedString(string: text, attributes: attributes)
-        button.imagePosition = .imageLeft
-        button.imageHugsTitle = true
+        button.imagePosition = .imageOnly
     }
 
-    // MARK: - 图标
+    /// 菜单栏当前外观（深色 / 浅色）下的文字颜色。
+    private func labelColor(for button: NSStatusBarButton) -> CGColor {
+        var color = NSColor.labelColor.cgColor
+        button.effectiveAppearance.performAsCurrentDrawingAppearance {
+            color = NSColor.labelColor.cgColor
+        }
+        return color
+    }
 
-    func updateIcon() {
-        guard let button = statusItem.button else { return }
-        let iconState: StatusIconState
+    private var iconState: StatusIconState {
         switch state.status {
         case .on(let profile):
             let color = NSColor(hex: profile.color)
-            iconState = state.health == .down ? .warning(color) : .on(color)
+            return state.health == .down ? .warning(color) : .on(color)
         case .external:
-            iconState = .external
+            return .external
         case .off:
-            iconState = .off
+            return .off
         }
-        button.image = StatusIcon.image(for: iconState)
+    }
+
+    func updateIcon() {
+        guard let button = statusItem.button else { return }
+        updateSpeedLabel()
         button.toolTip = tooltip + (state.speed.mode == .none ? "" : "\n↑ \(SpeedFormatter.full(bytesPerSecond: state.speed.upload))  ↓ \(SpeedFormatter.full(bytesPerSecond: state.speed.download))")
         if let panel, panel.isVisible {
             resizePanel()

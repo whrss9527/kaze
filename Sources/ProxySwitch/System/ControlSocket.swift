@@ -137,7 +137,11 @@ final class ControlSocketServer: @unchecked Sendable {
             while true {
                 let client = accept(fd, nil, nil)
                 if client < 0 { break }
-                self?.serve(client)
+                guard let self else {
+                    close(client)
+                    continue
+                }
+                self.serve(client)
             }
         }
         source.setCancelHandler {

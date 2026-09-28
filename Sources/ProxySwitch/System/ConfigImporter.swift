@@ -76,8 +76,6 @@ struct ImportPlan: Equatable {
     var patch: String?
     /// 完整备份：替换时整个换掉。
     var backup: AppConfig?
-    /// 地址被隐藏了的订阅（从控制接口导出的配置描述）：保留现有的同名订阅。
-    var keptSubscriptions: [String] = []
     var warnings: [String] = []
 
     init(format: ImportFormat, sourceName: String) {
@@ -141,6 +139,8 @@ enum ImportError: LocalizedError, Equatable {
 enum ConfigImporter {
     /// 隐藏了的订阅地址的结尾（控制接口导出配置时用，免得把订阅的令牌交给 AI 助手）。
     static let hiddenURLSuffix = "__hidden__"
+    /// 隐藏了的手动节点链接的开头（链接里有密码），后面跟节点名。
+    static let hiddenNodePrefix = "hidden://"
 
     // MARK: - 识别
 
@@ -249,9 +249,15 @@ enum ConfigImporter {
                 plan.warnings.append("有一条订阅没有写 url")
                 continue
             }
-            if subscription.url.hasSuffix("/" + hiddenURLSuffix) {
-                plan.keptSubscriptions.append(subscription.name)
-                continue
+            if isHidden(url: subscription.url) {
+                // 从控制接口导出的描述：地址被隐藏了，用现有的同名订阅的地址（同名的有几个时按顺序对应）。
+                guard let original = existing.engine.subscriptions.first(where: { candidate in
+                    candidate.name == subscription.name && !plan.subscriptions.contains { $0.url == candidate.url }
+                }) else {
+                    plan.warnings.append("订阅「\(subscription.name)」的地址被隐藏了，现有设置里没有同名的订阅，跳过")
+                    continue
+                }
+                subscription.url = original.url
             }
             if let problem = Subscription.validate(url: subscription.url) ?? Subscription.validateOptions(filter: subscription.filter, exclude: subscription.exclude, prefix: subscription.prefix) {
                 plan.warnings.append("订阅「\(subscription.name)」：\(problem)")
@@ -261,6 +267,15 @@ enum ConfigImporter {
         }
         for item in json["nodes"] as? [Any] ?? [] {
             guard let link = item as? String else { continue }
+            if let name = hiddenNodeName(link) {
+                // 隐藏了的节点：用现有的同名手动节点（同名的有几个时按顺序对应）。
+                if let original = existing.engine.manualNodes.first(where: { $0.name == name && !plan.manualNodes.contains($0) }) {
+                    plan.manualNodes.append(original)
+                } else {
+                    plan.warnings.append("节点「\(name)」的链接被隐藏了，现有设置里没有同名的手动节点，跳过")
+                }
+                continue
+            }
             let links = NodeLink.extract(link)
             if links.isEmpty {
                 plan.warnings.append("认不出节点链接：\(String(link.prefix(40)))")
@@ -327,9 +342,19 @@ enum ConfigImporter {
                     plan.ruleSets.append(RuleSet(name: entry.name, url: entry.url, policy: policy, behavior: entry.behavior))
                     continue
                 }
-                guard let url = object["url"] as? String else {
+                guard var url = object["url"] as? String else {
                     plan.warnings.append("有一个规则集没有写 url")
                     continue
+                }
+                if isHidden(url: url) {
+                    let name = (object["name"] as? String) ?? ""
+                    guard let original = existing.engine.ruleSets.first(where: { candidate in
+                        candidate.name == name && !plan.ruleSets.contains { $0.url == candidate.url }
+                    }) else {
+                        plan.warnings.append("规则集「\(name)」的地址被隐藏了，现有设置里没有同名的规则集，跳过")
+                        continue
+                    }
+                    url = original.url
                 }
                 if let problem = RuleSet.validate(url: url) {
                     plan.warnings.append("规则集 \(url)：\(problem)")
@@ -339,6 +364,10 @@ enum ConfigImporter {
                 let name = (object["name"] as? String) ?? RuleSet.defaultName(for: url)
                 plan.ruleSets.append(RuleSet(name: name, url: url, policy: policy ?? (RuleSet(name: "", url: url, policy: nil).kind == .inline ? nil : .proxy)))
             } else if let url = item as? String {
+                if isHidden(url: url) {
+                    plan.warnings.append("有一个规则集的地址被隐藏了，又没有写名字，跳过")
+                    continue
+                }
                 plan.ruleSets.append(RuleSet(name: RuleSet.defaultName(for: url), url: url, policy: .proxy))
             }
         }
@@ -1113,7 +1142,8 @@ enum ConfigImporter {
 
     /// 把计划合并进现有的设置。directory 是导入文件存放的目录（Clash 配置里的节点、转换后的规则）。
     static func apply(_ plan: ImportPlan, to current: AppConfig, mode: ImportMode, directory: URL) -> ImportResult {
-        if let backup = plan.backup {
+        if let stored = plan.backup {
+            let backup = restoringSecrets(stored, from: current)
             if mode == .replace {
                 var config = backup
                 // 本机的端口和开关保持不变。
@@ -1144,26 +1174,35 @@ enum ConfigImporter {
             files.append((url, nodeFile.content))
             subscriptions.append(Subscription(name: "\(plan.sourceName) 的节点", url: url.absoluteString))
         }
-        if mode == .replace && (!subscriptions.isEmpty || !plan.keptSubscriptions.isEmpty) {
-            engine.subscriptions = engine.subscriptions.filter { plan.keptSubscriptions.contains($0.name) }
+        // 替换时地址相同的沿用原来的 id：策略组里记的来源、下载好的节点和规则都还能用。
+        let previousSubscriptions = engine.subscriptions
+        if mode == .replace && !subscriptions.isEmpty {
+            engine.subscriptions = []
         }
         // 策略组里「只用某几个订阅」记的是导入计划里订阅的 id；和已有订阅重复时换成已有的那个。
         var idMap: [UUID: UUID] = [:]
-        for subscription in subscriptions {
+        for var subscription in subscriptions {
             if let index = engine.subscriptions.firstIndex(where: { $0.url == subscription.url }) {
                 idMap[subscription.id] = engine.subscriptions[index].id
-                var updated = subscription
-                updated.id = engine.subscriptions[index].id
-                engine.subscriptions[index] = updated
+                subscription.id = engine.subscriptions[index].id
+                engine.subscriptions[index] = subscription
             } else {
+                if let previous = previousSubscriptions.first(where: { $0.url == subscription.url }) {
+                    idMap[subscription.id] = previous.id
+                    subscription.id = previous.id
+                }
                 engine.subscriptions.append(subscription)
             }
         }
         if !subscriptions.isEmpty { added.append("\(subscriptions.count) 条订阅") }
+        let previousNodes = engine.manualNodes
         if mode == .replace && !plan.manualNodes.isEmpty {
             engine.manualNodes = []
         }
-        let newNodes = plan.manualNodes.filter { node in !engine.manualNodes.contains { $0.link == node.link } }
+        var newNodes: [ManualNode] = []
+        for node in plan.manualNodes where !engine.manualNodes.contains(where: { $0.link == node.link }) && !newNodes.contains(where: { $0.link == node.link }) {
+            newNodes.append(previousNodes.first { $0.link == node.link } ?? node)
+        }
         engine.manualNodes += newNodes
         if !newNodes.isEmpty { added.append("\(newNodes.count) 个节点") }
 
@@ -1202,15 +1241,19 @@ enum ConfigImporter {
             }
             ruleSets.append(set)
         }
+        let previousSets = engine.ruleSets
         if mode == .replace && !ruleSets.isEmpty {
             engine.ruleSets = []
         }
-        for set in ruleSets {
+        for var set in ruleSets {
             if let index = engine.ruleSets.firstIndex(where: { $0.url == set.url }) {
                 engine.ruleSets[index].policy = set.policy
                 engine.ruleSets[index].enabled = true
                 if set.converted != nil { engine.ruleSets[index].converted = set.converted }
             } else {
+                if let previous = previousSets.first(where: { $0.url == set.url }) {
+                    set.id = previous.id
+                }
                 engine.ruleSets.append(set)
             }
         }
@@ -1377,6 +1420,90 @@ enum ConfigImporter {
     static func describeJSON(_ config: AppConfig) -> String {
         let data = (try? JSONSerialization.data(withJSONObject: describe(config), options: [.prettyPrinted, .sortedKeys])) ?? Data("{}".utf8)
         return String(decoding: data, as: UTF8.self)
+    }
+
+    // MARK: - 隐藏
+
+    /// 地址里常带着令牌：只留协议和主机名。本机文件不用隐藏。
+    static func hiddenURL(_ text: String) -> String {
+        let components = URLComponents(string: text)
+        let scheme = components?.scheme?.lowercased() ?? "https"
+        if scheme == "file" { return text }
+        let host = components?.host.flatMap { $0.isEmpty ? nil : $0 } ?? "hidden"
+        return "\(scheme)://\(host)/\(hiddenURLSuffix)"
+    }
+
+    static func isHidden(url: String) -> Bool {
+        url.hasSuffix("/" + hiddenURLSuffix)
+    }
+
+    /// 放规则的公开网站：地址里没有查询参数和账号时不用隐藏（规则库里的都在这些网站上）。
+    static let publicRuleHosts: Set<String> = ["raw.githubusercontent.com", "gist.githubusercontent.com", "cdn.jsdelivr.net", "fastly.jsdelivr.net", "testingcf.jsdelivr.net"]
+
+    /// 规则集的地址：内置的、本机的和公开网站上的照原样，别的只留主机名。
+    static func hiddenRuleSetURL(_ text: String) -> String {
+        if text.lowercased().hasPrefix(RuleSet.builtinScheme) { return text }
+        if let components = URLComponents(string: text), components.query == nil, components.user == nil,
+           let host = components.host?.lowercased(), publicRuleHosts.contains(host) {
+            return text
+        }
+        return hiddenURL(text)
+    }
+
+    /// 手动节点的链接里有密码：只留名字。
+    static func hiddenLink(for node: ManualNode) -> String {
+        hiddenNodePrefix + node.name
+    }
+
+    /// 隐藏了的手动节点的名字；不是隐藏的写法时返回 nil。
+    static func hiddenNodeName(_ link: String) -> String? {
+        guard link.hasPrefix(hiddenNodePrefix) else { return nil }
+        return String(link.dropFirst(hiddenNodePrefix.count))
+    }
+
+    /// 交给控制接口的配置：订阅和规则集的地址只留主机名，手动节点的链接只留名字。
+    static func hidingSecrets(_ config: AppConfig) -> AppConfig {
+        var copy = config
+        for index in copy.engine.subscriptions.indices {
+            copy.engine.subscriptions[index].url = hiddenURL(copy.engine.subscriptions[index].url)
+        }
+        for index in copy.engine.ruleSets.indices {
+            copy.engine.ruleSets[index].url = hiddenRuleSetURL(copy.engine.ruleSets[index].url)
+        }
+        for index in copy.engine.manualNodes.indices {
+            copy.engine.manualNodes[index].link = hiddenLink(for: copy.engine.manualNodes[index])
+        }
+        return copy
+    }
+
+    /// 从控制接口导出的备份再导入时：隐藏了的地址和链接按 id 或名字换回现有的，现有设置里找不到的去掉。
+    static func restoringSecrets(_ config: AppConfig, from current: AppConfig) -> AppConfig {
+        var restored = config
+        let subscriptions = current.engine.subscriptions
+        restored.engine.subscriptions = config.engine.subscriptions.compactMap { subscription in
+            guard isHidden(url: subscription.url) else { return subscription }
+            guard let original = subscriptions.first(where: { $0.id == subscription.id }) ?? subscriptions.first(where: { $0.name == subscription.name }) else { return nil }
+            var kept = subscription
+            kept.url = original.url
+            return kept
+        }
+        let sets = current.engine.ruleSets
+        restored.engine.ruleSets = config.engine.ruleSets.compactMap { set in
+            guard isHidden(url: set.url) else { return set }
+            guard let original = sets.first(where: { $0.id == set.id }) ?? sets.first(where: { $0.name == set.name }) else { return nil }
+            var kept = set
+            kept.url = original.url
+            return kept
+        }
+        let nodes = current.engine.manualNodes
+        restored.engine.manualNodes = config.engine.manualNodes.compactMap { node in
+            guard let name = hiddenNodeName(node.link) else { return node }
+            guard let original = nodes.first(where: { $0.id == node.id }) ?? nodes.first(where: { $0.name == name }) else { return nil }
+            var kept = node
+            kept.link = original.link
+            return kept
+        }
+        return restored
     }
 
     /// 去向的文字写法：proxy、direct、reject，策略组写名字。

@@ -41,7 +41,7 @@ proxyswitch ruleset add 广告拦截 reject    # 从规则库按名字添加
 proxyswitch group-add 美国 url-test 美|US
 proxyswitch import ~/Downloads/config.yaml --preview   # 预览
 proxyswitch import https://example.com/config.yaml     # 合并导入；--replace 替换同类设置
-proxyswitch export describe > proxyswitch.json         # 配置描述；backup 是备份，core 是内核配置（订阅地址都隐藏）
+proxyswitch export describe > proxyswitch.json         # 配置描述；backup 是备份，core 是内核配置（订阅地址、节点链接都隐藏）
 proxyswitch history                     # 操作记录
 proxyswitch undo                        # 撤销最近一次改动
 proxyswitch call select_node '{"name":"香港"}'          # 直接调用某个工具
@@ -88,7 +88,7 @@ MCP 服务器初始化时会把使用规则告诉 AI 助手：先看状态再动
 | `get_traffic` | 查看 | 按节点、按程序和设备、按天的流量 |
 | `get_logs` | 查看 | ProxySwitch 和内核的日志（`lines`） |
 | `diagnose_url` | 查看 | 诊断网址（`url`）：命中的规则、出口、结论 |
-| `export_config` | 查看 | 导出（`format`：`describe` / `backup` / `core`），订阅地址隐藏 |
+| `export_config` | 查看 | 导出（`format`：`describe` / `backup` / `core`），订阅地址和节点链接隐藏 |
 | `preview_import` | 查看 | 预览导入（`content` 或 `url`），不改动 |
 | `list_changes` | 查看 | 操作记录 |
 | `turn_on` / `turn_off` / `toggle` | 日常 | 开关代理（`turn_on` 可带 `profile`） |
@@ -111,7 +111,7 @@ MCP 服务器初始化时会把使用规则告诉 AI 助手：先看状态再动
 
 规则的去向写 `proxy`（走节点）、`direct`（直连）、`reject`（拦截）或者策略组的名字。规则类型（`type`）：`auto`（域名或 IP，默认）、`domain`、`suffix`、`keyword`、`wildcard`、`regex`、`ip`、`geoip`、`device`、`port`、`app`、`process`、`network`、`logic`。
 
-订阅地址里常带着令牌，经接口列出和导出时只留主机名（`https://example.com/__hidden__`）；把这样的配置描述再导入时，隐藏了的订阅保留现有的。
+订阅地址里常带着令牌，经接口列出和导出时只留主机名（`https://example.com/__hidden__`）；私人的规则集地址也一样（规则库和 GitHub 这类公开网站上的照原样）。手动节点的链接里有密码，导出时只留名字（`hidden://香港 01`）。把这样的配置描述或备份再导入时，隐藏了的订阅、规则集和节点按名字用现有的，改过的其他设置（筛选、前缀、去向……）照样生效；现有设置里没有同名的就跳过。
 
 ## ProxySwitch 配置描述（JSON）
 
@@ -165,7 +165,7 @@ MCP 服务器初始化时会把使用规则告诉 AI 助手：先看状态再动
 - `ruleSets[].library` 是规则库里的名字；`policy` 不写时纯列表走节点，完整配置按文件里的策略。
 - `networkRules[].action`：`off`（关闭代理）、`mode:rule`、`mode:global`、`profile:配置名`。
 - 合并导入时同名的策略组、同地址的订阅和规则集、同样的规则会被更新；替换导入时导入的类别整个换掉，没导入的类别不动。
-- 设置 →「高级」→「导出」→「配置描述」导出的就是这个格式（带完整的订阅地址），改了再导入就行；经命令行和 AI 助手导出时订阅地址是隐藏的。
+- 设置 →「高级」→「导出」→「配置描述」导出的就是这个格式（带完整的订阅地址），改了再导入就行；经命令行和 AI 助手导出时订阅地址和节点链接是隐藏的。
 
 ## 其他能导入的格式
 
@@ -175,7 +175,7 @@ MCP 服务器初始化时会把使用规则告诉 AI 助手：先看状态再动
 - **节点链接**：`ss://`、`ssr://`、`vmess://`、`vless://`、`trojan://`、`hysteria2://`、`tuic://`、`anytls://` 等，一行一条或整段 base64，加成手动节点。
 - **规则列表**：纯规则列表加成规则集。
 - **网址**：填网址时先下载再认格式。内容是节点列表或只有节点的 Clash 配置时直接加成订阅（以后自动更新）；是完整的 Clash / Surge 配置时，订阅和规则也直接用这个网址，跟着它更新。
-- **ProxySwitch 备份**：设置 →「高级」→「导出」→「完整备份」，导入时选「替换」原样恢复。经命令行导出的备份里订阅地址是隐藏的，只适合给别人看，不适合当备份。
+- **ProxySwitch 备份**：设置 →「高级」→「导出」→「完整备份」，导入时选「替换」原样恢复。经命令行导出的备份里订阅地址和节点链接是隐藏的：在这台 Mac 上还能恢复（隐藏的按名字用现有的），换一台 Mac 就不行了。
 
 设置里的导入在「高级」页（节点页、配置页也有入口），也可以把文件直接拖进设置窗口。导入前一定会先给你看要改动什么。
 

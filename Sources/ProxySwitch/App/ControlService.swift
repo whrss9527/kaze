@@ -266,7 +266,7 @@ final class ControlService: ObservableObject {
                 ["id": rule.id.uuidString, "type": rule.kind.rawValue, "value": rule.pattern, "policy": ConfigImporter.policyText(rule.policy), "enabled": rule.enabled]
             }
             let sets = config.ruleSets.map { set -> [String: Any] in
-                var item: [String: Any] = ["name": set.name, "url": set.isBuiltin ? set.url : ControlService.maskedURL(set.url), "enabled": set.enabled, "policy": set.policy.map(ConfigImporter.policyText) ?? "follow"]
+                var item: [String: Any] = ["name": set.name, "url": ConfigImporter.hiddenRuleSetURL(set.url), "enabled": set.enabled, "policy": set.policy.map(ConfigImporter.policyText) ?? "follow"]
                 if let count = engine.ruleSetStatus[set.id]?.count { item["rules"] = count }
                 if let problem = engine.ruleSetStatus[set.id]?.problem { item["problem"] = problem }
                 return item
@@ -275,7 +275,7 @@ final class ControlService: ObservableObject {
         case "list_subscriptions":
             let config = state.config.engine
             let subscriptions = config.subscriptions.map { subscription -> [String: Any] in
-                var item: [String: Any] = ["name": subscription.name, "url": ControlService.maskedURL(subscription.url), "enabled": subscription.enabled]
+                var item: [String: Any] = ["name": subscription.name, "url": ConfigImporter.hiddenURL(subscription.url), "enabled": subscription.enabled]
                 if let status = engine.subscriptionStatus[subscription.id] {
                     item["nodes"] = status.nodeCount
                     if let info = status.info {
@@ -318,7 +318,7 @@ final class ControlService: ObservableObject {
         case "get_logs":
             let lines = min(500, max(10, params.int("lines") ?? 80))
             let core = engine.logTail.split(separator: "\n").suffix(lines).joined(separator: "\n")
-            return ["text": "最近的日志", "app": Log.tail(lines: lines), "core": core]
+            return ["text": "最近的日志", "app": ControlService.masked(Log.tail(lines: lines), config: state.config), "core": ControlService.masked(core, config: state.config)]
         case "diagnose_url":
             let text = try params.require("url")
             guard let url = DiagnoseTarget.normalize(text) else { throw ControlError.invalid("认不出网址：\(text)") }
@@ -329,13 +329,14 @@ final class ControlService: ObservableObject {
         case "export_config":
             switch params.string("format") ?? "describe" {
             case "backup":
-                return ["text": "完整备份（订阅地址已隐藏）", "content": ControlService.masked(try ConfigImporter.backupJSON(state.config), config: state.config)]
+                let content = try ConfigImporter.backupJSON(ConfigImporter.hidingSecrets(state.config))
+                return ["text": "完整备份（订阅和规则集的地址、手动节点的链接已隐藏）", "content": content]
             case "core":
                 let text = (try? String(contentsOf: engine.configURL, encoding: .utf8)) ?? ""
                 let cleaned = text.split(separator: "\n", omittingEmptySubsequences: false).filter { !$0.hasPrefix("secret:") }.joined(separator: "\n")
                 return ["text": cleaned.isEmpty ? "内核还没有生成配置" : "内核配置（去掉了密钥，订阅地址已隐藏）", "content": ControlService.masked(cleaned, config: state.config)]
             default:
-                return ["text": "ProxySwitch 配置描述（订阅地址已隐藏；改了以后可以用 import_config 导入，隐藏的订阅会保留）", "content": ControlService.masked(ConfigImporter.describeJSON(state.config), config: state.config)]
+                return ["text": "ProxySwitch 配置描述（订阅和规则集的地址、手动节点的链接已隐藏；改了以后可以用 import_config 导入，隐藏了的按名字用现有的）", "content": ConfigImporter.describeJSON(ConfigImporter.hidingSecrets(state.config))]
             }
         case "preview_import":
             let plan = try await state.prepareImport(text: params.string("content"), url: params.string("url"), sourceName: sourceName)
@@ -657,20 +658,13 @@ final class ControlService: ObservableObject {
         }
     }
 
-    /// 订阅地址里常带着令牌：只留协议和主机名。
-    static func maskedURL(_ text: String) -> String {
-        guard let url = URL(string: text), let scheme = url.scheme, let host = url.host else { return text }
-        if scheme == "file" { return text }
-        return "\(scheme)://\(host)/\(ConfigImporter.hiddenURLSuffix)"
-    }
-
-    /// 把文字里所有的订阅地址换成隐藏的写法。
+    /// 把文字里（内核配置、日志）出现的订阅和规则集地址换成隐藏的写法。
     static func masked(_ text: String, config: AppConfig) -> String {
         var result = text
-        for subscription in config.engine.subscriptions where subscription.filePath == nil {
-            let escaped = subscription.url.replacingOccurrences(of: "/", with: "\\/")
-            result = result.replacingOccurrences(of: subscription.url, with: maskedURL(subscription.url))
-            result = result.replacingOccurrences(of: escaped, with: maskedURL(subscription.url).replacingOccurrences(of: "/", with: "\\/"))
+        let addresses = config.engine.subscriptions.map { ($0.url, ConfigImporter.hiddenURL($0.url)) }
+            + config.engine.ruleSets.map { ($0.url, ConfigImporter.hiddenRuleSetURL($0.url)) }
+        for (address, hidden) in addresses where !address.isEmpty && address != hidden {
+            result = result.replacingOccurrences(of: address, with: hidden)
         }
         return result
     }

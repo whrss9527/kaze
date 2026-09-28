@@ -366,6 +366,86 @@ final class ImportTests: XCTestCase {
         XCTAssertEqual(plan.hosts.first?.value, "192.168.1.5")
     }
 
+    func testHiddenSecretsRoundTrip() throws {
+        var config = AppConfig()
+        var subscription = Subscription(name: "机场", url: "https://sub.example.com/api/v1/sub?token=SECRET1")
+        subscription.filter = "港"
+        let local = Subscription(name: "本机", url: "file:///tmp/ps-imports/nodes.yaml")
+        config.engine.subscriptions = [subscription, local]
+        let node = ManualNode(link: "trojan://SECRET2@a.example.com:443#香港 01")
+        config.engine.manualNodes = [node]
+        let publicSet = RuleSet(name: "公开", url: "https://raw.githubusercontent.com/a/b/master/ad.list", policy: .reject)
+        let privateSet = RuleSet(name: "私人", url: "https://rules.example.com/my.list?key=SECRET3", policy: .direct)
+        config.engine.ruleSets = [publicSet, privateSet]
+        var group = PolicyGroup(name: "香港", kind: .urlTest, filter: "港")
+        group.sources = [subscription.id, ManualNode.sourceID]
+        config.engine.groups = [group]
+
+        // 导出的描述和备份里没有令牌和密码。
+        let hidden = ConfigImporter.hidingSecrets(config)
+        XCTAssertEqual(hidden.engine.subscriptions[0].url, "https://sub.example.com/__hidden__")
+        XCTAssertEqual(hidden.engine.subscriptions[1].url, local.url)
+        XCTAssertEqual(hidden.engine.ruleSets[0].url, publicSet.url)
+        XCTAssertEqual(hidden.engine.ruleSets[1].url, "https://rules.example.com/__hidden__")
+        XCTAssertEqual(hidden.engine.manualNodes[0].link, "hidden://香港 01")
+        let json = ConfigImporter.describeJSON(hidden)
+        let backup = try ConfigImporter.backupJSON(hidden)
+        for text in [json, backup] {
+            for secret in ["SECRET1", "SECRET2", "SECRET3"] {
+                XCTAssertFalse(text.contains(secret), secret)
+            }
+        }
+
+        // 改了隐藏的订阅的筛选再导入：地址用现有的，改动生效，id 不变。
+        let edited = json.replacingOccurrences(of: "\"filter\" : \"港\"", with: "\"filter\" : \"港|HK\"")
+        XCTAssertNotEqual(edited, json)
+        let plan = try ConfigImporter.plan(edited, sourceName: "描述", existing: config)
+        XCTAssertTrue(plan.warnings.isEmpty, "\(plan.warnings)")
+        XCTAssertEqual(plan.subscriptions.map(\.url), [subscription.url, local.url])
+        XCTAssertEqual(plan.manualNodes.map(\.link), [node.link])
+        XCTAssertEqual(plan.ruleSets.map(\.url), [publicSet.url, privateSet.url])
+        for mode in [ImportMode.merge, .replace] {
+            let result = ConfigImporter.apply(plan, to: config, mode: mode, directory: directory).config.engine
+            XCTAssertEqual(result.subscriptions.map(\.id), [subscription.id, local.id], "\(mode)")
+            XCTAssertEqual(result.subscriptions.map(\.url), [subscription.url, local.url], "\(mode)")
+            XCTAssertEqual(result.subscriptions[0].filter, "港|HK", "\(mode)")
+            XCTAssertEqual(result.manualNodes, [node], "\(mode)")
+            XCTAssertEqual(result.ruleSets.map(\.id), [publicSet.id, privateSet.id], "\(mode)")
+            XCTAssertEqual(result.ruleSets.map(\.url), [publicSet.url, privateSet.url], "\(mode)")
+            XCTAssertEqual(result.groups.first?.sources, [subscription.id, ManualNode.sourceID], "\(mode)")
+        }
+
+        // 现有设置里没有的隐藏项：提示并跳过。
+        let orphan = try ConfigImporter.plan(json, sourceName: "描述", existing: AppConfig())
+        XCTAssertEqual(orphan.subscriptions.map(\.url), [local.url])
+        XCTAssertTrue(orphan.manualNodes.isEmpty)
+        XCTAssertEqual(orphan.ruleSets.map(\.url), [publicSet.url])
+        XCTAssertEqual(orphan.warnings.count, 3)
+
+        // 隐藏了的备份：在这台机器上恢复时换回现有的地址和链接，找不到的去掉。
+        let backupPlan = try ConfigImporter.plan(backup, sourceName: "备份")
+        let restored = ConfigImporter.apply(backupPlan, to: config, mode: .replace, directory: directory).config.engine
+        XCTAssertEqual(restored.subscriptions, config.engine.subscriptions)
+        XCTAssertEqual(restored.manualNodes, config.engine.manualNodes)
+        XCTAssertEqual(restored.ruleSets, config.engine.ruleSets)
+        var other = config
+        other.engine.manualNodes = []
+        other.engine.subscriptions = [local]
+        let partial = ConfigImporter.apply(backupPlan, to: other, mode: .replace, directory: directory).config.engine
+        XCTAssertEqual(partial.subscriptions, [local])
+        XCTAssertTrue(partial.manualNodes.isEmpty)
+        let merged = ConfigImporter.apply(backupPlan, to: other, mode: .merge, directory: directory).config.engine
+        XCTAssertFalse(merged.subscriptions.contains { ConfigImporter.isHidden(url: $0.url) })
+        XCTAssertFalse(merged.manualNodes.contains { ConfigImporter.hiddenNodeName($0.link) != nil })
+        XCTAssertFalse(merged.ruleSets.contains { ConfigImporter.isHidden(url: $0.url) })
+
+        // 同名的手动节点按顺序对应，替换导入时一个都不少。
+        var twins = AppConfig()
+        twins.engine.manualNodes = [ManualNode(link: "trojan://p1@a.example.com:443#同名"), ManualNode(link: "trojan://p2@b.example.com:443#同名")]
+        let twinsPlan = try ConfigImporter.plan(ConfigImporter.describeJSON(ConfigImporter.hidingSecrets(twins)), sourceName: "描述", existing: twins)
+        XCTAssertEqual(ConfigImporter.apply(twinsPlan, to: twins, mode: .replace, directory: directory).config.engine.manualNodes, twins.engine.manualNodes)
+    }
+
     func testNetworkRules() {
         let office = NetworkRule(match: .ssid("Office"), action: .off)
         let home = NetworkRule(match: .router("AA:BB:CC:0D:EE:FF"), action: .mode(.global))

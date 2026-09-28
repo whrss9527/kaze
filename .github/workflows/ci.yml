@@ -210,6 +210,10 @@ jobs:
           grep -q 'DOMAIN-SUFFIX,imported.example,导入的组' "$core" || { echo "导入的规则没有进内核配置"; cat "$support/proxyswitch.log" | tail -20; exit 1; }
           "$cli" history
           "$cli" undo
+          # 经接口导出的配置描述里，手动节点的链接只留名字，密码不出现。
+          "$cli" export describe > "$RUNNER_TEMP/describe.json"
+          grep -q '手动节点D' "$RUNNER_TEMP/describe.json" || { echo "导出的配置描述里没有手动节点"; cat "$RUNNER_TEMP/describe.json"; exit 1; }
+          grep -q 'password@example.com' "$RUNNER_TEMP/describe.json" && { echo "导出的配置描述里有节点的密码"; exit 1; }
           # MCP：初始化、列出工具、调用一个工具。
           printf '%s\n' \
             '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"ci","version":"1"}}}' \
@@ -479,6 +483,19 @@ jobs:
             tail -60 "$RUNNER_TEMP/selftest.log"
             echo "=====END 签名流程自测====="
           fi
+          # 节点页、自动化页和高级页：同样裁出窗口一带缩小，放在后面，日志只看末尾几千行时也在。
+          for name in nodes automation advanced; do
+            [ -f "$name.png" ] || continue
+            width=$(sips -g pixelWidth "$name.png" | awk '/pixelWidth/{print $2}')
+            height=$(sips -g pixelHeight "$name.png" | awk '/pixelHeight/{print $2}')
+            cw=$(( width < 1000 ? width : 1000 )); ch=$(( height < 700 ? height : 700 ))
+            if sips -c "$ch" "$cw" "$name.png" --out "$name-window.png" >/dev/null 2>&1; then
+              sips -Z 700 -s format jpeg -s formatOptions 50 "$name-window.png" --out "$name-window.jpg" >/dev/null
+              echo "=====BEGIN $name-window.jpg====="
+              base64 -b 76 -i "$name-window.jpg"
+              echo "=====END $name-window.jpg====="
+            fi
+          done
           # 关于页（带赞赏码）：设置窗口在屏幕正中，裁出窗口一带缩小后打在最后。
           if [ -f about.png ]; then
             width=$(sips -g pixelWidth about.png | awk '/pixelWidth/{print $2}')

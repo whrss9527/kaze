@@ -525,8 +525,8 @@ final class ParsingTests: XCTestCase {
             let upload = SpeedFormatter.compact(bytesPerSecond: up)
             let download = SpeedFormatter.compact(bytesPerSecond: down)
             for state in [StatusIconState.off, .on(NSColor.systemGreen), .external] {
-                for side in SpeedSide.allCases {
-                    let image = StatusIcon.image(for: state, upload: upload, download: download, textColor: NSColor.black.cgColor, speedSide: side)
+                for side in [SpeedLayout.speedLeft, .speedRight] {
+                    let image = StatusIcon.image(for: state, upload: upload, download: download, textColor: NSColor.black.cgColor, layout: side)
                     XCTAssertEqual(image.size.height, StatusIcon.speedHeight)
                     XCTAssertEqual(image.isTemplate, state == .off)
                     let scale: CGFloat = 2
@@ -534,8 +534,8 @@ final class ParsingTests: XCTestCase {
                     let iconWidth = Int(StatusIcon.iconSize.width * scale)
                     let gapHalf = Int(StatusIcon.speedGap * scale) / 2
                     // 网速在左边时开关在最右边，反之开关在最左边。
-                    let iconRange = side == .left ? (bitmap.pixelsWide - iconWidth)..<bitmap.pixelsWide : 0..<iconWidth
-                    let textRange = side == .left ? 0..<(bitmap.pixelsWide - iconWidth - gapHalf) : (iconWidth + gapHalf)..<bitmap.pixelsWide
+                    let iconRange = side == .speedLeft ? (bitmap.pixelsWide - iconWidth)..<bitmap.pixelsWide : 0..<iconWidth
+                    let textRange = side == .speedLeft ? 0..<(bitmap.pixelsWide - iconWidth - gapHalf) : (iconWidth + gapHalf)..<bitmap.pixelsWide
                     let icon = try XCTUnwrap(inkRows(bitmap, xRange: iconRange))
                     let text = try XCTUnwrap(inkRows(bitmap, xRange: textRange))
                     let iconCenter = Double(icon.min + icon.max) / 2
@@ -555,7 +555,7 @@ final class ParsingTests: XCTestCase {
                     XCTAssertLessThanOrEqual(largestGap(bitmap, xRange: textRange, yRange: half..<bitmap.pixelsHigh), 8, "\(download) \(side)：箭头和数字之间空得太大")
                     // 开关和网速之间留着间距，没有画到一起；但也挨得很近，不超过 6 个点。
                     let iconColumns = try XCTUnwrap(inkColumns(bitmap, xRange: iconRange, yRange: 0..<bitmap.pixelsHigh))
-                    if side == .left {
+                    if side == .speedLeft {
                         let textEnd = max(top.max, bottom.max)
                         XCTAssertGreaterThan(iconColumns.min, textEnd)
                         XCTAssertLessThanOrEqual(iconColumns.min - textEnd, Int(6 * scale), "\(upload)/\(download)：网速和开关之间空得太大")
@@ -572,6 +572,104 @@ final class ParsingTests: XCTestCase {
                        StatusIcon.image(for: .off, upload: SpeedFormatter.compact(bytesPerSecond: 1_000_000_000), download: SpeedFormatter.compact(bytesPerSecond: 999_000), textColor: NSColor.black.cgColor).size.width)
         // 没有网速时还是原来的小开关。
         XCTAssertEqual(StatusIcon.image(for: .off).size, StatusIcon.iconSize)
+    }
+
+    /// 「关代理时只显示网速」：关着只有网速，开着开关出现在网速左边（网速的位置不动，只是左边多了开关）。
+    func testSpeedOnlyLayout() throws {
+        XCTAssertEqual(SpeedLayout.resolve(side: .speedOnly, state: .off), .speedOnly)
+        XCTAssertEqual(SpeedLayout.resolve(side: .speedOnly, state: .on(.systemGreen)), .speedRight)
+        XCTAssertEqual(SpeedLayout.resolve(side: .speedOnly, state: .external), .speedRight)
+        XCTAssertEqual(SpeedLayout.resolve(side: .speedOnly, state: .warning(.systemGreen)), .speedRight)
+        XCTAssertEqual(SpeedLayout.resolve(side: .left, state: .off), .speedLeft)
+        XCTAssertEqual(SpeedLayout.resolve(side: .right, state: .on(.systemBlue)), .speedRight)
+
+        let upload = SpeedFormatter.compact(bytesPerSecond: 12_595)
+        let download = SpeedFormatter.compact(bytesPerSecond: 1_258_291)
+        let only = StatusIcon.image(for: .off, upload: upload, download: download, textColor: NSColor.black.cgColor, layout: .speedOnly)
+        let withSwitch = StatusIcon.image(for: .on(.systemGreen), upload: upload, download: download, textColor: NSColor.black.cgColor, layout: .speedRight)
+        XCTAssertTrue(only.isTemplate)
+        XCTAssertEqual(only.size.height, StatusIcon.speedHeight)
+        // 开关加在左边：只多了开关和间距那么宽。
+        XCTAssertEqual(withSwitch.size.width - only.size.width, StatusIcon.iconSize.width + StatusIcon.speedGap, accuracy: 0.01)
+        // 只有网速时整张图都是文字：两个箭头对齐，墨迹从最左边附近开始。
+        let scale: CGFloat = 2
+        let bitmap = try XCTUnwrap(StatusIcon.bitmap(of: only, scale: scale))
+        let half = bitmap.pixelsHigh / 2
+        let top = try XCTUnwrap(inkColumns(bitmap, xRange: 0..<bitmap.pixelsWide, yRange: 0..<half))
+        let bottom = try XCTUnwrap(inkColumns(bitmap, xRange: 0..<bitmap.pixelsWide, yRange: half..<bitmap.pixelsHigh))
+        XCTAssertLessThanOrEqual(abs(top.min - bottom.min), 1)
+        XCTAssertLessThanOrEqual(top.min, 4)
+    }
+
+    /// 网速文字跟着代理状态变色：颜色和开关同色相，和菜单栏底色的对比度至少 4.5:1；关着时不变色。
+    func testSpeedTextColors() {
+        XCTAssertNil(StatusIcon.speedTextColor(for: .off, darkMenuBar: false))
+        let palette: [StatusIconState] = ProfilePalette.colors.map { StatusIconState.on(NSColor(hex: $0)) }
+        let states: [StatusIconState] = palette + [.external, .warning(NSColor(hex: "#16a34a")), .error]
+        for state in states {
+            for dark in [false, true] {
+                let color = StatusIcon.speedTextColor(for: state, darkMenuBar: dark)!
+                let background: NSColor = dark ? .darkMenuBarBackground : .lightMenuBarBackground
+                XCTAssertGreaterThanOrEqual(NSColor.contrast(color, background), 4.5, "\(state) \(dark ? "深色" : "浅色")")
+            }
+        }
+        // 连不上时是红色（红色分量最大）。
+        let warning = StatusIcon.speedTextColor(for: .warning(NSColor(hex: "#2563eb")), darkMenuBar: false)!.usingColorSpace(.sRGB)!
+        XCTAssertGreaterThan(warning.redComponent, warning.blueComponent)
+        XCTAssertEqual(NSColor.contrast(.black, .white), 21, accuracy: 0.01)
+    }
+
+    /// 把各种状态、三种摆法、深浅两种菜单栏画成一张对照图（设置了 PROXYSWITCH_ICON_PREVIEW_DIR 时才画，CI 里用来看效果）。
+    func testRenderIconPreview() throws {
+        guard let directory = ProcessInfo.processInfo.environment["PROXYSWITCH_ICON_PREVIEW_DIR"] else { return }
+        let states: [(String, StatusIconState)] = [("关", .off), ("开·绿", .on(NSColor(hex: "#16a34a"))), ("开·蓝", .on(NSColor(hex: "#2563eb"))), ("别的程序", .external), ("连不上", .warning(NSColor(hex: "#16a34a")))]
+        let sides: [SpeedSide] = [.left, .right, .speedOnly]
+        let upload = SpeedFormatter.compact(bytesPerSecond: 12_595)
+        let download = SpeedFormatter.compact(bytesPerSecond: 1_258_291)
+        let cell = NSSize(width: 110, height: 28)
+        let labelWidth: CGFloat = 60
+        let canvas = NSSize(width: labelWidth + cell.width * CGFloat(sides.count), height: cell.height * CGFloat(states.count * 2) + 18)
+        let scale: CGFloat = 3
+        let rep = try XCTUnwrap(NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(canvas.width * scale), pixelsHigh: Int(canvas.height * scale), bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0))
+        rep.size = canvas
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+        NSColor.white.setFill()
+        NSRect(origin: .zero, size: canvas).fill()
+        let labelAttributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 9), .foregroundColor: NSColor.darkGray]
+        for (column, side) in sides.enumerated() {
+            (side.title as NSString).draw(at: NSPoint(x: labelWidth + CGFloat(column) * cell.width + 4, y: canvas.height - 14), withAttributes: labelAttributes)
+        }
+        for dark in [false, true] {
+            for (row, entry) in states.enumerated() {
+                let index = (dark ? states.count : 0) + row
+                let y = canvas.height - 18 - cell.height * CGFloat(index + 1)
+                let background: NSColor = dark ? .darkMenuBarBackground : .lightMenuBarBackground
+                background.setFill()
+                NSRect(x: labelWidth, y: y, width: cell.width * CGFloat(sides.count), height: cell.height).fill()
+                ("\(entry.0)\(dark ? "·深" : "·浅")" as NSString).draw(at: NSPoint(x: 4, y: y + 9), withAttributes: labelAttributes)
+                let label: NSColor = dark ? .white : .black
+                for (column, side) in sides.enumerated() {
+                    let color = StatusIcon.speedTextColor(for: entry.1, darkMenuBar: dark) ?? label
+                    var image = StatusIcon.image(for: entry.1, upload: upload, download: download, textColor: color.cgColor, layout: SpeedLayout.resolve(side: side, state: entry.1))
+                    if image.isTemplate {
+                        // 模板图由系统上色，这里按菜单栏深浅手动上色。
+                        let template = image
+                        image = NSImage(size: template.size, flipped: false) { rect in
+                            template.draw(in: rect)
+                            label.set()
+                            rect.fill(using: .sourceAtop)
+                            return true
+                        }
+                    }
+                    let x = labelWidth + CGFloat(column) * cell.width + (cell.width - image.size.width) / 2
+                    image.draw(in: NSRect(x: x, y: y + (cell.height - image.size.height) / 2, width: image.size.width, height: image.size.height))
+                }
+            }
+        }
+        NSGraphicsContext.restoreGraphicsState()
+        let data = try XCTUnwrap(rep.representation(using: .png, properties: [:]))
+        try data.write(to: URL(fileURLWithPath: directory).appendingPathComponent("icon-preview.png"))
     }
 
     /// 某个区域里相邻两列墨迹之间最大的空白宽度（像素）。

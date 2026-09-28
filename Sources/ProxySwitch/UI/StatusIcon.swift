@@ -2,6 +2,26 @@ import AppKit
 import CoreText
 import SwiftUI
 
+/// 网速和开关怎么摆。
+enum SpeedLayout: Equatable {
+    /// 网速在左，开关在右。
+    case speedLeft
+    /// 开关在左，网速在右。
+    case speedRight
+    /// 只有网速，没有开关。
+    case speedOnly
+
+    /// 按设置和当前状态决定。「关代理时只显示网速」开着代理（或者系统代理被别的程序设置、代理服务器连不上）时
+    /// 开关出现在网速左边：菜单栏图标是靠右排的，开关加在左边，网速本身的位置不动。
+    static func resolve(side: SpeedSide, state: StatusIconState) -> SpeedLayout {
+        switch side {
+        case .left: return .speedLeft
+        case .right: return .speedRight
+        case .speedOnly: return state == .off ? .speedOnly : .speedRight
+        }
+    }
+}
+
 /// 菜单栏图标的状态。
 enum StatusIconState: Equatable {
     case off
@@ -46,22 +66,25 @@ enum StatusIcon {
         return ceil(samples.map { width(makeLine($0)) }.max() ?? 0)
     }()
 
-    /// 开关加两行网速（上行、下行），网速在开关的左边或右边。箭头单独占一列，数字紧跟在箭头后面：两个箭头上下对齐，
+    /// 开关加两行网速（上行、下行），网速在开关的左边、右边，或者只有网速。箭头单独占一列，数字紧跟在箭头后面：两个箭头上下对齐，
     /// 箭头和数字之间不空出一截；数字固定 3 位，数字一栏只比实际的字宽一点点，开关紧挨着文字。
-    /// textColor 是菜单栏当前外观下的文字颜色；关闭状态是模板图，颜色由系统决定。
-    static func image(for state: StatusIconState, upload: String, download: String, textColor: CGColor, speedSide: SpeedSide = .left) -> NSImage {
+    /// textColor 是网速文字的颜色（菜单栏文字色，或者跟着代理状态的颜色）；关闭状态是模板图，颜色由系统决定。
+    static func image(for state: StatusIconState, upload: String, download: String, textColor: CGColor, layout: SpeedLayout = .speedLeft) -> NSImage {
         let arrows = [makeLine("↑"), makeLine("↓")]
         let values = [makeLine(trimmed(upload)), makeLine(trimmed(download))]
         let arrowWidth = ceil(arrows.map { width($0) }.max() ?? 0)
         let valueWidth = max(valueColumnWidth, ceil(values.map { width($0) }.max() ?? 0))
         let textWidth = arrowWidth + arrowGap + valueWidth
-        let size = NSSize(width: textWidth + speedGap + iconSize.width, height: speedHeight)
+        let switchWidth = layout == .speedOnly ? 0 : speedGap + iconSize.width
+        let size = NSSize(width: textWidth + switchWidth, height: speedHeight)
         let image = NSImage(size: size, flipped: false) { rect in
             guard let context = NSGraphicsContext.current?.cgContext else { return false }
-            let textLeft = speedSide == .left ? rect.minX : rect.minX + iconSize.width + speedGap
-            let iconX = speedSide == .left ? rect.maxX - iconSize.width : rect.minX
-            let iconRect = NSRect(x: iconX, y: rect.midY - iconSize.height / 2, width: iconSize.width, height: iconSize.height)
-            draw(state, in: iconRect)
+            let textLeft = layout == .speedRight ? rect.minX + iconSize.width + speedGap : rect.minX
+            if layout != .speedOnly {
+                let iconX = layout == .speedLeft ? rect.maxX - iconSize.width : rect.minX
+                let iconRect = NSRect(x: iconX, y: rect.midY - iconSize.height / 2, width: iconSize.width, height: iconSize.height)
+                draw(state, in: iconRect)
+            }
             // 文字：先量出两行（箭头加数字）的墨迹范围，让墨迹的整体中线正好落在开关的中线上，不依赖字体的名义行高。
             context.saveGState()
             context.textMatrix = .identity
@@ -82,6 +105,19 @@ enum StatusIcon {
         }
         image.isTemplate = state == .off
         return image
+    }
+
+    /// 网速文字跟着代理状态时的颜色：开着用开关的颜色，系统代理被别的程序设置时黄色，代理服务器连不上时红色；关着时返回 nil（用普通的菜单栏文字色）。
+    /// 开关的颜色直接当小字用对比度不够，按菜单栏深浅自动调深或调浅到 4.5:1 以上。
+    static func speedTextColor(for state: StatusIconState, darkMenuBar: Bool) -> NSColor? {
+        let accent: NSColor
+        switch state {
+        case .off: return nil
+        case .on(let color): accent = color
+        case .external: accent = amber
+        case .warning, .error: accent = red
+        }
+        return accent.legible(onDark: darkMenuBar)
     }
 
     private static func width(_ line: CTLine) -> CGFloat {
@@ -163,6 +199,42 @@ enum StatusIcon {
 }
 
 extension NSColor {
+    /// 估计的菜单栏底色（半透明，随桌面变化；取偏不利的一端）。
+    static let lightMenuBarBackground = NSColor(srgbRed: 0.86, green: 0.86, blue: 0.86, alpha: 1)
+    static let darkMenuBarBackground = NSColor(srgbRed: 0.23, green: 0.23, blue: 0.23, alpha: 1)
+
+    /// 相对亮度（WCAG 的算法）。
+    var relativeLuminance: CGFloat {
+        guard let rgb = usingColorSpace(.sRGB) else { return 0 }
+        func linear(_ value: CGFloat) -> CGFloat {
+            value <= 0.04045 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4)
+        }
+        return 0.2126 * linear(rgb.redComponent) + 0.7152 * linear(rgb.greenComponent) + 0.0722 * linear(rgb.blueComponent)
+    }
+
+    /// 两个颜色的对比度（1…21）。
+    static func contrast(_ first: NSColor, _ second: NSColor) -> CGFloat {
+        let a = first.relativeLuminance
+        let b = second.relativeLuminance
+        return (max(a, b) + 0.05) / (min(a, b) + 0.05)
+    }
+
+    /// 同一个色相、和菜单栏底色对比度够的版本：浅色菜单栏上往黑调，深色菜单栏上往白调，每次 5%，调到够为止。
+    func legible(onDark dark: Bool, minimumContrast: CGFloat = 4.5) -> NSColor {
+        guard let base = usingColorSpace(.sRGB) else { return self }
+        let background: NSColor = dark ? .darkMenuBarBackground : .lightMenuBarBackground
+        let target: NSColor = dark ? .white : .black
+        var fraction: CGFloat = 0
+        while fraction < 1 {
+            let candidate = base.blended(withFraction: fraction, of: target)?.usingColorSpace(.sRGB) ?? base
+            if NSColor.contrast(candidate, background) >= minimumContrast {
+                return candidate
+            }
+            fraction += 0.05
+        }
+        return target
+    }
+
     /// 解析 #rrggbb。
     convenience init(hex: String) {
         var text = hex.trimmingCharacters(in: .whitespaces)

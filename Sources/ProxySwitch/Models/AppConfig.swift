@@ -77,6 +77,8 @@ enum SpeedDisplay: String, Codable, CaseIterable, Identifiable {
 enum SpeedSide: String, Codable, CaseIterable, Identifiable {
     case left
     case right
+    /// 代理关着时只显示网速；开启后开关出现在网速左边。
+    case speedOnly
 
     var id: String { rawValue }
 
@@ -84,6 +86,7 @@ enum SpeedSide: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .left: return "图标左边"
         case .right: return "图标右边"
+        case .speedOnly: return "关代理时只显示网速"
         }
     }
 }
@@ -105,11 +108,13 @@ struct AppConfig: Codable, Equatable {
     var speedDisplay: SpeedDisplay = .system
     /// 网速在图标的左边还是右边；默认在左边，开关在右边。
     var speedSide: SpeedSide = .left
+    /// 网速文字跟着代理状态变色：开着时用开关的颜色，关着时是普通的菜单栏文字颜色。
+    var speedColorFollowsStatus: Bool = true
 
     init() {}
 
     private enum CodingKeys: String, CodingKey {
-        case profiles, clickAction, toggleHotkey, offMode, notifyLevel, healthCheck, disableOnExit, testURL, autoCheckUpdates, engine, speedDisplay, speedSide
+        case profiles, clickAction, toggleHotkey, offMode, notifyLevel, healthCheck, disableOnExit, testURL, autoCheckUpdates, engine, speedDisplay, speedSide, speedColorFollowsStatus
     }
 
     init(from decoder: Decoder) throws {
@@ -130,6 +135,7 @@ struct AppConfig: Codable, Equatable {
         engine = try container.decodeIfPresent(EngineConfig.self, forKey: .engine) ?? EngineConfig()
         speedDisplay = try container.decodeIfPresent(SpeedDisplay.self, forKey: .speedDisplay) ?? .system
         speedSide = try container.decodeIfPresent(SpeedSide.self, forKey: .speedSide) ?? .left
+        speedColorFollowsStatus = try container.decodeIfPresent(Bool.self, forKey: .speedColorFollowsStatus) ?? true
     }
 
     func encode(to encoder: Encoder) throws {
@@ -147,6 +153,7 @@ struct AppConfig: Codable, Equatable {
         try container.encode(engine, forKey: .engine)
         try container.encode(speedDisplay, forKey: .speedDisplay)
         try container.encode(speedSide, forKey: .speedSide)
+        try container.encode(speedColorFollowsStatus, forKey: .speedColorFollowsStatus)
     }
 
     func profile(id: UUID?) -> Profile? {

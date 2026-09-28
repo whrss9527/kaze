@@ -201,7 +201,15 @@ struct GeneralPage: View {
                         }
                     }
                     .disabled(state.config.speedDisplay == .none)
-                    Text("上行在上、下行在下，默认显示在图标左边、开关在右边。「系统网络总速度」统计有线和 Wi‑Fi 网卡的全部流量；「只算内置代理」是经过内核的流量。")
+                    Toggle("网速文字跟着代理状态变色", isOn: $state.config.speedColorFollowsStatus)
+                        .disabled(state.config.speedDisplay == .none)
+                    Text("上行在上、下行在下，默认显示在图标左边、开关在右边。「关代理时只显示网速」：代理关着时菜单栏里只有网速，开启后开关出现在网速左边，网速本身的位置不动；点网速和点开关一样。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text("变色：开着代理时网速用开关的颜色，系统代理是别的程序设置的时候是黄色，代理服务器连不上时是红色，关着时是普通的菜单栏文字颜色。颜色会按菜单栏深浅自动调深或调浅，保证看得清。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text("「系统网络总速度」统计有线和 Wi‑Fi 网卡的全部流量；「只算内置代理」是经过内核的流量。")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

@@ -33,7 +33,7 @@ final class StatusItemController: NSObject {
             .store(in: &cancellables)
         state.speed.onUpdate = { [weak self] in self?.updateSpeedLabel() }
         state.$config
-            .map(\.speedSide)
+            .map { SpeedLabelSettings(side: $0.speedSide, colorFollowsStatus: $0.speedColorFollowsStatus) }
             .removeDuplicates()
             .dropFirst()
             .sink { [weak self] _ in Task { @MainActor in self?.updateSpeedLabel() } }
@@ -50,9 +50,21 @@ final class StatusItemController: NSObject {
         if meter.mode == .none {
             button.image = StatusIcon.image(for: iconState)
         } else {
-            button.image = StatusIcon.image(for: iconState, upload: SpeedFormatter.compact(bytesPerSecond: meter.upload), download: SpeedFormatter.compact(bytesPerSecond: meter.download), textColor: labelColor(for: button), speedSide: state.config.speedSide)
+            let iconState = self.iconState
+            let layout = SpeedLayout.resolve(side: state.config.speedSide, state: iconState)
+            var textColor = labelColor(for: button)
+            if state.config.speedColorFollowsStatus, let accent = StatusIcon.speedTextColor(for: iconState, darkMenuBar: isDark(button)) {
+                textColor = accent.cgColor
+            }
+            button.image = StatusIcon.image(for: iconState, upload: SpeedFormatter.compact(bytesPerSecond: meter.upload), download: SpeedFormatter.compact(bytesPerSecond: meter.download), textColor: textColor, layout: layout)
         }
         button.imagePosition = .imageOnly
+    }
+
+    /// 菜单栏现在是不是深色（深色模式，或者浅色模式下被桌面衬成深色）。
+    private func isDark(_ button: NSStatusBarButton) -> Bool {
+        let match = button.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua, .vibrantLight, .vibrantDark])
+        return match == .darkAqua || match == .vibrantDark
     }
 
     /// 菜单栏当前外观（深色 / 浅色）下的文字颜色。
@@ -417,4 +429,10 @@ extension StatusIcon {
         }
         return image
     }
+}
+
+/// 影响网速文字怎么画的设置，变了就重画。
+private struct SpeedLabelSettings: Equatable {
+    var side: SpeedSide
+    var colorFollowsStatus: Bool
 }

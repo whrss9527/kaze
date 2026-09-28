@@ -21,7 +21,10 @@ jobs:
       - name: 编译
         run: swift build
       - name: 单元测试
-        run: swift test
+        run: |
+          # 顺便把菜单栏图标各种状态的对照图画出来，最后一步打进日志。
+          mkdir -p screenshots
+          PROXYSWITCH_ICON_PREVIEW_DIR="$PWD/screenshots" swift test
       - name: 缓存内核下载
         uses: actions/cache@v4
         with:
@@ -273,4 +276,10 @@ jobs:
               base64 -b 76 -i menubar.png
               echo "=====END menubar.png====="
             fi
+          fi
+          if [ -f icon-preview.png ]; then
+            sips -s format jpeg -s formatOptions 85 icon-preview.png --out icon-preview.jpg >/dev/null
+            echo "=====BEGIN icon-preview.jpg====="
+            base64 -b 76 -i icon-preview.jpg
+            echo "=====END icon-preview.jpg====="
           fi

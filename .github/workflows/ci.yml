@@ -76,6 +76,8 @@ jobs:
             cat "$support/proxyswitch.log" || true
             exit 1
           fi
+          # 面板打开前先拍一张整屏，留着裁出菜单栏右半边看图标和网速。
+          screencapture -x screenshots/desktop.png || true
           open "proxyswitch://panel"; sleep 3
           screencapture -x screenshots/panel.png || true
           open "proxyswitch://settings"; sleep 4
@@ -262,3 +264,13 @@ jobs:
             base64 -b 76 -i "$name.jpg"
             echo "=====END $name.jpg====="
           done
+          # 菜单栏右半边放大 4 倍，最后打出来，日志末尾一定能看到。
+          if [ -f desktop.png ]; then
+            width=$(sips -g pixelWidth desktop.png | awk '/pixelWidth/{print $2}')
+            if sips -c 25 520 --cropOffset 0 $((width - 520)) desktop.png --out menubar-crop.png >/dev/null 2>&1; then
+              sips -z 100 2080 menubar-crop.png --out menubar.png >/dev/null
+              echo "=====BEGIN menubar.png====="
+              base64 -b 76 -i menubar.png
+              echo "=====END menubar.png====="
+            fi
+          fi

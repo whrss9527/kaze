@@ -20,6 +20,66 @@ enum RuleConverter {
     /// 所有「走代理」的策略都指到这个组。
     static let proxyGroup = "节点"
 
+    /// 内置规则集展开成的规则；不是内置地址返回 nil。
+    static func builtinRules(url: String, policy: String) -> [String]? {
+        switch url {
+        case RuleSet.chinaDirectURL:
+            return ["DOMAIN-SUFFIX,cn,\(policy)", "GEOIP,CN,\(policy)"]
+        default:
+            return nil
+        }
+    }
+
+    /// 是不是完整配置、要由本程序转换：小火箭 / Surge 的 [Rule] 段，或者 Clash 顶格的 rules: 列表（纯规则列表用的是 payload:）。
+    static func needsConversion(_ text: String) -> Bool {
+        for raw in text.split(omittingEmptySubsequences: true, whereSeparator: \.isNewline) {
+            if raw.first == " " || raw.first == "\t" { continue }
+            let line = raw.trimmingCharacters(in: .whitespaces).lowercased()
+            if line == "[rule]" || line == "rules:" { return true }
+            if line == "payload:" { return false }
+        }
+        return false
+    }
+
+    /// 完整配置里 RULE-SET 引用的远程列表地址。
+    static func referencedRuleSets(_ text: String) -> [String] {
+        var urls: [String] = []
+        for reference in convert(text).ruleSets where !urls.contains(reference.url) {
+            urls.append(reference.url)
+        }
+        return urls
+    }
+
+    /// 从内容判断一个规则列表的类型：有「类型,内容」这种完整规则的是完整规则；全是 IP 段的是 IP 段列表；其余当域名列表。
+    static func detectBehavior(_ text: String) -> RuleSetBehavior {
+        var sampled = 0
+        var cidrs = 0
+        for raw in relevantLines(text) {
+            var line = raw.trimmingCharacters(in: .whitespaces)
+            if line.isEmpty || line.hasPrefix("#") || line.hasPrefix("//") || line.hasPrefix(";") { continue }
+            if line.hasPrefix("- ") {
+                line = line.dropFirst(2).trimmingCharacters(in: .whitespaces)
+                if (line.hasPrefix("\"") && line.hasSuffix("\"")) || (line.hasPrefix("'") && line.hasSuffix("'")), line.count >= 2 {
+                    line = String(line.dropFirst().dropLast())
+                }
+            }
+            if line.isEmpty { continue }
+            if let comma = line.firstIndex(of: ",") {
+                let type = line[..<comma].trimmingCharacters(in: .whitespaces).uppercased()
+                if supportedTypes.contains(type) || ["RULE-SET", "FINAL", "MATCH", "USER-AGENT", "URL-REGEX", "GEOSITE", "IP-ASN", "AND", "OR", "NOT"].contains(type) {
+                    return .classical
+                }
+            }
+            sampled += 1
+            if IPPrefix.normalize(line) != nil {
+                cidrs += 1
+            }
+            if sampled >= 200 { break }
+        }
+        if sampled > 0, cidrs == sampled { return .ipcidr }
+        return .domain
+    }
+
     /// 局域网和本机直连，两种模式都放在最前面。
     static let lanRules: [String] = [
         "DOMAIN-SUFFIX,local,DIRECT",
@@ -53,7 +113,9 @@ enum RuleConverter {
         case skip
     }
 
-    static func convert(_ text: String, defaultPolicy: String = proxyGroup) -> ConvertedRules {
+    /// force 不为空时所有规则都改到这个去向（统一去向），FINAL 除外；groups 是现有的自定义策略组名，
+    /// 规则文件里写的策略名和某个组同名时就指到那个组。
+    static func convert(_ text: String, defaultPolicy: String = proxyGroup, force: String? = nil, groups: [String] = []) -> ConvertedRules {
         var result = ConvertedRules()
         var seen = Set<String>()
         for raw in relevantLines(text) {
@@ -75,7 +137,7 @@ enum RuleConverter {
                 }
             }
             if line.isEmpty { continue }
-            switch convertLine(line, defaultPolicy: defaultPolicy) {
+            switch convertLine(line, defaultPolicy: defaultPolicy, force: force, groups: groups) {
             case .rule(let rule):
                 if seen.insert(rule).inserted {
                     result.rules.append(rule)
@@ -129,20 +191,25 @@ enum RuleConverter {
     private static let ipTypes: Set<String> = ["IP-CIDR", "IP-CIDR6", "IP-SUFFIX", "GEOIP"]
     private static let surgeOptions: Set<String> = ["NO-RESOLVE", "FORCE-REMOTE-DNS", "DNS-FAILED", "EXTENDED-MATCHING", "PRE-MATCHING"]
 
-    static func convertLine(_ line: String, defaultPolicy: String = proxyGroup) -> Converted {
+    static func convertLine(_ line: String, defaultPolicy: String = proxyGroup, force: String? = nil, groups: [String] = []) -> Converted {
         let fields = line.split(separator: ",", omittingEmptySubsequences: false).map { $0.trimmingCharacters(in: .whitespaces) }
         guard let first = fields.first, !first.isEmpty else { return .skip }
         let type = first.uppercased()
+        // 没有强制去向时，没写策略的行用默认策略。
+        let fallback = force ?? defaultPolicy
         switch type {
         case "FINAL", "MATCH":
-            let policy = fields.count > 1 && !fields[1].isEmpty ? policy(fields[1]) : defaultPolicy
+            let policy = fields.count > 1 && !fields[1].isEmpty ? policy(fields[1], groups: groups) : defaultPolicy
             return .rule("MATCH,\(policy)")
         case "RULE-SET":
             guard fields.count >= 2, !fields[1].isEmpty else { return .skip }
             let target = fields[1]
             let lowered = target.lowercased()
             guard lowered.hasPrefix("http://") || lowered.hasPrefix("https://") else { return .skip }
-            let policy = fields.count > 2 && !fields[2].isEmpty && !surgeOptions.contains(fields[2].uppercased()) ? policy(fields[2]) : defaultPolicy
+            var policy = fallback
+            if force == nil, fields.count > 2, !fields[2].isEmpty, !surgeOptions.contains(fields[2].uppercased()) {
+                policy = self.policy(fields[2], groups: groups)
+            }
             return .ruleSet(RuleSetReference(url: target, policy: policy))
         case _ where supportedTypes.contains(type):
             guard fields.count >= 2, !fields[1].isEmpty else { return .skip }
@@ -150,7 +217,7 @@ enum RuleConverter {
             if type == "GEOIP" {
                 value = value.uppercased()
             }
-            var policy = defaultPolicy
+            var policy = fallback
             var noResolve = false
             for extra in fields.dropFirst(2) where !extra.isEmpty {
                 let option = extra.uppercased()
@@ -158,8 +225,8 @@ enum RuleConverter {
                     noResolve = true
                 } else if surgeOptions.contains(option) {
                     continue
-                } else {
-                    policy = self.policy(extra)
+                } else if force == nil {
+                    policy = self.policy(extra, groups: groups)
                 }
             }
             var rule = "\(type),\(value),\(policy)"
@@ -171,24 +238,28 @@ enum RuleConverter {
             // Clash 的 domain / ipcidr 列表：没有逗号的一行一个。
             guard fields.count == 1 else { return .skip }
             if first.hasPrefix("+.") {
-                return .rule("DOMAIN-SUFFIX,\(first.dropFirst(2)),\(defaultPolicy)")
+                return .rule("DOMAIN-SUFFIX,\(first.dropFirst(2)),\(fallback)")
             }
             if first.hasPrefix(".") {
-                return .rule("DOMAIN-SUFFIX,\(first.dropFirst()),\(defaultPolicy)")
+                return .rule("DOMAIN-SUFFIX,\(first.dropFirst()),\(fallback)")
             }
             if first.contains("/"), let slash = first.firstIndex(of: "/"), Int(first[first.index(after: slash)...]) != nil {
-                return .rule("\(first.contains(":") ? "IP-CIDR6" : "IP-CIDR"),\(first),\(defaultPolicy),no-resolve")
+                return .rule("\(first.contains(":") ? "IP-CIDR6" : "IP-CIDR"),\(first),\(fallback),no-resolve")
             }
             if looksLikeDomain(first) {
-                return .rule("DOMAIN,\(first),\(defaultPolicy)")
+                return .rule("DOMAIN,\(first),\(fallback)")
             }
             return .skip
         }
     }
 
-    /// 小火箭 / Surge 里的策略名转成内核里的：走代理的都指到「节点」组，自定义的策略组也按走代理处理。
-    static func policy(_ raw: String) -> String {
-        switch raw.uppercased() {
+    /// 小火箭 / Surge 里的策略名转成内核里的：直连、拒绝各归各，和某个自定义策略组同名的指到那个组，其余走代理的都指到「节点」组。
+    static func policy(_ raw: String, groups: [String] = []) -> String {
+        let trimmed = raw.trimmingCharacters(in: .whitespaces)
+        if let group = groups.first(where: { $0.caseInsensitiveCompare(trimmed) == .orderedSame }) {
+            return group
+        }
+        switch trimmed.uppercased() {
         case "DIRECT", "直连", "直接连接":
             return "DIRECT"
         case "REJECT", "REJECT-DROP", "REJECT-TINYGIF", "REJECT-IMG", "REJECT-DICT", "REJECT-ARRAY", "REJECT-200", "BLOCK", "拒绝", "广告", "AD", "ADBLOCK":

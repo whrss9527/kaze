@@ -4,7 +4,9 @@ import SwiftUI
 enum SettingsPage: String, CaseIterable, Identifiable {
     case profiles
     case nodes
+    case rules
     case share
+    case connections
     case diagnose
     case general
     case hotkey
@@ -18,7 +20,9 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         switch self {
         case .profiles: return "代理配置"
         case .nodes: return "节点与订阅"
+        case .rules: return "分流规则"
         case .share: return "局域网共享"
+        case .connections: return "连接"
         case .diagnose: return "网址诊断"
         case .general: return "通用"
         case .hotkey: return "快捷键"
@@ -32,7 +36,9 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         switch self {
         case .profiles: return "point.3.connected.trianglepath.dotted"
         case .nodes: return "antenna.radiowaves.left.and.right"
+        case .rules: return "arrow.triangle.branch"
         case .share: return "wifi.router"
+        case .connections: return "list.bullet.rectangle"
         case .diagnose: return "stethoscope"
         case .general: return "gearshape"
         case .hotkey: return "keyboard"
@@ -136,8 +142,10 @@ struct SettingsRootView: View {
     private var detail: some View {
         switch navigation.page {
         case .profiles: ProfilesPage(state: state, navigation: navigation)
-        case .nodes: NodesPage(state: state, engine: state.engine)
+        case .nodes: NodesPage(state: state, engine: state.engine, navigation: navigation)
+        case .rules: RulesPage(state: state, engine: state.engine, navigation: navigation)
         case .share: SharePage(state: state, engine: state.engine, sleepGuard: state.sleepGuard)
+        case .connections: ConnectionsPage(state: state, engine: state.engine)
         case .diagnose: DiagnosePage(state: state, engine: state.engine, navigation: navigation)
         case .general: GeneralPage(state: state)
         case .hotkey: HotkeyPage(state: state)

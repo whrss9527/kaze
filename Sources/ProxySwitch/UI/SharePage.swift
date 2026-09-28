@@ -8,7 +8,6 @@ struct SharePage: View {
     @ObservedObject var sleepGuard: SleepGuard
     @State private var portText = ""
     @State private var clientsText = ""
-    @State private var clients: [ShareClient] = []
     @State private var testResult: TestResult?
     @State private var testing = false
     @State private var copied = false
@@ -31,14 +30,10 @@ struct SharePage: View {
             portText = String(state.share.port)
             clientsText = state.share.allowedClients
         }
-        .task {
-            // 页面开着时每两秒读一次连接列表：能看到 PS5 连上来了没有，短连接也会记进「最近的连接」。
-            while !Task.isCancelled {
-                clients = await engine.shareClients()
-                try? await Task.sleep(for: .seconds(2))
-            }
-        }
     }
+
+    /// 正在使用的设备：内核在跑时连接列表每两秒刷新一次，这里按来源 IP 归并。
+    private var clients: [ShareClient] { engine.shareClients }
 
     private var isListening: Bool {
         if case .listening = engine.shareStatus { return true }
@@ -301,20 +296,20 @@ struct SharePage: View {
                     .contentShape(Rectangle())
                     .contextMenu {
                         if !connection.host.isEmpty {
-                            ForEach(RulePolicy.allCases) { policy in
-                                Button("让 \(connection.host) \(policy.title)") {
-                                    engine.addCustomRule(pattern: connection.host, policy: policy)
+                            ForEach(RuleTarget.options(groups: state.config.engine.groups), id: \.self) { target in
+                                Button("让 \(connection.host) \(target.actionTitle)") {
+                                    engine.addCustomRule(pattern: connection.host, policy: target)
                                 }
                             }
                         }
                     }
                 }
                 HStack(alignment: .top) {
-                    Text("PS5 的代理设置只对系统流量（联网测试、PSN、商店）和浏览器生效。如果打开 YouTube 这类应用时这里没有出现 youtube.com、googlevideo.com 的连接，说明那个应用用的是自己的网络栈、没走代理；用 PS5 的浏览器打开同一个网站可以对照。域名一栏如果是 IP，说明设备自己解析的 DNS 被污染了，内核会从 TLS 握手里取回域名再分流。")
+                    Text("PS5 的代理设置只对系统流量（联网测试、PSN、商店）和浏览器生效。如果打开 YouTube 这类应用时这里没有出现 youtube.com、googlevideo.com 的连接，说明那个应用用的是自己的网络栈、没走代理；用 PS5 的浏览器打开同一个网站可以对照。域名一栏如果是 IP，说明设备自己解析的 DNS 被污染了，内核会从 TLS 握手里取回域名再分流。本机和设备的全部连接在「连接」页。")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Spacer()
-                    Button("清空") { engine.clearShareHistory() }
+                    Button("清空") { engine.clearHistory(shareOnly: true) }
                         .controlSize(.small)
                 }
             }

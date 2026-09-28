@@ -118,6 +118,13 @@ final class AppState: ObservableObject {
         engine.readConfig = { [weak self] in self?.config ?? AppConfig() }
         engine.writeEngine = { [weak self] engine in self?.config.engine = engine }
         engine.onStatusChanged = { [weak self] in self?.onStatusChanged?() }
+        // 按出口累计的流量存在本机状态里，跨重启接着算。
+        engine.loadTraffic(persisted.traffic)
+        engine.persistTraffic = { [weak self] stats in
+            guard let self else { return }
+            self.persisted.traffic = stats
+            Store.save(self.persisted)
+        }
         $config
             .map { EngineInputs(engine: $0.engine, testURL: $0.testURL) }
             .removeDuplicates()

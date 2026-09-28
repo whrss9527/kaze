@@ -1,5 +1,13 @@
 import Foundation
 
+/// 交给内核加载的一个规则集文件（rule-provider）。
+struct RuleProviderSpec: Equatable {
+    var name: String
+    var path: String
+    var behavior: RuleSetBehavior
+    var format: String
+}
+
 /// 生成内核（mihomo）的配置文件。
 enum CoreConfigBuilder {
     struct Input {
@@ -11,6 +19,8 @@ enum CoreConfigBuilder {
         var rules: [String]
         /// 局域网共享；nil 表示没开。
         var share: ShareInputs? = nil
+        /// 规则里 RULE-SET 引用的规则集文件。
+        var ruleProviders: [RuleProviderSpec] = []
     }
 
     static let selectorGroup = RuleConverter.proxyGroup
@@ -34,7 +44,8 @@ enum CoreConfigBuilder {
         lines.append("mode: rule")
         lines.append("log-level: warning")
         lines.append("ipv6: false")
-        lines.append("find-process-mode: \"off\"")
+        // 连接页里显示是哪个程序发起的连接。
+        lines.append("find-process-mode: always")
         lines.append("external-controller: \"127.0.0.1:\(engine.apiPort)\"")
         lines.append("secret: \(quote(input.secret))")
         lines.append("unified-delay: true")
@@ -115,6 +126,52 @@ enum CoreConfigBuilder {
         lines.append("    lazy: true")
         lines.append("    proxies: [\"DIRECT\"]")
         if !useLine.isEmpty { lines.append(useLine) }
+        // 自定义策略组：成员是按名字筛选出来的订阅节点。手动选择的组多了「节点」「自动选择」和直连三个候选，默认跟随「节点」；
+        // 自动类的组只有筛出来的节点，筛不到时内核退回直连。没加载订阅（只做共享）时组照样要有，规则里引用了它们，
+        // 这时自动类的组只有直连一个成员。
+        for group in engine.groups {
+            lines.append("  - name: \(quote(group.name))")
+            lines.append("    type: \(group.kind.coreType)")
+            switch group.kind {
+            case .select:
+                lines.append("    proxies: [\(quote(selectorGroup)), \(quote(autoGroup)), \"DIRECT\"]")
+            case .urlTest:
+                lines.append("    url: \(quote(input.testURL))")
+                lines.append("    interval: 600")
+                lines.append("    tolerance: 80")
+                lines.append("    lazy: true")
+            case .fallback:
+                lines.append("    url: \(quote(input.testURL))")
+                lines.append("    interval: 600")
+                lines.append("    lazy: true")
+            case .loadBalance:
+                lines.append("    url: \(quote(input.testURL))")
+                lines.append("    interval: 600")
+                lines.append("    strategy: round-robin")
+                lines.append("    lazy: true")
+            }
+            if useLine.isEmpty {
+                if group.kind != .select {
+                    lines.append("    proxies: [\"DIRECT\"]")
+                }
+            } else {
+                lines.append(useLine)
+                if let filter = group.coreFilter {
+                    lines.append("    filter: \(quote(filter))")
+                }
+            }
+        }
+        if !input.ruleProviders.isEmpty {
+            // 规则集文件由本程序下载到内核目录里，内核只管读；更新时本程序换文件再让内核重读。
+            lines.append("rule-providers:")
+            for provider in input.ruleProviders {
+                lines.append("  \(provider.name):")
+                lines.append("    type: file")
+                lines.append("    behavior: \(provider.behavior.rawValue)")
+                lines.append("    format: \(provider.format)")
+                lines.append("    path: \(quote(provider.path))")
+            }
+        }
         // 局域网直连 → 用户自定义 → 预设规则；自定义规则在全局模式下也生效（全局 = 除局域网和你的例外之外都走节点）。
         var rules = RuleConverter.lanRules + engine.customRuleLines + input.rules
         if !(rules.last?.hasPrefix("MATCH,") ?? false) {

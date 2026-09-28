@@ -171,11 +171,13 @@ struct PersistedState: Codable, Equatable {
     var syncEnabled: Bool = false
     /// 局域网共享也是本机的：由这台 Mac 共享给 PS5 等设备，不跟着配置同步。
     var share = ShareConfig()
+    /// 内置代理按出口累计的流量，本机的统计。
+    var traffic = TrafficStats()
 
     init() {}
 
     private enum CodingKeys: String, CodingKey {
-        case lastProfileID, enabledByUs, original, syncEnabled, share
+        case lastProfileID, enabledByUs, original, syncEnabled, share, traffic
     }
 
     init(from decoder: Decoder) throws {
@@ -185,5 +187,6 @@ struct PersistedState: Codable, Equatable {
         original = try container.decodeIfPresent(ProxySnapshot.self, forKey: .original)
         syncEnabled = try container.decodeIfPresent(Bool.self, forKey: .syncEnabled) ?? false
         share = try container.decodeIfPresent(ShareConfig.self, forKey: .share) ?? ShareConfig()
+        traffic = try container.decodeIfPresent(TrafficStats.self, forKey: .traffic) ?? TrafficStats()
     }
 }

@@ -247,13 +247,38 @@ struct SharePage: View {
                                 .truncationMode(.middle)
                         }
                         Spacer()
+                        deviceMenu(client.ip)
                     }
                 }
-                Text("按来源 IP 归并，只统计现在还开着的连接。")
+                Text("按来源 IP 归并，只统计现在还开着的连接。右边的菜单能让某台设备固定走某个节点组、直连或者断网（设备规则在「分流规则」页里也能改）。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
         }
+    }
+
+    /// 设备现在的设备规则（按来源 IP）。
+    private func deviceRule(_ ip: String) -> CustomRule? {
+        let prefix = IPPrefix.normalize(ip)
+        return state.config.engine.customRules.first { $0.kind == .device && $0.enabled && ($0.pattern == ip || $0.pattern == prefix) }
+    }
+
+    private func deviceMenu(_ ip: String) -> some View {
+        let current = deviceRule(ip)
+        return Menu(current.map { "走：\($0.policy.title)" } ?? "跟随规则") {
+            ForEach(RuleTarget.options(groups: state.config.engine.groups), id: \.self) { target in
+                Button("这台设备的所有连接\(target.actionTitle)") {
+                    engine.addCustomRule(pattern: ip, policy: target, kind: .device)
+                }
+            }
+            if let current {
+                Divider()
+                Button("恢复跟随分流规则") { engine.removeCustomRule(current.id) }
+            }
+        }
+        .fixedSize()
+        .controlSize(.small)
+        .help("本机用内置代理时完全生效；本机用别的代理或直连时，只有「直连」「拦截」生效")
     }
 
     private func clientDetail(_ client: ShareClient) -> String {
@@ -299,6 +324,16 @@ struct SharePage: View {
                             ForEach(RuleTarget.options(groups: state.config.engine.groups), id: \.self) { target in
                                 Button("让 \(connection.host) \(target.actionTitle)") {
                                     engine.addCustomRule(pattern: connection.host, policy: target)
+                                }
+                            }
+                        }
+                        if !connection.client.isEmpty {
+                            Divider()
+                            Menu("让设备 \(connection.client) 的所有连接…") {
+                                ForEach(RuleTarget.options(groups: state.config.engine.groups), id: \.self) { target in
+                                    Button(target.actionTitle) {
+                                        engine.addCustomRule(pattern: connection.client, policy: target, kind: .device)
+                                    }
                                 }
                             }
                         }

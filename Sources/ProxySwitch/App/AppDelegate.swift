@@ -4,6 +4,10 @@ import AppKit
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     static func main() {
+        // 带子命令运行（proxyswitch status、proxyswitch mcp……）时是命令行工具，不启动界面。
+        if CommandLineTool.shouldHandle(CommandLine.arguments) {
+            exit(CommandLineTool.run(CommandLine.arguments))
+        }
         let app = NSApplication.shared
         let delegate = AppDelegate()
         app.delegate = delegate

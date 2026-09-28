@@ -297,4 +297,11 @@ enum RuleLibrary {
     static func entry(for url: String) -> RuleLibraryEntry? {
         all.first { $0.url == url }
     }
+
+    /// 按名字找（不区分大小写），导入配置和 AI 助手按名字添加时用。
+    static func entry(named name: String) -> RuleLibraryEntry? {
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        return all.first { $0.name.caseInsensitiveCompare(trimmed) == .orderedSame }
+            ?? all.first { $0.name.localizedCaseInsensitiveContains(trimmed) }
+    }
 }

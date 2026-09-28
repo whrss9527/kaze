@@ -5,6 +5,7 @@ struct ProfilesPage: View {
     @ObservedObject var state: AppState
     @ObservedObject var navigation: SettingsNavigation
     @State private var showDetect = false
+    @State private var importing = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -25,6 +26,9 @@ struct ProfilesPage: View {
                 state.addProfile(profile)
                 navigation.selectedProfileID = profile.id
             }
+        }
+        .sheet(isPresented: $importing) {
+            ImportSheet(state: state, initial: nil)
         }
         .onAppear {
             if navigation.selectedProfileID == nil {
@@ -92,6 +96,12 @@ struct ProfilesPage: View {
                     Label("自动检测", systemImage: "wand.and.stars")
                 }
                 .help("找出本机正在运行的代理软件")
+                Button {
+                    importing = true
+                } label: {
+                    Label("导入", systemImage: "square.and.arrow.down")
+                }
+                .help("导入 Clash / Surge / 小火箭 / Quantumult X 的配置、节点链接或者 ProxySwitch 的备份")
             }
             .controlSize(.small)
             Spacer()

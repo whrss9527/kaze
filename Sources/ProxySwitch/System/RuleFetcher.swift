@@ -71,7 +71,8 @@ enum RuleStore {
         defer { session.invalidateAndCancel() }
         var request = URLRequest(url: url)
         request.cachePolicy = .reloadIgnoringLocalCacheData
-        request.setValue(UpdateChecker.userAgent, forHTTPHeaderField: "User-Agent")
+        // 以 clash.meta 的身份下载：机场按这个返回 Clash 格式的配置（远程配置当规则集、从网址导入时要用），GitHub 这类静态文件不受影响。
+        request.setValue(CoreConfigBuilder.providerUserAgent, forHTTPHeaderField: "User-Agent")
         let (data, response) = try await session.data(for: request)
         if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
             throw RuleStoreError.status(http.statusCode)

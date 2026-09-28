@@ -110,11 +110,13 @@ struct AppConfig: Codable, Equatable {
     var speedSide: SpeedSide = .left
     /// 网速文字跟着代理状态变色：开着时用开关的颜色，关着时是普通的菜单栏文字颜色。
     var speedColorFollowsStatus: Bool = true
+    /// 自动化：本机控制接口的权限、按网络自动切换。
+    var automation = AutomationConfig()
 
     init() {}
 
     private enum CodingKeys: String, CodingKey {
-        case profiles, clickAction, toggleHotkey, offMode, notifyLevel, healthCheck, disableOnExit, testURL, autoCheckUpdates, engine, speedDisplay, speedSide, speedColorFollowsStatus
+        case profiles, clickAction, toggleHotkey, offMode, notifyLevel, healthCheck, disableOnExit, testURL, autoCheckUpdates, engine, speedDisplay, speedSide, speedColorFollowsStatus, automation
     }
 
     init(from decoder: Decoder) throws {
@@ -136,6 +138,7 @@ struct AppConfig: Codable, Equatable {
         speedDisplay = try container.decodeIfPresent(SpeedDisplay.self, forKey: .speedDisplay) ?? .system
         speedSide = try container.decodeIfPresent(SpeedSide.self, forKey: .speedSide) ?? .left
         speedColorFollowsStatus = try container.decodeIfPresent(Bool.self, forKey: .speedColorFollowsStatus) ?? true
+        automation = try container.decodeIfPresent(AutomationConfig.self, forKey: .automation) ?? AutomationConfig()
     }
 
     func encode(to encoder: Encoder) throws {
@@ -154,6 +157,7 @@ struct AppConfig: Codable, Equatable {
         try container.encode(speedDisplay, forKey: .speedDisplay)
         try container.encode(speedSide, forKey: .speedSide)
         try container.encode(speedColorFollowsStatus, forKey: .speedColorFollowsStatus)
+        try container.encode(automation, forKey: .automation)
     }
 
     func profile(id: UUID?) -> Profile? {

@@ -47,6 +47,10 @@ final class AppState: ObservableObject {
     let engine = Engine()
     let speed = SpeedMeter()
     let sleepGuard = SleepGuard()
+    /// 本机控制接口（命令行、AI 助手）。
+    let control = ControlService()
+    /// 按网络自动切换。
+    let network = NetworkAutomation()
     /// 更新后正在重新启动：退出时不要按「退出时关闭代理」清理。
     var relaunching = false
 
@@ -126,7 +130,7 @@ final class AppState: ObservableObject {
             Store.save(self.persisted)
         }
         $config
-            .map { EngineInputs(engine: $0.engine, testURL: $0.testURL) }
+            .map { EngineInputs(engine: $0.engine, testURL: $0.testURL, profiles: $0.profiles) }
             .removeDuplicates()
             .dropFirst()
             .sink { [weak self] _ in Task { @MainActor in self?.engineConfigChanged() } }
@@ -151,6 +155,8 @@ final class AppState: ObservableObject {
                 }
             }
             .store(in: &cancellables)
+        control.start(state: self)
+        network.start(state: self)
         speed.coreTraffic = { [weak self] in try await self?.engine.trafficStream() }
         speed.setMode(config.speedDisplay)
         $config
@@ -559,8 +565,66 @@ final class AppState: ObservableObject {
         Notifier.shared.show(title: title, body: body, route: route, category: category)
     }
 
+    // MARK: - 导入导出
+
+    /// 导入的文件（Clash 配置里的节点、转换后的规则）放在这里。
+    static var importsDirectory: URL { Store.directory.appendingPathComponent("imports", isDirectory: true) }
+
+    /// 从文字或网址做导入计划，不改动任何设置。文字本身是一个网址时按网址处理；
+    /// 网址的内容认不出来时当作订阅（交给内核解析）。
+    func prepareImport(text: String?, url: String?, sourceName: String) async throws -> ImportPlan {
+        var address = url?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let text = text?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty {
+            if !text.contains(where: \.isNewline), let parsed = URL(string: text), let scheme = parsed.scheme?.lowercased(), ["http", "https", "file", "proxyswitch"].contains(scheme) {
+                address = text
+            } else {
+                return try ConfigImporter.plan(text, sourceName: sourceName, existing: config)
+            }
+        }
+        guard var address, !address.isEmpty else { throw ImportError.empty }
+        // proxyswitch://import?url=… 里面的地址。
+        if address.lowercased().hasPrefix("proxyswitch:"), let inner = URLComponents(string: address)?.queryItems?.first(where: { $0.name == "url" })?.value {
+            address = inner
+        }
+        guard let parsed = URL(string: address), let scheme = parsed.scheme?.lowercased() else { throw ImportError.invalid("认不出网址：\(address)") }
+        if scheme == "file" {
+            let text = try String(contentsOf: parsed, encoding: .utf8)
+            return try ConfigImporter.plan(text, sourceName: parsed.deletingPathExtension().lastPathComponent, existing: config)
+        }
+        guard ["http", "https"].contains(scheme), parsed.host != nil else { throw ImportError.invalid("网址要以 http:// 或 https:// 开头") }
+        let corePort = engine.isRunning && config.engine.wantsCore ? config.engine.mixedPort : nil
+        let data = try await RuleStore.download(address, routes: NetworkRoute.routes(for: parsed, corePort: corePort, system: SystemProxy.current()))
+        let text = String(decoding: data, as: UTF8.self)
+        let name = parsed.host ?? sourceName
+        if ConfigImporter.detect(text) == nil {
+            var plan = ImportPlan(format: .links, sourceName: name)
+            plan.subscriptions = [Subscription(name: name, url: address)]
+            plan.warnings.append("认不出内容的格式，当作订阅添加，交给内核解析")
+            return plan
+        }
+        return try ConfigImporter.plan(text, sourceName: name, sourceURL: address, existing: config)
+    }
+
+    /// 应用导入：写文件、改设置，返回一句话。
+    @discardableResult
+    func applyImport(_ plan: ImportPlan, mode: ImportMode) throws -> String {
+        let result = ConfigImporter.apply(plan, to: config, mode: mode, directory: Self.importsDirectory)
+        for file in result.files {
+            try FileManager.default.createDirectory(at: file.url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try file.content.write(to: file.url, atomically: true, encoding: .utf8)
+        }
+        config = result.config
+        ensureEngineProfile()
+        if !plan.subscriptions.isEmpty || plan.nodeFile != nil || !plan.manualNodes.isEmpty {
+            selectEngineProfile()
+        }
+        Log.info("导入「\(plan.sourceName)」（\(plan.format.title)，\(mode.title)）：\(result.summary)")
+        return result.summary
+    }
+
     /// 退出时按设置关闭代理，并停掉内核。
     func handleExit() {
+        control.stop()
         sleepGuard.release()
         defer { engine.shutdown() }
         guard !relaunching, config.disableOnExit, case .on(let profile) = status else { return }
@@ -589,8 +653,9 @@ final class AppState: ObservableObject {
     }
 }
 
-/// 会影响内核配置的那部分设置，变了才重新生成。
+/// 会影响内核配置的那部分设置，变了才重新生成（前置代理可以用配置列表里的代理，所以配置列表也算）。
 private struct EngineInputs: Equatable {
     var engine: EngineConfig
     var testURL: String
+    var profiles: [Profile]
 }

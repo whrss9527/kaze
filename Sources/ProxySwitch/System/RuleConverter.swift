@@ -10,6 +10,8 @@ struct RuleSetReference: Equatable {
 struct ConvertedRules: Equatable {
     var rules: [String] = []
     var ruleSets: [RuleSetReference] = []
+    /// 规则和引用的规则集按文件里的顺序排的，合并时引用的内容放回原来的位置。
+    var sequence: [RuleConverter.Converted] = []
     var skipped = 0
     var warnings: [String] = []
 }
@@ -35,7 +37,7 @@ enum RuleConverter {
         for raw in text.split(omittingEmptySubsequences: true, whereSeparator: \.isNewline) {
             if raw.first == " " || raw.first == "\t" { continue }
             let line = raw.trimmingCharacters(in: .whitespaces).lowercased()
-            if line == "[rule]" || line == "rules:" { return true }
+            if ruleSections.contains(line) || line == "rules:" { return true }
             if line == "payload:" { return false }
         }
         return false
@@ -66,7 +68,7 @@ enum RuleConverter {
             if line.isEmpty { continue }
             if let comma = line.firstIndex(of: ",") {
                 let type = line[..<comma].trimmingCharacters(in: .whitespaces).uppercased()
-                if supportedTypes.contains(type) || ["RULE-SET", "FINAL", "MATCH", "USER-AGENT", "URL-REGEX", "GEOSITE", "IP-ASN", "AND", "OR", "NOT"].contains(type) {
+                if supportedTypes.contains(coreType(type)) || ["RULE-SET", "DOMAIN-SET", "FINAL", "MATCH", "USER-AGENT", "URL-REGEX", "GEOSITE", "IP-ASN", "AND", "OR", "NOT"].contains(type) {
                     return .classical
                 }
             }
@@ -141,9 +143,11 @@ enum RuleConverter {
             case .rule(let rule):
                 if seen.insert(rule).inserted {
                     result.rules.append(rule)
+                    result.sequence.append(.rule(rule))
                 }
             case .ruleSet(let reference):
                 result.ruleSets.append(reference)
+                result.sequence.append(.ruleSet(reference))
             case .skip:
                 result.skipped += 1
                 if result.warnings.count < 10 {
@@ -157,7 +161,7 @@ enum RuleConverter {
     /// 找出文件里放规则的那部分。
     static func relevantLines(_ text: String) -> [Substring] {
         let all = text.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline)
-        if let start = all.firstIndex(where: { $0.trimmingCharacters(in: .whitespaces).lowercased() == "[rule]" }) {
+        if let start = all.firstIndex(where: { ruleSections.contains($0.trimmingCharacters(in: .whitespaces).lowercased()) }) {
             var lines: [Substring] = []
             for line in all[(start + 1)...] {
                 let trimmed = line.trimmingCharacters(in: .whitespaces)
@@ -183,25 +187,57 @@ enum RuleConverter {
         return all
     }
 
-    private static let supportedTypes: Set<String> = [
+    static let supportedTypes: Set<String> = [
         "DOMAIN", "DOMAIN-SUFFIX", "DOMAIN-KEYWORD", "DOMAIN-REGEX", "DOMAIN-WILDCARD",
-        "IP-CIDR", "IP-CIDR6", "IP-SUFFIX", "GEOIP", "SRC-IP-CIDR", "SRC-PORT", "DST-PORT",
-        "PROCESS-NAME", "PROCESS-PATH",
+        "IP-CIDR", "IP-CIDR6", "IP-SUFFIX", "GEOIP", "SRC-IP-CIDR", "SRC-IP-SUFFIX", "SRC-PORT", "DST-PORT", "IN-PORT",
+        "PROCESS-NAME", "PROCESS-PATH", "PROCESS-NAME-REGEX", "PROCESS-PATH-REGEX", "PROCESS-NAME-WILDCARD", "PROCESS-PATH-WILDCARD",
+        "NETWORK",
     ]
+    /// Surge / 小火箭里名字不一样的规则类型。
+    static let typeAliases: [String: String] = [
+        "DEST-PORT": "DST-PORT",
+        "SRC-IP": "SRC-IP-CIDR",
+        "IP6-CIDR": "IP-CIDR6",
+        "PROTOCOL": "NETWORK",
+        // Quantumult X 的写法。
+        "HOST": "DOMAIN",
+        "HOST-SUFFIX": "DOMAIN-SUFFIX",
+        "HOST-KEYWORD": "DOMAIN-KEYWORD",
+        "HOST-WILDCARD": "DOMAIN-WILDCARD",
+    ]
+    /// 放规则的段：小火箭 / Surge 的 [Rule]，Quantumult X 的 [filter_local]。
+    static let ruleSections: Set<String> = ["[rule]", "[filter_local]"]
     private static let ipTypes: Set<String> = ["IP-CIDR", "IP-CIDR6", "IP-SUFFIX", "GEOIP"]
-    private static let surgeOptions: Set<String> = ["NO-RESOLVE", "FORCE-REMOTE-DNS", "DNS-FAILED", "EXTENDED-MATCHING", "PRE-MATCHING"]
+    private static let logicTypes: Set<String> = ["AND", "OR", "NOT"]
+    private static let surgeOptions: Set<String> = ["NO-RESOLVE", "FORCE-REMOTE-DNS", "DNS-FAILED", "EXTENDED-MATCHING", "PRE-MATCHING", "NO-TRACK"]
+
+    /// 规则类型的内核写法：别名换成内核的名字。
+    static func coreType(_ raw: String) -> String {
+        let upper = raw.uppercased()
+        return typeAliases[upper] ?? upper
+    }
 
     static func convertLine(_ line: String, defaultPolicy: String = proxyGroup, force: String? = nil, groups: [String] = []) -> Converted {
         let fields = line.split(separator: ",", omittingEmptySubsequences: false).map { $0.trimmingCharacters(in: .whitespaces) }
         guard let first = fields.first, !first.isEmpty else { return .skip }
-        let type = first.uppercased()
+        let type = coreType(first)
         // 没有强制去向时，没写策略的行用默认策略。
         let fallback = force ?? defaultPolicy
         switch type {
         case "FINAL", "MATCH":
             let policy = fields.count > 1 && !fields[1].isEmpty ? policy(fields[1], groups: groups) : defaultPolicy
             return .rule("MATCH,\(policy)")
-        case "RULE-SET":
+        case _ where logicTypes.contains(type):
+            return convertLogic(line, fallback: fallback, force: force, groups: groups)
+        case "NETWORK":
+            // Surge 的 PROTOCOL 还有 HTTP、HTTPS、QUIC，内核只认 TCP 和 UDP。
+            guard fields.count >= 2, ["TCP", "UDP"].contains(fields[1].uppercased()) else { return .skip }
+            var policy = fallback
+            if force == nil, fields.count > 2, !fields[2].isEmpty {
+                policy = self.policy(fields[2], groups: groups)
+            }
+            return .rule("NETWORK,\(fields[1].uppercased()),\(policy)")
+        case "RULE-SET", "DOMAIN-SET":
             guard fields.count >= 2, !fields[1].isEmpty else { return .skip }
             let target = fields[1]
             let lowered = target.lowercased()
@@ -216,6 +252,10 @@ enum RuleConverter {
             var value = fields[1]
             if type == "GEOIP" {
                 value = value.uppercased()
+            }
+            // 内核的 IP 规则要写成网段；Surge 的 SRC-IP 这类只写了一个 IP。
+            if ["IP-CIDR", "IP-CIDR6", "SRC-IP-CIDR"].contains(type), !value.contains("/"), let prefix = IPPrefix.normalize(value) {
+                value = prefix
             }
             var policy = fallback
             var noResolve = false
@@ -253,6 +293,68 @@ enum RuleConverter {
         }
     }
 
+    /// 组合规则：AND,((DOMAIN,a.com),(NETWORK,UDP)),策略。里面的每条规则类型都要内核认识（别名换成内核的名字），否则跳过。
+    static func convertLogic(_ line: String, fallback: String, force: String?, groups: [String]) -> Converted {
+        guard let comma = line.firstIndex(of: ",") else { return .skip }
+        let type = line[..<comma].trimmingCharacters(in: .whitespaces).uppercased()
+        let rest = line[line.index(after: comma)...].trimmingCharacters(in: .whitespaces)
+        guard rest.hasPrefix("(") else { return .skip }
+        // 找到和第一个括号配对的右括号。
+        var depth = 0
+        var end: String.Index?
+        for index in rest.indices {
+            if rest[index] == "(" { depth += 1 }
+            if rest[index] == ")" {
+                depth -= 1
+                if depth == 0 {
+                    end = index
+                    break
+                }
+            }
+        }
+        guard let end else { return .skip }
+        let body = String(rest[...end])
+        let tail = rest[rest.index(after: end)...].split(separator: ",", omittingEmptySubsequences: true).map { $0.trimmingCharacters(in: .whitespaces) }
+        // 里面的每条规则：去掉括号，按类型转换。
+        let inner = body.dropFirst().dropLast()
+        var parts: [String] = []
+        var current = ""
+        depth = 0
+        for character in inner {
+            if character == "(" {
+                depth += 1
+                if depth == 1 { current = ""; continue }
+            }
+            if character == ")" {
+                depth -= 1
+                if depth == 0 { parts.append(current); continue }
+            }
+            if depth >= 1 { current.append(character) }
+        }
+        guard !parts.isEmpty else { return .skip }
+        var converted: [String] = []
+        for part in parts {
+            let fields = part.split(separator: ",", maxSplits: 1, omittingEmptySubsequences: false).map { $0.trimmingCharacters(in: .whitespaces) }
+            let innerType = coreType(fields.first ?? "")
+            if logicTypes.contains(innerType) {
+                // 嵌套的组合规则原样保留。
+                converted.append("(\(part))")
+                continue
+            }
+            guard supportedTypes.contains(innerType), fields.count == 2, !fields[1].isEmpty else { return .skip }
+            var value = innerType == "GEOIP" ? fields[1].uppercased() : fields[1]
+            if ["IP-CIDR", "IP-CIDR6", "SRC-IP-CIDR"].contains(innerType), !value.contains("/"), let prefix = IPPrefix.normalize(value) {
+                value = prefix
+            }
+            converted.append("(\(innerType),\(value))")
+        }
+        var policy = fallback
+        if force == nil, let first = tail.first, !surgeOptions.contains(first.uppercased()) {
+            policy = self.policy(first, groups: groups)
+        }
+        return .rule("\(type),(\(converted.joined(separator: ","))),\(policy)")
+    }
+
     /// 小火箭 / Surge 里的策略名转成内核里的：直连、拒绝各归各，和某个自定义策略组同名的指到那个组，其余走代理的都指到「节点」组。
     static func policy(_ raw: String, groups: [String] = []) -> String {
         let trimmed = raw.trimmingCharacters(in: .whitespaces)
@@ -262,7 +364,7 @@ enum RuleConverter {
         switch trimmed.uppercased() {
         case "DIRECT", "直连", "直接连接":
             return "DIRECT"
-        case "REJECT", "REJECT-DROP", "REJECT-TINYGIF", "REJECT-IMG", "REJECT-DICT", "REJECT-ARRAY", "REJECT-200", "BLOCK", "拒绝", "广告", "AD", "ADBLOCK":
+        case "REJECT", "REJECT-DROP", "REJECT-NO-DROP", "REJECT-TINYGIF", "REJECT-IMG", "REJECT-DICT", "REJECT-ARRAY", "REJECT-200", "BLOCK", "拒绝", "广告", "AD", "ADBLOCK":
             return "REJECT"
         default:
             return proxyGroup
@@ -274,9 +376,8 @@ enum RuleConverter {
         return text.allSatisfy { $0.isLetter || $0.isNumber || $0 == "." || $0 == "-" || $0 == "_" }
     }
 
-    /// 把内联的规则集合并进去：RULE-SET 出现的位置换成规则集的内容。
+    /// 把内联的规则集合并进去：RULE-SET / DOMAIN-SET 出现的位置换成规则集的内容，FINAL 放在最后。
     static func merge(_ converted: ConvertedRules, ruleSetRules: [String: [String]]) -> [String] {
-        // convert() 已经把 RULE-SET 从 rules 里拿走了，规则集的内容接在普通规则前面（它们通常在文件末尾、FINAL 之前）。
         var rules: [String] = []
         var seen = Set<String>()
         func add(_ rule: String) {
@@ -285,12 +386,20 @@ enum RuleConverter {
             }
         }
         let finalRules = converted.rules.filter { $0.hasPrefix("MATCH,") }
-        for rule in converted.rules where !rule.hasPrefix("MATCH,") {
-            add(rule)
-        }
-        for reference in converted.ruleSets {
-            for rule in ruleSetRules[reference.url] ?? [] {
-                add(rule)
+        // 老的结果没有顺序信息时，规则集接在普通规则后面。
+        let sequence = converted.sequence.isEmpty ? converted.rules.map(Converted.rule) + converted.ruleSets.map(Converted.ruleSet) : converted.sequence
+        for item in sequence {
+            switch item {
+            case .rule(let rule):
+                if !rule.hasPrefix("MATCH,") {
+                    add(rule)
+                }
+            case .ruleSet(let reference):
+                for rule in ruleSetRules[reference.url] ?? [] where !rule.hasPrefix("MATCH,") {
+                    add(rule)
+                }
+            case .skip:
+                break
             }
         }
         if let final = finalRules.last {

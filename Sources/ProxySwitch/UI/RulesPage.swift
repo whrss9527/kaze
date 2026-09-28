@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// 分流规则页：规则集（远程的规则列表）按顺序匹配，自定义规则排在最前，最后是「其余流量」的去向；规则库一键添加。
 struct RulesPage: View {
@@ -13,6 +14,7 @@ struct RulesPage: View {
     @State private var showLibrary = false
     @State private var newRulePattern = ""
     @State private var newRulePolicy: RuleTarget = .proxy
+    @State private var newRuleKind: CustomRuleKind = .auto
     @State private var ruleProblem: String?
     @State private var refreshingAll = false
 
@@ -149,50 +151,37 @@ struct RulesPage: View {
     private var customRulesSection: some View {
         Section("自定义规则") {
             if state.config.engine.customRules.isEmpty {
-                Text("让某个网站固定走节点、直连、拦截或者走某个策略组。排在所有规则集前面，全局模式下也生效。")
+                Text("让某个网站、某个应用、某台设备固定走节点、直连、拦截或者走某个策略组。排在所有规则集前面，全局模式下也生效。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
             ForEach(state.config.engine.customRules) { rule in
-                HStack(spacing: 10) {
-                    Toggle("", isOn: Binding(get: { rule.enabled }, set: { value in
-                        var updated = rule
-                        updated.enabled = value
-                        engine.updateCustomRule(updated)
-                    }))
-                    .labelsHidden()
-                    .toggleStyle(.switch)
-                    .controlSize(.small)
-                    Text(rule.pattern)
-                        .font(.system(size: 12, design: .monospaced))
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                    Spacer()
-                    Picker("", selection: Binding(get: { rule.policy }, set: { value in
-                        var updated = rule
-                        updated.policy = value
-                        engine.updateCustomRule(updated)
-                    })) {
-                        ForEach(targets, id: \.self) { target in
-                            Text(target.title).tag(target)
-                        }
-                    }
-                    .labelsHidden()
-                    .frame(width: 110)
-                    Button(role: .destructive) {
-                        engine.removeCustomRule(rule.id)
-                    } label: {
-                        Image(systemName: "trash")
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.secondary)
-                    .help("删除这条规则")
-                }
+                CustomRuleRow(
+                    rule: rule,
+                    targets: targets,
+                    onChange: { engine.updateCustomRule($0) },
+                    onMove: { engine.moveCustomRule(rule.id, up: $0) },
+                    onDelete: { engine.removeCustomRule(rule.id) }
+                )
             }
-            HStack(spacing: 10) {
-                TextField("", text: $newRulePattern, prompt: Text("域名（含子域名）或 IP / 网段，比如 youtube.com、8.8.8.8、10.0.0.0/8"))
+            HStack(spacing: 8) {
+                Picker("", selection: $newRuleKind) {
+                    ForEach(CustomRuleKind.common) { kind in
+                        Text(kind.title).tag(kind)
+                    }
+                    Divider()
+                    ForEach(CustomRuleKind.allCases.filter { !CustomRuleKind.common.contains($0) }) { kind in
+                        Text(kind.title).tag(kind)
+                    }
+                }
+                .labelsHidden()
+                .frame(width: 110)
+                TextField("", text: $newRulePattern, prompt: Text(newRuleKind.placeholder))
                     .labelsHidden()
                     .onSubmit { addRule() }
+                if newRuleKind == .app {
+                    appMenu
+                }
                 Picker("", selection: $newRulePolicy) {
                     ForEach(targets, id: \.self) { target in
                         Text(target.title).tag(target)
@@ -208,14 +197,61 @@ struct RulesPage: View {
                     .font(.caption)
                     .foregroundStyle(.red)
             }
-            Text("规则立刻生效，不用重启内核。共享给 PS5 等设备的流量同样遵守这些规则；在「连接」页和「局域网共享」页的连接上右键也能直接加。")
+            Text(kindHelp)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text("规则立刻生效，不用重启内核，从上到下匹配。共享给 PS5 等设备的流量同样遵守这些规则；在「连接」页和「局域网共享」页的连接上右键也能直接加。")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
     }
 
+    private var kindHelp: String {
+        switch newRuleKind {
+        case .app: return "应用：这个 .app 以及它的辅助进程发起的连接（按路径匹配）。比如让 Telegram 走节点、让某个下载工具直连。"
+        case .device: return "局域网设备：按来源 IP 匹配经局域网共享上网的设备，比如让 PS5 走某个策略组。本机没开内置代理时，设备规则里只有直连和拦截生效。"
+        case .process: return "进程名：命令行工具这类没有 .app 的程序，比如 git、node、curl。"
+        case .logic: return "组合规则：把几条条件用 AND（都满足）、OR（满足一个）、NOT（不满足）组合起来，写成 AND,((DOMAIN,a.com),(NETWORK,UDP))，里面每条是「类型,内容」。"
+        case .geoip: return "IP 归属地：目标 IP 属于某个国家或地区（要先解析域名）。"
+        default: return "「域名或 IP」按域名（含子域名）或 IP / 网段匹配；更多类型在左边的菜单里。"
+        }
+    }
+
+    /// 选应用：正在运行的、或者到文件夹里选。
+    private var appMenu: some View {
+        Menu("选择应用") {
+            ForEach(runningApps, id: \.self) { path in
+                Button((path as NSString).lastPathComponent.replacingOccurrences(of: ".app", with: "")) {
+                    newRulePattern = path
+                }
+            }
+            if !runningApps.isEmpty {
+                Divider()
+            }
+            Button("到应用程序文件夹里选…") { chooseApp() }
+        }
+        .fixedSize()
+    }
+
+    private var runningApps: [String] {
+        let paths = NSWorkspace.shared.runningApplications
+            .filter { $0.activationPolicy == .regular }
+            .compactMap { $0.bundleURL?.path }
+            .filter { !$0.hasPrefix("/System/") }
+        return Array(Set(paths)).sorted { ($0 as NSString).lastPathComponent.localizedStandardCompare(($1 as NSString).lastPathComponent) == .orderedAscending }
+    }
+
+    private func chooseApp() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.application]
+        panel.directoryURL = URL(fileURLWithPath: "/Applications")
+        panel.message = "选择要单独分流的应用"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        newRulePattern = url.path
+    }
+
     private func addRule() {
-        ruleProblem = engine.addCustomRule(pattern: newRulePattern, policy: newRulePolicy)
+        ruleProblem = engine.addCustomRule(pattern: newRulePattern, policy: newRulePolicy, kind: newRuleKind)
         if ruleProblem == nil {
             newRulePattern = ""
         }
@@ -448,5 +484,69 @@ struct RuleLibrarySheet: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
+    }
+}
+
+/// 自定义规则列表里的一行：种类、内容（应用显示图标和名字）、去向。
+struct CustomRuleRow: View {
+    var rule: CustomRule
+    var targets: [RuleTarget]
+    var onChange: (CustomRule) -> Void
+    var onMove: (Bool) -> Void
+    var onDelete: () -> Void
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Toggle("", isOn: Binding(get: { rule.enabled }, set: { value in
+                var updated = rule
+                updated.enabled = value
+                onChange(updated)
+            }))
+            .labelsHidden()
+            .toggleStyle(.switch)
+            .controlSize(.small)
+            if rule.kind == .app {
+                Image(nsImage: NSWorkspace.shared.icon(forFile: rule.pattern))
+                    .resizable()
+                    .frame(width: 18, height: 18)
+            }
+            if !rule.kind.badge.isEmpty {
+                Text(rule.kind.badge)
+                    .font(.system(size: 9, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 1)
+                    .background(Capsule().fill(Color.primary.opacity(0.08)))
+            }
+            Text(rule.displayValue)
+                .font(.system(size: 12, design: rule.kind == .app ? .default : .monospaced))
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .help(rule.pattern)
+            Spacer()
+            Picker("", selection: Binding(get: { rule.policy }, set: { value in
+                var updated = rule
+                updated.policy = value
+                onChange(updated)
+            })) {
+                ForEach(targets, id: \.self) { target in
+                    Text(target.title).tag(target)
+                }
+            }
+            .labelsHidden()
+            .frame(width: 110)
+            Menu {
+                Button("上移") { onMove(true) }
+                Button("下移") { onMove(false) }
+                Button("复制内容") { TerminalCommands.copy(rule.pattern) }
+                Divider()
+                Button("删除规则", role: .destructive) { onDelete() }
+            } label: {
+                Image(systemName: "ellipsis.circle")
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+        }
     }
 }

@@ -1,4 +1,5 @@
 import AppKit
+import Charts
 import SwiftUI
 
 /// 连接页：出口 IP、按出口累计的流量、现在开着的连接和最近的连接（谁访问了什么、走了哪里、命中了哪条规则）。
@@ -7,6 +8,8 @@ struct ConnectionsPage: View {
     @ObservedObject var engine: Engine
     @State private var filter = ""
     @State private var closingAll = false
+    @State private var trafficView = "outbound"
+    @State private var serviceNode = ""
 
     private var targets: [RuleTarget] { RuleTarget.options(groups: state.config.engine.groups) }
 
@@ -14,7 +17,9 @@ struct ConnectionsPage: View {
         VStack(spacing: 0) {
             PageHeader(title: "连接", subtitle: "谁在访问什么、走了哪个节点、命中了哪条规则；出口 IP 和按节点累计的流量")
             Form {
+                speedSection
                 exitSection
+                servicesSection
                 trafficSection
                 activeSection
                 recentSection
@@ -85,7 +90,121 @@ struct ConnectionsPage: View {
         }
     }
 
+    // MARK: - 网速
+
+    private var speedSection: some View {
+        Section("网速") {
+            if engine.speedHistory.count < 2 {
+                Text(engine.isRunning ? "正在采集，几秒后出现最近两分钟经内核的网速。" : "内核运行时这里显示最近两分钟经内核的网速。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                SpeedChart(samples: engine.speedHistory)
+                    .frame(height: 120)
+                if let last = engine.speedHistory.last {
+                    HStack(spacing: 16) {
+                        Label("↑ \(Engine.bytesText(last.upload))/s", systemImage: "arrow.up")
+                            .foregroundStyle(.orange)
+                        Label("↓ \(Engine.bytesText(last.download))/s", systemImage: "arrow.down")
+                            .foregroundStyle(Color.accentColor)
+                        Spacer()
+                        let peak = engine.speedHistory.map { max($0.upload, $0.download) }.max() ?? 0
+                        Text("两分钟内最快 \(Engine.bytesText(peak))/s")
+                            .foregroundStyle(.secondary)
+                    }
+                    .font(.caption)
+                    .labelStyle(.titleOnly)
+                }
+            }
+        }
+    }
+
+    // MARK: - 服务检测
+
+    private var serviceKey: String { serviceNode }
+
+    private var servicesSection: some View {
+        Section("服务检测") {
+            HStack {
+                Picker("经", selection: $serviceNode) {
+                    Text("现在的节点" + (engine.effectiveNode.map { "（\($0)）" } ?? "")).tag("")
+                    ForEach(engine.sortedNodes.prefix(200)) { node in
+                        Text(node.name).tag(node.name)
+                    }
+                }
+                .frame(maxWidth: 320)
+                Spacer()
+                if engine.checkingServices != nil {
+                    ProgressView()
+                        .controlSize(.small)
+                }
+                Button(engine.checkingServices != nil ? "正在检测…" : "检测") {
+                    let node = serviceNode.isEmpty ? nil : serviceNode
+                    Task { await engine.checkServices(node: node) }
+                }
+                .disabled(engine.checkingServices != nil || !engine.isRunning || !state.config.engine.wantsCore)
+            }
+            if let results = engine.serviceResults[serviceKey], !results.isEmpty {
+                ForEach(results) { result in
+                    HStack(spacing: 10) {
+                        Image(systemName: icon(result.status))
+                            .foregroundStyle(color(result.status))
+                            .frame(width: 16)
+                        Text(result.service.title)
+                            .frame(width: 130, alignment: .leading)
+                        Text(result.summary)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        if let region = result.region {
+                            Text(flag(region) + " " + region)
+                                .font(.caption)
+                        }
+                    }
+                }
+                if let date = results.first?.checkedAt {
+                    Text("\(Engine.relative(date))检测")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Text("看经某个节点 ChatGPT、Claude、Netflix、YouTube Premium 这些服务能不能用、服务认为你在哪。选别的节点检测时不会切换你正在用的节点。检测方法是公开的经验做法，服务一改就可能不准，仅供参考。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func flag(_ region: String) -> String {
+        ExitInfo(ip: "", countryCode: region, country: "", city: "", organization: "").flag
+    }
+
+    private func icon(_ status: ServiceCheckResult.Status) -> String {
+        switch status {
+        case .available: return "checkmark.circle.fill"
+        case .limited: return "circle.lefthalf.filled"
+        case .blocked: return "nosign"
+        case .failed: return "xmark.circle"
+        }
+    }
+
+    private func color(_ status: ServiceCheckResult.Status) -> Color {
+        switch status {
+        case .available: return .green
+        case .limited: return .orange
+        case .blocked: return .red
+        case .failed: return .secondary
+        }
+    }
+
     // MARK: - 流量
+
+    private var trafficEntries: [TrafficEntry] {
+        switch trafficView {
+        case "source": return engine.traffic.rankedSources
+        case "day": return engine.traffic.recentDays(14).reversed()
+        default: return engine.traffic.ranked
+        }
+    }
 
     private var trafficSection: some View {
         Section("流量统计") {
@@ -93,14 +212,21 @@ struct ConnectionsPage: View {
                 Text("↑ \(Engine.bytesText(engine.sessionTraffic.upload))　↓ \(Engine.bytesText(engine.sessionTraffic.download))")
                     .monospacedDigit()
             }
-            let ranked = engine.traffic.ranked
-            if ranked.isEmpty {
-                Text("有流量经过内核后，这里按节点（以及直连、上游代理）累计。")
+            Picker("", selection: $trafficView) {
+                Text("按节点").tag("outbound")
+                Text("按程序和设备").tag("source")
+                Text("按天").tag("day")
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            let ranked = trafficEntries
+            if ranked.allSatisfy({ $0.traffic.isZero }) {
+                Text("有流量经过内核后，这里按节点（以及直连、上游代理）、按发起连接的程序和设备、按天累计。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
-                let top = ranked.first?.traffic.total ?? 1
-                ForEach(ranked.prefix(12), id: \.name) { item in
+                let top = ranked.map(\.traffic.total).max() ?? 1
+                ForEach(ranked.prefix(14), id: \.name) { item in
                     HStack(spacing: 10) {
                         Text(item.name)
                             .font(.system(size: 12))
@@ -123,13 +249,13 @@ struct ConnectionsPage: View {
                 }
             }
             HStack(alignment: .top) {
-                Text("从 \(Self.dateFormatter.string(from: engine.traffic.since)) 起累计，内核重启后接着算；每两秒采样一次，连接关掉前最后一点流量算不进来，看趋势够用。")
+                Text("从 \(Self.dateFormatter.string(from: engine.traffic.since)) 起累计，内核重启后接着算；每两秒采样一次，连接关掉前最后一点流量算不进来，看趋势够用。按天的统计保留一个月。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
                 Button("清零") { engine.resetTraffic() }
                     .controlSize(.small)
-                    .disabled(ranked.isEmpty)
+                    .disabled(engine.traffic.outbounds.isEmpty)
             }
         }
     }
@@ -184,6 +310,8 @@ struct ConnectionsPage: View {
                 ForEach(activeRecords.prefix(80)) { record in
                     ConnectionRow(record: record, targets: targets, showTraffic: true, onPin: { target in
                         engine.addCustomRule(pattern: record.host, policy: target)
+                    }, onPinApp: { target in
+                        pinApp(record, target)
                     }, onClose: {
                         Task { await engine.close(connection: record.id) }
                     })
@@ -200,6 +328,17 @@ struct ConnectionsPage: View {
         }
     }
 
+    /// 让发起这条连接的应用（或者设备）固定走某个去向。
+    private func pinApp(_ record: ConnectionRecord, _ target: RuleTarget) {
+        if record.isShare {
+            engine.addCustomRule(pattern: record.client, policy: target, kind: .device)
+        } else if let bundle = CustomRule.appBundlePath(forProcessPath: record.processPath) {
+            engine.addCustomRule(pattern: bundle, policy: target, kind: .app)
+        } else if !record.process.isEmpty {
+            engine.addCustomRule(pattern: record.process, policy: target, kind: .process)
+        }
+    }
+
     // MARK: - 最近的连接
 
     private var recentSection: some View {
@@ -213,6 +352,8 @@ struct ConnectionsPage: View {
                 ForEach(records.prefix(60)) { record in
                     ConnectionRow(record: record, targets: targets, showTraffic: false, onPin: { target in
                         engine.addCustomRule(pattern: record.host, policy: target)
+                    }, onPinApp: { target in
+                        pinApp(record, target)
                     }, onClose: nil)
                 }
                 HStack {
@@ -231,7 +372,18 @@ struct ConnectionRow: View {
     var targets: [RuleTarget]
     var showTraffic: Bool
     var onPin: (RuleTarget) -> Void
+    /// 让发起连接的应用（本机）或者设备（共享）固定走某个去向。
+    var onPinApp: ((RuleTarget) -> Void)? = nil
     var onClose: (() -> Void)?
+
+    /// 右键菜单里「让 xx 走…」的 xx：应用名、进程名或者设备。
+    private var appTitle: String? {
+        if record.isShare { return record.client.isEmpty ? nil : "设备 \(record.client)" }
+        if let bundle = CustomRule.appBundlePath(forProcessPath: record.processPath) {
+            return (bundle as NSString).lastPathComponent.replacingOccurrences(of: ".app", with: "")
+        }
+        return record.process.isEmpty ? nil : record.process
+    }
 
     var body: some View {
         HStack(alignment: .center, spacing: 10) {
@@ -277,6 +429,14 @@ struct ConnectionRow: View {
                 }
                 Divider()
             }
+            if let onPinApp, let appTitle {
+                Menu("让 \(appTitle) 的所有连接…") {
+                    ForEach(targets, id: \.self) { target in
+                        Button(target.actionTitle) { onPinApp(target) }
+                    }
+                }
+                Divider()
+            }
             Button("复制目标") { TerminalCommands.copy(record.target) }
             if let onClose {
                 Button("断开这条连接", role: .destructive) { onClose() }
@@ -299,5 +459,35 @@ struct ConnectionRow: View {
             text += " · \(duration)"
         }
         return text
+    }
+}
+
+/// 最近两分钟的网速曲线：上行、下行两条线。
+struct SpeedChart: View {
+    var samples: [SpeedSample]
+
+    var body: some View {
+        Chart {
+            ForEach(samples) { sample in
+                LineMark(x: .value("时间", sample.date), y: .value("字节每秒", Double(sample.download)), series: .value("方向", "下行"))
+                    .foregroundStyle(Color.accentColor)
+                    .interpolationMethod(.monotone)
+                LineMark(x: .value("时间", sample.date), y: .value("字节每秒", Double(sample.upload)), series: .value("方向", "上行"))
+                    .foregroundStyle(Color.orange)
+                    .interpolationMethod(.monotone)
+            }
+        }
+        .chartXAxis(.hidden)
+        .chartYAxis {
+            AxisMarks(position: .leading, values: .automatic(desiredCount: 3)) { value in
+                AxisGridLine()
+                AxisValueLabel {
+                    if let bytes = value.as(Double.self) {
+                        Text(Engine.bytesText(Int64(bytes)) + "/s")
+                            .font(.system(size: 9))
+                    }
+                }
+            }
+        }
     }
 }

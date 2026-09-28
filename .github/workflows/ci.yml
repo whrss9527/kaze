@@ -65,6 +65,8 @@ jobs:
           import base64, urllib.parse
           uris = [f"ss://YWVzLTEyOC1nY206cGFzc3dvcmQ=@127.0.0.1:{port}#{urllib.parse.quote(name)}" for port, name in [(8388, "测试节点A"), (8389, "测试节点B")]]
           uris.append("trojan://password@example.com:443#" + urllib.parse.quote("测试节点C"))
+          # 订阅设了「去掉 过期」：这个节点不该出现。
+          uris.append("trojan://password@example.com:443#" + urllib.parse.quote("过期节点"))
           open("feed0/sub.txt", "w").write(base64.b64encode("\n".join(uris).encode()).decode())
           PY
           # 假装 iCloud 云盘里已经有另一台 Mac 同步上来的配置（多一套「iCloud 来的」），并且本机记录着同步已开启。
@@ -76,10 +78,15 @@ jobs:
                                  {"id":"6D2F2A1E-0000-4000-8000-000000000002","name":"公司代理","color":"#2563eb","kind":"http","host":"proxy.corp.example","port":3128},
                                  {"id":"6D2F2A1E-0000-4000-8000-000000000003","name":"SOCKS 隧道","color":"#7c3aed","kind":"socks5","host":"127.0.0.1","port":1080},
                                  {"id":"6D2F2A1E-0000-4000-8000-000000000004","name":"iCloud 来的","color":"#db2777","kind":"http","host":"10.0.0.8","port":8888}],
-                     "engine":{"subscriptions":[{"id":"6D2F2A1E-0000-4000-8000-00000000000A","name":"测试机场","url":"file://SUBFILE"}],"mode":"rule",
-                               "groups":[{"name":"流媒体","kind":"select","filter":"A|B"},{"name":"自动测试","kind":"urlTest","filter":"测试"}],
+                     "engine":{"subscriptions":[{"id":"6D2F2A1E-0000-4000-8000-00000000000A","name":"测试机场","url":"file://SUBFILE","exclude":"过期"}],"mode":"rule",
+                               "groups":[{"name":"流媒体","kind":"select","filter":"A|B"},{"name":"自动测试","kind":"urlTest","filter":"测试","exclude":"C","interval":300,"includeGroups":["流媒体"]}],
                                "ruleSets":[{"name":"国内直连","url":"builtin://china-direct","policy":"direct"}],
-                               "customRules":[{"pattern":"youtube.com","policy":"group:流媒体"}]}}}
+                               "customRules":[{"pattern":"youtube.com","policy":"group:流媒体"},{"kind":"app","pattern":"/Applications/Safari.app","policy":"direct"},
+                                              {"kind":"device","pattern":"192.168.1.20","policy":"reject"},{"kind":"logic","pattern":"AND,((DOMAIN-SUFFIX,example.net),(NETWORK,UDP))","policy":"reject"}],
+                               "manualNodes":[{"link":"trojan://password@example.com:443#%E6%89%8B%E5%8A%A8%E8%8A%82%E7%82%B9D"}],
+                               "dns":{"enabled":true,"nameservers":["223.5.5.5","https://doh.pub/dns-query"],"fallback":[]},
+                               "hosts":[{"domain":"nas.lan","value":"192.168.1.5"}],
+                               "patch":"log-level: info\n"}}}
           JSON
           # runner 上未签名程序连本机端口会被系统的「本地网络」权限拦住（超时），所以 CI 里用本机文件当订阅。
           sed -i '' "s|file://SUBFILE|file://$(pwd)/feed0/sub.txt|" "$cloud/config.json"
@@ -102,9 +109,9 @@ jobs:
           screencapture -x screenshots/settings.png || true
           open "proxyswitch://settings?page=sync"; sleep 3
           screencapture -x screenshots/sync.png || true
-          # 内核应该已经跟着假订阅启动，并读到 3 个节点。
+          # 内核应该已经跟着假订阅启动，读到订阅里的 3 个节点（「过期节点」被筛掉）加 1 个手动节点。
           for i in $(seq 1 20); do
-            grep -q "读取到 3 个节点" "$support/proxyswitch.log" && break
+            grep -q "读取到 4 个节点" "$support/proxyswitch.log" && break
             sleep 1
           done
           open "proxyswitch://settings?page=nodes"; sleep 3
@@ -122,6 +129,10 @@ jobs:
           done
           open "proxyswitch://settings?page=share"; sleep 3
           screencapture -x screenshots/share.png || true
+          open "proxyswitch://settings?page=automation"; sleep 3
+          screencapture -x screenshots/automation.png || true
+          open "proxyswitch://settings?page=advanced"; sleep 3
+          screencapture -x screenshots/advanced.png || true
           share_code=$(curl -s -m 15 -x http://127.0.0.1:7892 -o /dev/null -w '%{http_code}' https://cp.cloudflare.com/generate_204 || true)
           echo "经共享端口访问外网：$share_code"
           # 网址诊断：本机没开代理，应该得出「直连正常」之类的结论并写进日志。
@@ -140,7 +151,7 @@ jobs:
           grep -q "应用了来自 另一台 Mac 的配置" "$support/proxyswitch.log" || { echo "没有从假 iCloud 拉到配置"; exit 1; }
           grep -q "iCloud 来的" "$support/config.json" || { echo "拉到的配置没有写到本机"; cat "$support/config.json"; exit 1; }
           grep -q "内核已启动" "$support/proxyswitch.log" || { echo "内核没有启动"; exit 1; }
-          grep -q "读取到 3 个节点" "$support/proxyswitch.log" || { echo "没有读到假订阅的 3 个节点"; exit 1; }
+          grep -q "读取到 4 个节点" "$support/proxyswitch.log" || { echo "没有读到假订阅的 3 个节点和 1 个手动节点"; exit 1; }
           grep -q '"name":"节点代理"' "$support/config.json" || grep -q '"name" : "节点代理"' "$support/config.json" || { echo "没有自动加上「节点代理」配置"; exit 1; }
           grep -q "局域网共享已开启" "$support/proxyswitch.log" || { echo "局域网共享没有开启"; exit 1; }
           grep -q 'name: "lan-share"' "$support/core/config.yaml" || { echo "内核配置里没有共享入口"; exit 1; }
@@ -158,6 +169,66 @@ jobs:
           pmset -g assertions | grep -q "ProxySwitch" || { pmset -g assertions; echo "共享期间没有阻止睡眠"; exit 1; }
           grep -q "诊断完成：cp.cloudflare.com" "$support/proxyswitch.log" || { echo "网址诊断没有跑完"; exit 1; }
           nc -z 127.0.0.1 7892 || { echo "共享端口没有监听"; exit 1; }
+          # 这次新增的配置都进了内核配置，而且内核认了（上面已经确认内核启动、读到节点）。
+          core="$support/core/config.yaml"
+          grep -q '已合并配置补丁' "$core" || { echo "配置补丁没有合并"; exit 1; }
+          grep -q '^log-level: info' "$core" || { echo "补丁里的 log-level 没有生效"; exit 1; }
+          grep -q '^dns:' "$core" || { echo "内核配置里没有 DNS"; exit 1; }
+          grep -q 'nas.lan' "$core" || { echo "内核配置里没有 Hosts"; exit 1; }
+          grep -q 'exclude-filter: "(?i)过期"' "$core" || { echo "订阅的排除没有写进内核配置"; exit 1; }
+          grep -q 'exclude-filter: "(?i)C"' "$core" || { echo "策略组的排除没有写进内核配置"; exit 1; }
+          grep -q 'PROCESS-PATH-WILDCARD,/Applications/Safari.app/\*,DIRECT' "$core" || { echo "应用规则没有写进内核配置"; exit 1; }
+          grep -q 'SRC-IP-CIDR,192.168.1.20/32,REJECT' "$core" || { echo "设备规则没有写进内核配置"; exit 1; }
+          grep -q 'AND,((DOMAIN-SUFFIX,example.net),(NETWORK,UDP)),REJECT' "$core" || { echo "组合规则没有写进内核配置"; exit 1; }
+          grep -q 'ps-probe' "$core" || { echo "服务检测的入口没有写进内核配置"; exit 1; }
+          grep -q 'manual' "$core" || { echo "手动节点没有写进内核配置"; exit 1; }
+          # 命令行、MCP、导入和撤销：经本机控制接口操作正在运行的程序。
+          cli=dist/ProxySwitch.app/Contents/MacOS/ProxySwitch
+          [ -S "$support/control.sock" ] || { echo "本机控制接口没有开"; cat "$support/proxyswitch.log"; exit 1; }
+          "$cli" status --json | tee "$RUNNER_TEMP/status.json"
+          grep -q '"engine"' "$RUNNER_TEMP/status.json" || { echo "命令行读不到状态"; exit 1; }
+          "$cli" nodes 测试
+          "$cli" rule add example.org direct --type suffix
+          for i in $(seq 1 20); do grep -q 'DOMAIN-SUFFIX,example.org,DIRECT' "$core" && break; sleep 0.5; done
+          grep -q 'DOMAIN-SUFFIX,example.org,DIRECT' "$core" || { echo "命令行加的规则没有进内核配置"; exit 1; }
+          "$cli" undo
+          for i in $(seq 1 20); do grep -q 'DOMAIN-SUFFIX,example.org,DIRECT' "$core" || break; sleep 0.5; done
+          grep -q 'DOMAIN-SUFFIX,example.org,DIRECT' "$core" && { echo "撤销没有生效"; exit 1; }
+          cat > "$RUNNER_TEMP/import.yaml" <<'YAML'
+          proxy-groups:
+            - name: 导入的组
+              type: select
+              proxies: [测试节点A, DIRECT]
+          rules:
+            - DOMAIN-SUFFIX,imported.example,导入的组
+            - MATCH,DIRECT
+          YAML
+          "$cli" import "$RUNNER_TEMP/import.yaml" --preview
+          "$cli" import "$RUNNER_TEMP/import.yaml"
+          for i in $(seq 1 30); do grep -q 'DOMAIN-SUFFIX,imported.example,导入的组' "$core" && break; sleep 0.5; done
+          grep -q 'name: "导入的组"' "$core" || { echo "导入的策略组没有进内核配置"; exit 1; }
+          grep -q 'DOMAIN-SUFFIX,imported.example,导入的组' "$core" || { echo "导入的规则没有进内核配置"; cat "$support/proxyswitch.log" | tail -20; exit 1; }
+          "$cli" history
+          "$cli" undo
+          # 经接口导出的配置描述里，手动节点的链接只留名字，密码不出现。
+          "$cli" export describe > "$RUNNER_TEMP/describe.json"
+          grep -q '手动节点D' "$RUNNER_TEMP/describe.json" || { echo "导出的配置描述里没有手动节点"; cat "$RUNNER_TEMP/describe.json"; exit 1; }
+          grep -q 'password@example.com' "$RUNNER_TEMP/describe.json" && { echo "导出的配置描述里有节点的密码"; exit 1; }
+          # MCP：初始化、列出工具、调用一个工具。
+          printf '%s\n' \
+            '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"ci","version":"1"}}}' \
+            '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
+            '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
+            '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"list_groups","arguments":{}}}' \
+            | "$cli" mcp | tee "$RUNNER_TEMP/mcp.out"
+          grep -q '"protocolVersion":"2025-06-18"' "$RUNNER_TEMP/mcp.out" || { echo "MCP 初始化失败"; exit 1; }
+          grep -q '"name":"get_status"' "$RUNNER_TEMP/mcp.out" || { echo "MCP 没有列出工具"; exit 1; }
+          grep -q '流媒体' "$RUNNER_TEMP/mcp.out" || { echo "MCP 调用工具失败"; exit 1; }
+          # URL 命令经同一个接口：切到全局模式再切回来。
+          open "proxyswitch://mode?value=global"
+          for i in $(seq 1 20); do grep -q '"mode" : "global"' "$support/config.json" && break; sleep 0.5; done
+          grep -q '"mode" : "global"' "$support/config.json" || { echo "URL 命令切换模式没有生效"; exit 1; }
+          "$cli" mode rule
           pkill -x ProxySwitch || true
           sleep 3
           pgrep -x mihomo && { echo "程序退出后内核还在运行"; exit 1; }
@@ -412,6 +483,19 @@ jobs:
             tail -60 "$RUNNER_TEMP/selftest.log"
             echo "=====END 签名流程自测====="
           fi
+          # 节点页、自动化页和高级页：同样裁出窗口一带缩小，放在后面，日志只看末尾几千行时也在。
+          for name in nodes automation advanced; do
+            [ -f "$name.png" ] || continue
+            width=$(sips -g pixelWidth "$name.png" | awk '/pixelWidth/{print $2}')
+            height=$(sips -g pixelHeight "$name.png" | awk '/pixelHeight/{print $2}')
+            cw=$(( width < 1000 ? width : 1000 )); ch=$(( height < 700 ? height : 700 ))
+            if sips -c "$ch" "$cw" "$name.png" --out "$name-window.png" >/dev/null 2>&1; then
+              sips -Z 700 -s format jpeg -s formatOptions 50 "$name-window.png" --out "$name-window.jpg" >/dev/null
+              echo "=====BEGIN $name-window.jpg====="
+              base64 -b 76 -i "$name-window.jpg"
+              echo "=====END $name-window.jpg====="
+            fi
+          done
           # 关于页（带赞赏码）：设置窗口在屏幕正中，裁出窗口一带缩小后打在最后。
           if [ -f about.png ]; then
             width=$(sips -g pixelWidth about.png | awk '/pixelWidth/{print $2}')

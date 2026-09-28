@@ -29,6 +29,8 @@ fetch() {
 # 有开发者证书时加安全时间戳（公证要求，证书过期后签名照样有效）；ad-hoc 签名不能带时间戳。
 # 由内向外签：先签 mihomo，再签整个 .app，不用 --deep（它会用同样的参数重签里面的东西）。
 IDENTITY="${CODESIGN_IDENTITY:--}"
+# 程序本身带上权限声明（Resources/ProxySwitch.entitlements：读 Wi‑Fi 名字要的定位权限），内核不用。
+ENTITLEMENTS="Resources/ProxySwitch.entitlements"
 sign() {
   local args=(--force --options runtime --sign "$IDENTITY")
   if [ "$IDENTITY" != "-" ]; then
@@ -36,6 +38,9 @@ sign() {
   fi
   if [ -n "${CODESIGN_KEYCHAIN:-}" ]; then
     args+=(--keychain "$CODESIGN_KEYCHAIN")
+  fi
+  if [ -n "${2:-}" ]; then
+    args+=(--entitlements "$2")
   fi
   codesign "${args[@]}" "$1"
 }
@@ -77,7 +82,7 @@ if [ -z "${SKIP_CORE:-}" ]; then
 fi
 
 # 没有开发者证书时用 ad-hoc 签名，Apple 芯片上必须有签名才能运行。
-sign "$APP"
+sign "$APP" "$ENTITLEMENTS"
 codesign --verify --deep --strict "$APP"
 if [ "$IDENTITY" = "-" ]; then
   echo "签名：ad-hoc"
@@ -116,7 +121,7 @@ if [ -n "${THIN_ARCHIVES:-}" ]; then
     if [ -f "${dir}/ProxySwitch.app/Contents/MacOS/mihomo" ]; then
       sign "${dir}/ProxySwitch.app/Contents/MacOS/mihomo"
     fi
-    sign "${dir}/ProxySwitch.app"
+    sign "${dir}/ProxySwitch.app" "$ENTITLEMENTS"
     codesign --verify --deep --strict "${dir}/ProxySwitch.app"
     (cd "$dir" && ditto -c -k --keepParent ProxySwitch.app "../ProxySwitch-macos-${arch}.zip")
     echo "已生成 dist/ProxySwitch-macos-${arch}.zip：$(du -h "dist/ProxySwitch-macos-${arch}.zip" | cut -f1)"

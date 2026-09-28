@@ -153,6 +153,41 @@ final class StatusItemController: NSObject {
         case .diagnose(let url, let device):
             SettingsWindowController.shared.navigation.diagnoseRequest = DiagnoseRequest(url: url ?? "", device: device)
             SettingsWindowController.shared.show(page: .diagnose)
+        case .node(let name):
+            runTool("select_node", ["name": name])
+        case .mode(let mode):
+            runTool("set_mode", ["mode": mode.rawValue])
+        case .group(let name, let member):
+            runTool("select_group", ["group": name, "member": member])
+        case .importConfig(let target):
+            // 网页也能触发 URL 命令：导入一定先给用户看预览、由用户确认。
+            SettingsWindowController.shared.navigation.importRequest = target
+            SettingsWindowController.shared.show(page: .advanced)
+        case .tool(let name, let params):
+            guard let tool = ControlCatalog.tool(named: name) else {
+                state.notify(title: "没有这个命令", body: name, problem: true)
+                return
+            }
+            guard tool.permission != .full else {
+                state.notify(title: "URL 命令不能改配置", body: "「\(tool.title)」要改配置，请在设置里操作，或者用命令行、AI 助手", problem: true)
+                return
+            }
+            runTool(name, params)
+        }
+    }
+
+    /// 经本机控制接口执行（和命令行、AI 助手一样受权限限制，也记在操作记录里）。
+    private func runTool(_ name: String, _ params: [String: Any]) {
+        Task { @MainActor in
+            do {
+                let result = try await state.control.call(name, params: params, client: "url")
+                if let text = result["text"] as? String {
+                    Log.info("URL 命令 \(name)：\(text)")
+                }
+            } catch {
+                state.notify(title: "命令没有执行", body: error.localizedDescription, problem: true)
+            }
+            updateIcon()
         }
     }
 
@@ -275,8 +310,10 @@ final class StatusItemController: NSObject {
         auto.representedObject = ""
         auto.state = engine.currentSelection == Engine.autoGroup ? .on : .off
         menu.addItem(auto)
-        for node in engine.nodes {
-            let title = node.delayText.isEmpty ? node.name : "\(node.name)　\(node.delayText)"
+        let favorites = Set(state.config.engine.favoriteNodes)
+        for node in engine.sortedNodes {
+            let name = favorites.contains(node.name) ? "★ " + node.name : node.name
+            let title = node.delayText.isEmpty ? name : "\(name)　\(node.delayText)"
             let menuItem = NSMenuItem(title: title, action: #selector(menuSelectNode(_:)), keyEquivalent: "")
             menuItem.target = self
             menuItem.representedObject = node.name

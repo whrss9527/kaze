@@ -64,7 +64,7 @@ for zip in "$@"; do
   out="$work/wait-$name.json"
   xcrun notarytool wait "$id" "${auth[@]}" --output-format json > "$out" || true
   status="$(json_field "$out" status)"
-  echo "$name：公证结果 ${status:-未知}"
+  echo "${name}：公证结果 ${status:-未知}"
   if [ "$status" != "Accepted" ]; then
     cat "$out" || true
     echo "===== 公证日志（为什么没通过） ====="
@@ -82,5 +82,5 @@ for zip in "$@"; do
   target="$(cd "$(dirname "$zip")" && pwd)/$name"
   rm -f "$target"
   (cd "$dir" && ditto -c -k --keepParent ProxySwitch.app "$target")
-  echo "$name：已钉上公证票据"
+  echo "${name}：已钉上公证票据"
 done

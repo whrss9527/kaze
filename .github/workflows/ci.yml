@@ -192,7 +192,7 @@ jobs:
           echo "===== 日志 ====="
           cat "$support/proxyswitch.log" || true
           echo "================"
-          [ "$version" = "9.9.9" ] || { echo "程序没有被替换成 9.9.9（现在是 $version）"; exit 1; }
+          [ "$version" = "9.9.9" ] || { echo "程序没有被替换成 9.9.9（现在是 ${version}）"; exit 1; }
           grep -q "已启动，版本 9.9.9" "$support/proxyswitch.log" || { echo "新版本没有重新启动"; exit 1; }
           grep -q "下载 http://127.0.0.1:8765/ProxySwitch-macos-arm64.zip" "$support/proxyswitch.log" || { echo "没有下载本机架构的精简包"; exit 1; }
           pgrep -x ProxySwitch >/dev/null || { echo "更新后程序没有在运行"; exit 1; }
@@ -224,7 +224,7 @@ jobs:
           echo "===== 日志（从临时位置运行） ====="
           cat "$support/proxyswitch.log" || true
           echo "================"
-          [ "$version" = "9.9.9" ] || { echo "没有装进「应用程序」（/Applications 里的版本是 $version）"; exit 1; }
+          [ "$version" = "9.9.9" ] || { echo "没有装进「应用程序」（/Applications 里的版本是 ${version}）"; exit 1; }
           [ ! -e "$app" ] || { echo "旧的那份没有移到废纸篓"; exit 1; }
           grep -q "移到废纸篓" "$support/proxyswitch.log" || { echo "日志里没有移到废纸篓的记录"; exit 1; }
           pgrep -f "/Applications/ProxySwitch.app/Contents/MacOS/ProxySwitch" >/dev/null || { echo "没有从「应用程序」重新打开"; exit 1; }
@@ -236,6 +236,8 @@ jobs:
       - name: 签名流程自测（临时的自签名证书）
         run: |
           # 发布时用 Developer ID 证书签名：这里造一张临时的自签名证书，把导入钥匙串、找证书、签名、校验、启动走一遍。
+          # 输出另存一份：失败时最后一步把末尾打在日志最后（前面是几万行截图）。
+          exec > >(tee "$RUNNER_TEMP/selftest.log") 2>&1
           work="$RUNNER_TEMP/signing-selftest"
           rm -rf "$work" && mkdir -p "$work"
           cat > "$work/openssl.cnf" <<'EOF'
@@ -312,6 +314,7 @@ jobs:
           done
           xcrun notarytool log --help >/dev/null
           xcrun --find stapler
+          echo "签名流程自测通过"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -374,4 +377,9 @@ jobs:
             echo "=====BEGIN summary====="
             cat summary.txt
             echo "=====END summary====="
+          fi
+          if [ -f "$RUNNER_TEMP/selftest.log" ] && ! grep -q "签名流程自测通过" "$RUNNER_TEMP/selftest.log"; then
+            echo "=====BEGIN 签名流程自测的最后 60 行====="
+            tail -60 "$RUNNER_TEMP/selftest.log"
+            echo "=====END 签名流程自测====="
           fi

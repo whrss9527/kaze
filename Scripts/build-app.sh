@@ -51,6 +51,8 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 sed -e "s/__VERSION__/$VERSION/g" -e "s/__BUILD__/$BUILD/g" Resources/Info.plist > "$APP/Contents/Info.plist"
 cp "$BIN_DIR/ProxySwitch" "$APP/Contents/MacOS/ProxySwitch"
 cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
+# 关于页的赞赏码（「请我喝杯咖啡」）。
+[ -f Resources/donate-wechat.png ] && cp Resources/donate-wechat.png "$APP/Contents/Resources/donate-wechat.png"
 printf 'APPL????' > "$APP/Contents/PkgInfo"
 
 if [ -z "${SKIP_CORE:-}" ]; then

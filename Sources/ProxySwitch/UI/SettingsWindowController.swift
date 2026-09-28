@@ -392,9 +392,24 @@ struct AboutPage: View {
     var body: some View {
         VStack(spacing: 0) {
             PageHeader(title: "关于", subtitle: "ProxySwitch for Mac")
-            ScrollView {
-                aboutCard
-                    .padding(24)
+            // 窗口够宽时赞赏码放在右边，一眼就能看到；窄的时候排到下面。
+            // 按实际宽度判断（ViewThatFits 按理想宽度量，更新说明里一行长字就会让它一直选竖排）。
+            GeometryReader { geometry in
+                ScrollView {
+                    if geometry.size.width >= 680 {
+                        HStack(alignment: .top, spacing: 20) {
+                            aboutCard
+                            DonateCard()
+                        }
+                        .padding(24)
+                    } else {
+                        VStack(spacing: 20) {
+                            aboutCard
+                            DonateCard()
+                        }
+                        .padding(24)
+                    }
+                }
             }
         }
     }
@@ -429,5 +444,51 @@ struct AboutPage: View {
         .frame(maxWidth: .infinity)
         .padding(28)
         .glassCard(cornerRadius: 20)
+    }
+}
+
+/// 关于页的「请我喝杯咖啡」：微信赞赏码卡片，点一下放大，方便手机扫。图片不在（开发时直接运行二进制）就不显示。
+struct DonateCard: View {
+    @MainActor static let image: NSImage? = Bundle.main.url(forResource: "donate-wechat", withExtension: "png")
+        .flatMap { NSImage(contentsOf: $0) }
+
+    @State private var enlarged = false
+
+    var body: some View {
+        if let image = Self.image {
+            VStack(spacing: 10) {
+                Button {
+                    enlarged = true
+                } label: {
+                    Image(nsImage: image)
+                        .resizable()
+                        .interpolation(.high)
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 210)
+                        .shadow(color: .black.opacity(0.22), radius: 12, y: 6)
+                }
+                .buttonStyle(.plain)
+                .help("点击放大")
+                .accessibilityLabel("微信赞赏码：请我喝杯咖啡")
+                .popover(isPresented: $enlarged, arrowEdge: .leading) {
+                    Image(nsImage: image)
+                        .resizable()
+                        .interpolation(.high)
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 420)
+                        .padding(14)
+                }
+                Text("觉得好用的话，\n微信扫一扫请我喝杯咖啡")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text("点图片可以放大")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+            .frame(width: 230)
+            .padding(.vertical, 8)
+        }
     }
 }

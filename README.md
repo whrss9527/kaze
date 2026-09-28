@@ -91,6 +91,12 @@ VERSION=0.1.0 Scripts/build-app.sh   # 组装通用二进制的 dist/ProxySwitch
 
 本机调试更新流程时可以把环境变量 `PROXYSWITCH_UPDATE_URL` 指向一个返回 GitHub releases 格式 JSON 的地址；调试 iCloud 同步时可以用 `PROXYSWITCH_SYNC_DIR` 把同步文件夹指到任意目录（见 `.github/workflows/ci.yml` 里的做法）。
 
+## 请我喝杯咖啡
+
+ProxySwitch 免费开源。觉得好用的话，可以用微信扫一扫请我喝杯咖啡 ☕（程序里「设置 → 关于」也有这张码，点一下能放大）。
+
+<p align="center"><img src="Resources/donate-wechat.png" width="300" alt="微信赞赏码：请我喝杯咖啡"></p>
+
 ## 许可证
 
 [MIT](LICENSE)

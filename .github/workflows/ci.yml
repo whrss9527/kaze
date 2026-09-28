@@ -39,6 +39,7 @@ jobs:
           [ -f dist/ProxySwitch-macos-arm64.zip ] || { echo "没有生成 arm64 精简包"; exit 1; }
           lipo -archs dist/thin-arm64/ProxySwitch.app/Contents/MacOS/mihomo
           [ "$(lipo -archs dist/thin-arm64/ProxySwitch.app/Contents/MacOS/mihomo)" = "arm64" ] || { echo "精简包里的内核不是单架构"; exit 1; }
+          [ -f dist/ProxySwitch.app/Contents/Resources/donate-wechat.png ] || { echo "关于页的赞赏码没有打包进去"; exit 1; }
           # 程序和内核都开着 hardened runtime（公证要求），后面的冒烟和更新测试跑的就是这种运行方式。
           for code in dist/ProxySwitch.app dist/ProxySwitch.app/Contents/MacOS/mihomo dist/thin-arm64/ProxySwitch.app; do
             codesign -dv "$code" 2>&1 | grep -q 'flags=.*runtime' || { codesign -dv "$code"; echo "$code 没有开 hardened runtime"; exit 1; }
@@ -382,4 +383,16 @@ jobs:
             echo "=====BEGIN 签名流程自测的最后 60 行====="
             tail -60 "$RUNNER_TEMP/selftest.log"
             echo "=====END 签名流程自测====="
+          fi
+          # 关于页（带赞赏码）：设置窗口在屏幕正中，裁出窗口一带缩小后打在最后。
+          if [ -f about.png ]; then
+            width=$(sips -g pixelWidth about.png | awk '/pixelWidth/{print $2}')
+            height=$(sips -g pixelHeight about.png | awk '/pixelHeight/{print $2}')
+            cw=$(( width < 1000 ? width : 1000 )); ch=$(( height < 700 ? height : 700 ))
+            if sips -c "$ch" "$cw" about.png --out about-window.png >/dev/null 2>&1; then
+              sips -Z 700 -s format jpeg -s formatOptions 50 about-window.png --out about-window.jpg >/dev/null
+              echo "=====BEGIN about-window.jpg（${width}x${height} 截图的中间 ${cw}x${ch}）====="
+              base64 -b 76 -i about-window.jpg
+              echo "=====END about-window.jpg====="
+            fi
           fi

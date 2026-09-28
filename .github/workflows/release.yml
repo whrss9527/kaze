@@ -4,6 +4,7 @@ name: release
 # 用 CHANGELOG.md 里对应版本的内容创建 GitHub Release 并上传 zip 和校验和。
 # Release 先以草稿创建，附件上传完才发布。
 # 也可以在 Actions 页面手动运行：填一个标签名，标签不存在时在所选分支的最新提交上创建并推送，存在时重新上传附件。
+# CI 在合并进 main、发现 CHANGELOG.md 最上面的版本还没有标签时，也会调用这里自动发布（见 ci.yml 的「发布新版本」）。
 # 仓库的 Secrets 里配了 Developer ID 证书和公证凭据时（见 docs/signing.md），用证书签名并提交苹果公证，
 # 用户下载后双击就能打开；没配时照旧 ad-hoc 签名。
 on:
@@ -15,19 +16,35 @@ on:
         description: "要发布的标签，例如 v0.1.0；不存在时在当前分支的最新提交上创建"
         required: true
         type: string
+  workflow_call:
+    inputs:
+      tag:
+        description: "要发布的标签，例如 v0.8.0"
+        required: true
+        type: string
+      ref:
+        description: "在哪个提交上发布（标签不存在时在它上面创建）"
+        required: true
+        type: string
 
 permissions:
   contents: write
 
 env:
-  TAG: ${{ github.event.inputs.tag || github.ref_name }}
+  TAG: ${{ inputs.tag || github.ref_name }}
 
 jobs:
   release:
     name: 打包并发布
     runs-on: macos-15
+    # 同一时间只发一个版本（手动推标签和合并后自动发布可能撞在一起）。
+    concurrency:
+      group: release
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
       - name: 确定要发布的提交
         run: |
           if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then

@@ -55,12 +55,18 @@ struct CoreProvider: Decodable, Equatable {
 /// 内核里的一条连接（/connections）。
 struct CoreConnection: Decodable, Equatable {
     struct Metadata: Decodable, Equatable {
+        var network: String?
+        var type: String?
         var sourceIP: String?
+        var sourcePort: String?
         var destinationIP: String?
         var destinationPort: String?
         var host: String?
         /// 从哪个入口进来的；共享入口是 CoreConfigBuilder.shareListener。
         var inboundName: String?
+        /// 发起连接的程序（本机的连接才有）。
+        var process: String?
+        var processPath: String?
 
         /// 显示用：域名，没有就目标 IP。
         var displayHost: String {
@@ -81,10 +87,34 @@ struct CoreConnection: Decodable, Equatable {
 
     var outbound: String { chains?.first ?? "" }
 
+    /// 最外层的策略组；直接走出口（DIRECT、上游代理）时没有。
+    var group: String? {
+        guard let chains, chains.count > 1, let last = chains.last, last != chains.first else { return nil }
+        return last
+    }
+
     /// 命中的规则，比如「Match」「GeoIP CN」「DomainSuffix cn」。
     var ruleText: String {
         [rule ?? "", rulePayload ?? ""].filter { !$0.isEmpty }.joined(separator: " ")
     }
+
+    var startDate: Date? { Engine.parseDate(start) }
+}
+
+/// /connections 的整体：连接列表和内核这次运行以来的总流量。
+struct CoreConnectionsSnapshot: Decodable, Equatable {
+    var connections: [CoreConnection]?
+    var downloadTotal: Int64?
+    var uploadTotal: Int64?
+}
+
+/// 内核里的一个规则集（/providers/rules）。
+struct CoreRuleProvider: Decodable, Equatable {
+    var name: String
+    var behavior: String?
+    var ruleCount: Int?
+    var updatedAt: String?
+    var vehicleType: String?
 }
 
 /// 正在经共享入口上网的一台设备（按来源 IP 归并的连接）。
@@ -124,28 +154,60 @@ struct ShareClient: Identifiable, Equatable {
     }
 }
 
-/// 经共享入口的一条连接的摘要，「最近的连接」列表用：哪台设备访问了什么、走了哪里、命中了哪条规则。
-struct ShareConnection: Identifiable, Equatable {
+/// 一条连接的摘要，「最近的连接」列表用：谁（哪个程序、哪台设备）访问了什么、走了哪里、命中了哪条规则、用了多少流量。
+struct ConnectionRecord: Identifiable, Equatable {
     var id: String
+    /// 来源 IP：本机是 127.0.0.1，共享的设备是它的局域网地址。
     var client: String
+    /// 发起连接的程序名，本机的连接才有。
+    var process: String
     var host: String
     var port: String
     var outbound: String
+    /// 最外层的策略组，没有经过策略组时为空。
+    var group: String
     var rule: String
     var start: String
+    var inbound: String
+    var upload: Int64
+    var download: Int64
+    var network: String
 
     init(_ connection: CoreConnection) {
         id = connection.id
         client = connection.metadata.sourceIP ?? ""
+        process = connection.metadata.process ?? ""
         host = connection.metadata.displayHost
         port = connection.metadata.destinationPort ?? ""
         outbound = connection.outbound
+        group = connection.group ?? ""
         rule = connection.ruleText
         start = connection.start ?? ""
+        inbound = connection.metadata.inboundName ?? ""
+        upload = connection.upload
+        download = connection.download
+        network = (connection.metadata.network ?? "").uppercased()
     }
 
     /// host:port。
     var target: String { port.isEmpty ? host : "\(host):\(port)" }
+
+    /// 是不是经共享入口来的（PS5 等设备）。
+    var isShare: Bool { inbound == CoreConfigBuilder.shareListener }
+
+    /// 显示用的来源：程序名；没有程序名时，本机回环来的写「本机」，其余（共享的设备）显示来源 IP。
+    var source: String {
+        if !process.isEmpty { return process }
+        if isShare { return client }
+        return ["", "127.0.0.1", "::1", "localhost"].contains(client) ? "本机" : client
+    }
+
+    /// 出口连同策略组：「流媒体 → 香港 01」；没经过组时只有出口。
+    var route: String {
+        group.isEmpty || group == outbound ? outbound : "\(group) → \(outbound)"
+    }
+
+    var startDate: Date? { Engine.parseDate(start) }
 }
 
 enum CoreAPIError: LocalizedError {
@@ -254,14 +316,40 @@ final class CoreAPI {
 
     /// 当前所有连接。
     func connections() async throws -> [CoreConnection] {
+        try await connectionsSnapshot().connections ?? []
+    }
+
+    /// 当前所有连接，连同内核这次运行以来的总流量。
+    func connectionsSnapshot() async throws -> CoreConnectionsSnapshot {
         let data = try await requestData("GET", "/connections")
-        struct Envelope: Decodable { var connections: [CoreConnection]? }
-        return try JSONDecoder().decode(Envelope.self, from: data).connections ?? []
+        return try JSONDecoder().decode(CoreConnectionsSnapshot.self, from: data)
+    }
+
+    /// 断开一条连接。
+    func closeConnection(_ id: String) async throws {
+        _ = try await requestData("DELETE", "/connections/\(encode(id))")
+    }
+
+    /// 断开全部连接。
+    func closeAllConnections() async throws {
+        _ = try await requestData("DELETE", "/connections")
     }
 
     /// 让内核重新下载一条订阅。
     func updateProvider(_ name: String) async throws {
         _ = try await requestData("PUT", "/providers/proxies/\(encode(name))", timeout: 60)
+    }
+
+    /// 内核加载的规则集。
+    func ruleProviders() async throws -> [String: CoreRuleProvider] {
+        let data = try await requestData("GET", "/providers/rules")
+        struct Envelope: Decodable { var providers: [String: CoreRuleProvider] }
+        return try JSONDecoder().decode(Envelope.self, from: data).providers
+    }
+
+    /// 让内核重读一个规则集的文件。
+    func updateRuleProvider(_ name: String) async throws {
+        _ = try await requestData("PUT", "/providers/rules/\(encode(name))", timeout: 60)
     }
 
     /// 重新读取配置文件（不重启内核）。

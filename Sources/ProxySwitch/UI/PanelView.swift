@@ -30,6 +30,9 @@ struct PanelView: View {
             UpdateBanner(updater: state.updater) { actions.openSettings(.about) }
             if state.config.engine.wantsCore {
                 nodeCard
+                if engine.isRunning, !engine.groupStates.isEmpty {
+                    groupsCard
+                }
             }
             if state.share.enabled {
                 shareCard
@@ -214,8 +217,79 @@ struct PanelView: View {
             parts.append(node.type.uppercased())
             if !node.delayText.isEmpty { parts.append(node.delayText) }
         }
+        if let exit = engine.exitInfo, engine.isRunning {
+            parts.append("出口 \(exit.short)")
+        }
         parts.append("\(engine.nodes.count) 个节点 · \(state.config.engine.mode == .global ? "全局" : "规则分流")")
         return parts.joined(separator: " · ")
+    }
+
+    // MARK: - 策略组
+
+    /// 每个自定义策略组一行：名字、现在用的成员；手动选择的组点开菜单换成员。
+    private var groupsCard: some View {
+        VStack(spacing: 0) {
+            ForEach(engine.groupStates) { group in
+                HStack(spacing: 8) {
+                    Image(systemName: group.kind.symbol)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 16)
+                    Text(group.name)
+                        .font(.system(size: 11, weight: .medium))
+                        .lineLimit(1)
+                    Spacer(minLength: 4)
+                    if group.kind == .select {
+                        Menu {
+                            ForEach(group.members, id: \.self) { member in
+                                Button {
+                                    Task { await engine.select(group: group.name, member: member) }
+                                } label: {
+                                    if member == group.now {
+                                        Label(memberTitle(member), systemImage: "checkmark")
+                                    } else {
+                                        Text(memberTitle(member))
+                                    }
+                                }
+                            }
+                        } label: {
+                            HStack(spacing: 3) {
+                                Text(memberTitle(group.now ?? "", withDelay: false))
+                                    .font(.system(size: 11))
+                                    .lineLimit(1)
+                                Image(systemName: "chevron.up.chevron.down")
+                                    .font(.system(size: 8, weight: .semibold))
+                            }
+                            .foregroundStyle(Color.accentColor)
+                        }
+                        .menuStyle(.borderlessButton)
+                        .menuIndicator(.hidden)
+                        .fixedSize()
+                        .help("给「\(group.name)」选节点")
+                    } else {
+                        Text(memberTitle(group.now ?? "", withDelay: true))
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .help("\(group.kind.title)：\(group.kind.detail)")
+                    }
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 5)
+            }
+        }
+        .padding(6)
+        .glassCard()
+    }
+
+    /// 成员的显示名：节点带延迟，DIRECT 写成直连。
+    private func memberTitle(_ member: String, withDelay: Bool = true) -> String {
+        if member.isEmpty { return "…" }
+        if member == "DIRECT" { return "直连" }
+        if withDelay, let node = engine.nodes.first(where: { $0.name == member }), !node.delayText.isEmpty {
+            return "\(member) · \(node.delayText)"
+        }
+        return member
     }
 
     private var filteredNodes: [Engine.Node] {

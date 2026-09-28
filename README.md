@@ -10,7 +10,9 @@ Windows 版在 [proxyswitch](https://github.com/whrss9527/proxyswitch)，两边�
 
 ## 功能
 
-- **内置节点代理**：填一个机场的订阅地址，节点就出现在面板里，可以选节点、自动选择延迟最低的、一键测速；支持全局代理和按规则分流，规则可以直接用 [johnshall 的小火箭规则](https://github.com/johnshall/Shadowrocket-ADBlock-Rules-Forever)（黑名单、白名单、去广告等预设）或任何小火箭 / Surge / Clash 格式的规则地址。不用再装 Clash 或小火箭。
+- **内置节点代理**：填一个机场的订阅地址，节点就出现在面板里，可以选节点、自动选择延迟最低的、一键测速；支持全局代理和按规则分流。
+- **策略组与分流规则**：可以建「流媒体」「Telegram」这样的策略组，按节点名正则筛成员，手动选择、自动选择、故障转移、负载均衡四种类型，面板里每个组单独选节点；分流规则是一列规则集，按顺序匹配，每条有自己的去向和开关，规则库里收了 blackmatrix7、MetaCubeX、ACL4SSR 的常用规则和 [johnshall 的小火箭规则](https://github.com/johnshall/Shadowrocket-ADBlock-Rules-Forever)，一键添加；也能填任何 `.list` / `.yaml` / `.mrs` 列表或小火箭、Surge 的 `.conf`。
+- **连接与流量**：「连接」页列出经内核的每一条连接：哪个程序（或哪台设备）访问了什么、命中了哪条规则、走了哪个策略组和节点、用了多少流量，右键就能让这个域名固定走某个去向或断开它；按节点累计流量，显示节点出口和本机直连的出口 IP 与归属。
 - **局域网共享**：打开后 PS5、Switch、手机等同一局域网里的设备把这台 Mac 当代理服务器（`Mac 的 IP:7892`），就能享受和本机一样的网络：本机走节点它们就走同样的节点和规则，本机用公司代理它们就转发给公司代理，本机没开代理就经这台 Mac 直连，切换配置时几秒内跟着变。默认只允许局域网网段里的设备，也可以只允许指定的 IP。
 - **网址诊断**：某个网站打不开时，填上网址，从这台 Mac 或 PS5 等设备的视角把链路走一遍——本机 / 共享状态、DNS、直连、经代理（从内核日志里抓命中的规则和走的节点）、节点延迟——给一句结论和修复按钮（开启节点代理、让这个域名走节点、自动选择节点）。`open "proxyswitch://diagnose?url=https://youtube.com"` 也能直接发起。
 - **菜单栏网速**：图标旁边两行小字显示实时上行、下行速度，可以统计系统整体流量或只算内置代理，网速放在图标左边或右边都行。
@@ -30,9 +32,12 @@ Windows 版在 [proxyswitch](https://github.com/whrss9527/proxyswitch)，两边�
 
 1. 设置 → 节点与订阅，粘上机场给的订阅地址点「添加」。内核会下载解析，配置列表里自动多一条「节点代理」。
 2. 面板里开关「节点代理」就是开关它：开启后系统代理指向 `127.0.0.1:7890`（HTTP 和 SOCKS 同一个端口）。节点卡片里可以选节点、自动选择、测速、切换全局 / 规则。
-3. 「自定义规则」可以让某个域名（含子域名）或 IP / 网段固定走节点、直连或拦截，排在预设规则前面，全局模式下也生效，改了立刻生效。规则分流的来源可以选内置的「国内直连」、johnshall 的几套小火箭规则，或者填自己的规则地址。小火箭 `.conf` 里的 `[Rule]` 段会转成内核规则：`DOMAIN-SUFFIX`、`DOMAIN-KEYWORD`、`IP-CIDR`、`GEOIP`、`RULE-SET`（下载后内联）、`FINAL` 都支持，`USER-AGENT`、`URL-REGEX` 这类内核不支持的会跳过；`Proxy` 类策略走面板里选中的节点。
-4. 内核是 [mihomo](https://github.com/MetaCubeX/mihomo)（Clash Meta，GPL-3.0），以独立程序的形式打包在 `ProxySwitch.app/Contents/MacOS/mihomo`，默认只监听本机端口（开了局域网共享才多一个给局域网设备的入口），配置在 `~/Library/Application Support/ProxySwitch/core/`。GeoIP 数据来自 [MetaCubeX/meta-rules-dat](https://github.com/MetaCubeX/meta-rules-dat)。
-5. 不支持 TUN 模式：只有走系统代理（或环境变量）的程序会经过它，和小火箭 Mac 版的默认行为一样。
+3. 「策略组」在节点页：建一个组，填名字、选类型（手动选择、自动选择、故障转移、负载均衡）、填节点名的正则筛选（比如 `港|HK`，不区分大小写），面板和右键菜单里每个组单独选节点。手动选择的组多了「节点」「自动选择」和直连三个候选，默认跟随「节点」，所以刚建好时行为不变。
+4. 「分流规则」页管理规则集：每条规则集有名字、地址、去向（走节点、直连、拦截或某个策略组）和开关，按列表顺序匹配，靠前的优先。「从规则库添加」里有国内直连（内置）、GeoSite 的国内域名 / 被墙网站 / 广告、blackmatrix7 的 Apple / Google / Telegram / Netflix / OpenAI 等分类列表、ACL4SSR 的去广告，以及 johnshall 的几套小火箭完整配置。纯规则列表（`.list`、`.txt`、`.yaml`、`.mrs`）由本程序下载到内核目录、交给内核的 rule-provider 加载，更新不用重启；小火箭 / Surge 的 `.conf` 会转换后并入：`DOMAIN-SUFFIX`、`DOMAIN-KEYWORD`、`IP-CIDR`、`GEOIP`、`RULE-SET`（下载后内联）、`FINAL` 都支持，`USER-AGENT`、`URL-REGEX` 这类内核不支持的会跳过；文件里的策略名和某个策略组同名就指到那个组，其余 `Proxy` 类策略走「节点」。「其余流量」决定没被任何规则命中的流量往哪走，默认跟随规则文件里的 FINAL。GitHub 上的规则国内直连不通时，会经内核或 jsDelivr 镜像下载；还没下载下来的规则集先跳过，不耽误内核启动，内核起来后在后台补下载、下好了自动生效，和订阅同一个间隔自动更新。地址是 `.yaml` 但内容是 Clash 的 `rules:` 配置、或者 `.list` 里其实是小火箭的 `[Rule]` 段时，下载后会认出来，改成转换并入。
+5. 「自定义规则」也在分流规则页：让某个域名（含子域名）或 IP / 网段固定走节点、直连、拦截或某个策略组，排在所有规则集前面，全局模式下也生效，改了立刻生效。「连接」页和「局域网共享」页的连接上右键就能加。
+6. 「连接」页：经内核的连接实时列出（每两秒刷新），本机的连接显示发起的程序名，PS5 等设备的显示它的 IP；「最近的连接」把短连接也记下来。按节点（以及直连、上游代理）累计流量，存在本机、内核重启后接着算，可以清零。「出口 IP」经节点查一次网站看到的地址和归属（切换节点后自动重查），也能查本机直连的公网地址。
+7. 内核是 [mihomo](https://github.com/MetaCubeX/mihomo)（Clash Meta，GPL-3.0），以独立程序的形式打包在 `ProxySwitch.app/Contents/MacOS/mihomo`，默认只监听本机端口（开了局域网共享才多一个给局域网设备的入口），配置在 `~/Library/Application Support/ProxySwitch/core/`，规则集文件在它的 `rules/` 里。GeoIP 数据来自 [MetaCubeX/meta-rules-dat](https://github.com/MetaCubeX/meta-rules-dat)。
+8. 不支持 TUN 模式：只有走系统代理（或环境变量）的程序会经过它。
 
 ## 局域网共享（PS5 / Switch）
 
@@ -78,16 +83,18 @@ VERSION=0.1.0 Scripts/build-app.sh   # 组装通用二进制的 dist/ProxySwitch
 
 | 目录 | 内容 |
 | --- | --- |
-| `Sources/ProxySwitch/App` | 入口、`AppState`（配置、状态、开关逻辑） |
-| `Sources/ProxySwitch/Models` | 配置、系统代理快照、networksetup 命令的生成 |
-| `Sources/ProxySwitch/System` | 系统代理、环境变量、git / npm、测速、快捷键、登录项、通知、URL 命令、更新、iCloud 文件、内核进程与 API、规则转换、局域网地址 |
-| `Sources/ProxySwitch/UI` | 菜单栏图标与面板、设置窗口各页、毛玻璃样式、快捷键录制 |
+| `Sources/ProxySwitch/App` | 入口、`AppState`（配置、状态、开关逻辑）、`Engine`（内核、节点、策略组、规则集、连接与流量） |
+| `Sources/ProxySwitch/Models` | 配置、系统代理快照、networksetup 命令的生成、策略组、规则集与规则库、流量统计 |
+| `Sources/ProxySwitch/System` | 系统代理、环境变量、git / npm、测速、快捷键、登录项、通知、URL 命令、更新、iCloud 文件、内核进程与 API、规则转换与下载、出口 IP、局域网地址 |
+| `Sources/ProxySwitch/UI` | 菜单栏图标与面板、设置窗口各页（节点、分流规则、连接……）、毛玻璃样式、快捷键录制 |
 | `Tests` | XCTest |
 | `Scripts/build-app.sh` | 组装 .app（下载 mihomo 合成通用二进制、GeoIP 数据库）、签名、打 zip |
 | `Scripts/import-certificate.sh`、`Scripts/notarize.sh` | 发布时导入 Developer ID 证书、提交苹果公证并钉上票据 |
 | `Resources` | Info.plist、图标 |
 
 推送代码时 GitHub Actions 会在 macOS 上编译、测试、打包并启动一次截图，然后用本地 HTTP 服务器假装发布一个 9.9.9 版本，走一遍下载、校验、替换、重新启动的完整更新流程，再用一张临时的自签名证书把签名流程走一遍；推送 `v*` 标签会自动打包并发布 Release，配了证书时顺便签名和公证。
+
+本仓库分支开的合并请求（草稿除外）测试全部通过后自动合并进 main。合并后，如果 `CHANGELOG.md` 最上面的版本还没有标签，就自动打上 `v版本号` 的标签、打包并发布 Release；所以要发版时，在 `CHANGELOG.md` 最上面加一节新版本就行。测试期间 main 有了新提交时不会自动合并，把 main 合进分支再推一次即可。
 
 本机调试更新流程时可以把环境变量 `PROXYSWITCH_UPDATE_URL` 指向一个返回 GitHub releases 格式 JSON 的地址；调试 iCloud 同步时可以用 `PROXYSWITCH_SYNC_DIR` 把同步文件夹指到任意目录（见 `.github/workflows/ci.yml` 里的做法）。
 

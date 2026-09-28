@@ -444,6 +444,14 @@ final class ParsingTests: XCTestCase {
         XCTAssertEqual(RuleConverter.convert(payload, defaultPolicy: "DIRECT").rules, ["DOMAIN-SUFFIX,example.com,DIRECT", "DOMAIN,sub.example.org,DIRECT", "IP-CIDR,10.0.0.0/8,DIRECT,no-resolve"])
         XCTAssertEqual(RuleConverter.policy("Reject"), "REJECT")
         XCTAssertEqual(RuleConverter.policy("自定义组"), "节点")
+        // 和自定义策略组同名的策略指到那个组；强制去向时全部改过去，FINAL 不动。
+        XCTAssertEqual(RuleConverter.policy("流媒体", groups: ["流媒体"]), "流媒体")
+        XCTAssertEqual(RuleConverter.policy("streaming", groups: ["Streaming"]), "Streaming")
+        let grouped = RuleConverter.convert("DOMAIN-SUFFIX,netflix.com,流媒体\nDOMAIN-SUFFIX,x.com,Proxy\nFINAL,DIRECT", groups: ["流媒体"])
+        XCTAssertEqual(grouped.rules, ["DOMAIN-SUFFIX,netflix.com,流媒体", "DOMAIN-SUFFIX,x.com,节点", "MATCH,DIRECT"])
+        let forced = RuleConverter.convert("DOMAIN-SUFFIX,netflix.com,流媒体\nDOMAIN,ad.example.com,REJECT\nIP-CIDR,1.1.1.0/24,DIRECT,no-resolve\nRULE-SET,https://x/a.list,DIRECT\n+.plain.com\nFINAL,DIRECT", force: "REJECT", groups: ["流媒体"])
+        XCTAssertEqual(forced.rules, ["DOMAIN-SUFFIX,netflix.com,REJECT", "DOMAIN,ad.example.com,REJECT", "IP-CIDR,1.1.1.0/24,REJECT,no-resolve", "DOMAIN-SUFFIX,plain.com,REJECT", "MATCH,DIRECT"])
+        XCTAssertEqual(forced.ruleSets, [RuleSetReference(url: "https://x/a.list", policy: "REJECT")])
     }
 
     func testCoreConfig() throws {
@@ -467,6 +475,41 @@ final class ParsingTests: XCTestCase {
         XCTAssertTrue(CoreConfigBuilder.yaml(global).hasSuffix("  - \"MATCH,节点\"\n"))
         XCTAssertEqual(CoreConfigBuilder.quote("a\"b\\c\n"), "\"a\\\"b\\\\c\\n\"")
         XCTAssertEqual(CoreConfigBuilder.makeSecret().count, 32)
+        XCTAssertTrue(yaml.contains("find-process-mode: always\n"))
+        XCTAssertFalse(yaml.contains("rule-providers:"))
+
+        // 自定义策略组：手动选择的带「节点」「自动选择」「DIRECT」，自动类的只有筛出来的节点；筛选默认不区分大小写。
+        var grouped = engine
+        grouped.groups = [
+            PolicyGroup(name: "流媒体", kind: .select, filter: "港|HK"),
+            PolicyGroup(name: "自动香港", kind: .urlTest, filter: "(?i)hk"),
+            PolicyGroup(name: "轮询", kind: .loadBalance),
+            PolicyGroup(name: "备用", kind: .fallback, filter: "US"),
+        ]
+        var groupedInput = input
+        groupedInput.engine = grouped
+        groupedInput.ruleProviders = [
+            RuleProviderSpec(name: "rs-abcd1234", path: "/tmp/core/rules/rs-abcd1234.txt", behavior: .classical, format: "text"),
+            RuleProviderSpec(name: "rs-ffff0000", path: "/tmp/core/rules/rs-ffff0000.mrs", behavior: .domain, format: "mrs"),
+        ]
+        groupedInput.rules = ["RULE-SET,rs-abcd1234,流媒体", "RULE-SET,rs-ffff0000,REJECT", "MATCH,节点"]
+        let groupedYAML = CoreConfigBuilder.yaml(groupedInput)
+        let use = "    use: [\(engine.subscriptions[0].providerName)]\n"
+        XCTAssertTrue(groupedYAML.contains("  - name: \"流媒体\"\n    type: select\n    proxies: [\"节点\", \"自动选择\", \"DIRECT\"]\n" + use + "    filter: \"(?i)港|HK\"\n"))
+        XCTAssertTrue(groupedYAML.contains("  - name: \"自动香港\"\n    type: url-test\n    url: \"https://cp.cloudflare.com/generate_204\"\n    interval: 600\n    tolerance: 80\n    lazy: true\n" + use + "    filter: \"(?i)hk\"\n"))
+        XCTAssertTrue(groupedYAML.contains("  - name: \"轮询\"\n    type: load-balance\n    url: \"https://cp.cloudflare.com/generate_204\"\n    interval: 600\n    strategy: round-robin\n    lazy: true\n" + use + "  - name: \"备用\"\n    type: fallback\n    url: \"https://cp.cloudflare.com/generate_204\"\n    interval: 600\n    lazy: true\n" + use + "    filter: \"(?i)US\"\n"))
+        XCTAssertTrue(groupedYAML.contains("rule-providers:\n  rs-abcd1234:\n    type: file\n    behavior: classical\n    format: text\n    path: \"/tmp/core/rules/rs-abcd1234.txt\"\n  rs-ffff0000:\n    type: file\n    behavior: domain\n    format: mrs\n    path: \"/tmp/core/rules/rs-ffff0000.mrs\"\n"))
+        XCTAssertTrue(groupedYAML.contains("  - \"RULE-SET,rs-abcd1234,流媒体\"\n  - \"RULE-SET,rs-ffff0000,REJECT\"\n  - \"MATCH,节点\"\n"))
+        // 没有加载订阅（只做共享）时策略组照样要有（规则里引用了它们）：手动选择的只有三个固定候选，自动类的只有直连，都不带 use 和筛选。
+        var shareOnly = groupedInput
+        shareOnly.engine.enabled = false
+        let shareOnlyYAML = CoreConfigBuilder.yaml(shareOnly)
+        XCTAssertTrue(shareOnlyYAML.contains("  - name: \"流媒体\"\n    type: select\n    proxies: [\"节点\", \"自动选择\", \"DIRECT\"]\n  - name: \"自动香港\"\n"))
+        XCTAssertTrue(shareOnlyYAML.contains("  - name: \"自动香港\"\n    type: url-test\n    url: \"https://cp.cloudflare.com/generate_204\"\n    interval: 600\n    tolerance: 80\n    lazy: true\n    proxies: [\"DIRECT\"]\n"))
+        XCTAssertTrue(shareOnlyYAML.contains("    strategy: round-robin\n    lazy: true\n    proxies: [\"DIRECT\"]\n"))
+        XCTAssertFalse(shareOnlyYAML.contains("use:"))
+        XCTAssertFalse(shareOnlyYAML.contains("filter:"))
+        XCTAssertTrue(shareOnlyYAML.contains("  - \"RULE-SET,rs-abcd1234,流媒体\"\n"))
     }
 
     func testEngineModels() throws {
@@ -487,12 +530,27 @@ final class ParsingTests: XCTestCase {
         XCTAssertTrue(engine.wantsCore)
         engine.enabled = false
         XCTAssertFalse(engine.wantsCore)
-        engine.ruleSource = .url(RulePresets.all[1].url)
+        engine.ruleSets = [RuleSet.chinaDirect(), RuleSet(name: "黑名单 + 去广告", url: RulePresets.all[1].url, policy: nil)]
+        engine.groups = [PolicyGroup(name: "流媒体", kind: .select, filter: "港")]
+        engine.finalPolicy = .group("流媒体")
         let data = try JSONEncoder().encode(engine)
         let decoded = try JSONDecoder().decode(EngineConfig.self, from: data)
         XCTAssertEqual(decoded, engine)
-        XCTAssertEqual(decoded.ruleSource.title, "黑名单 + 去广告")
+        XCTAssertEqual(decoded.ruleSets[1].kind, .inline)
+        XCTAssertEqual(decoded.groupNames, ["流媒体"])
         XCTAssertEqual(try JSONDecoder().decode(EngineConfig.self, from: Data("{}".utf8)).mixedPort, 7890)
+        // 旧配置里的单一规则来源迁移成规则集：内置的照旧；规则地址按文件自己的策略，FINAL 也跟着文件。
+        XCTAssertEqual(try JSONDecoder().decode(EngineConfig.self, from: Data("{}".utf8)).ruleSets, [RuleSet.chinaDirect()])
+        XCTAssertEqual(EngineConfig().ruleSets, [RuleSet.chinaDirect()])
+        let migratedURL = try JSONDecoder().decode(EngineConfig.self, from: Data(#"{"ruleSource":{"kind":"url","url":"\#(RulePresets.all[1].url)"}}"#.utf8))
+        XCTAssertEqual(migratedURL.ruleSets.count, 1)
+        XCTAssertEqual(migratedURL.ruleSets[0].name, "黑名单 + 去广告")
+        XCTAssertEqual(migratedURL.ruleSets[0].url, RulePresets.all[1].url)
+        XCTAssertNil(migratedURL.ruleSets[0].policy)
+        XCTAssertNil(migratedURL.finalPolicy)
+        XCTAssertEqual(try JSONDecoder().decode(EngineConfig.self, from: Data(#"{"ruleSource":{"kind":"chinaDirect"}}"#.utf8)).ruleSets, [RuleSet.chinaDirect()])
+        XCTAssertTrue(try JSONDecoder().decode(EngineConfig.self, from: Data(#"{"ruleSets":[]}"#.utf8)).ruleSets.isEmpty)
+        XCTAssertFalse(String(decoding: data, as: UTF8.self).contains("ruleSource"))
         XCTAssertEqual(try JSONDecoder().decode(RuleSource.self, from: Data(#"{"kind":"url","url":"https://a/b"}"#.utf8)), .url("https://a/b"))
         XCTAssertEqual(try JSONDecoder().decode(RuleSource.self, from: Data(#"{"kind":"nope"}"#.utf8)), .chinaDirect)
 
@@ -1180,13 +1238,21 @@ final class ShareTests: XCTestCase {
         XCTAssertEqual(clients[1].lastOutbound, "上游代理")
         // 内核在没有连接时给的是 null。
         XCTAssertTrue(ShareClient.group([], listener: "lan-share").isEmpty)
-        // 「最近的连接」里的一条：目标、出口、规则。
-        let recent = ShareConnection(connections[0])
+        // 「最近的连接」里的一条：目标、出口、规则、来源。
+        let recent = ConnectionRecord(connections[0])
         XCTAssertEqual(recent.target, "store.playstation.com:443")
         XCTAssertEqual(recent.outbound, "DIRECT")
         XCTAssertEqual(recent.rule, "Match")
         XCTAssertEqual(recent.client, "192.168.1.20")
-        XCTAssertEqual(ShareConnection(connections[1]).target, "5.6.7.8:443")
+        XCTAssertTrue(recent.isShare)
+        XCTAssertEqual(recent.source, "192.168.1.20")
+        XCTAssertEqual(recent.route, "DIRECT")
+        XCTAssertEqual(ConnectionRecord(connections[1]).target, "5.6.7.8:443")
+        let local = ConnectionRecord(connections[3])
+        XCTAssertFalse(local.isShare)
+        XCTAssertEqual(local.source, "本机")
+        XCTAssertEqual(local.route, "节点")
+        XCTAssertNil(connections[3].group)
     }
 
     func testShareURLCommands() {

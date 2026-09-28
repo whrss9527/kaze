@@ -192,6 +192,11 @@ final class StatusItemController: NSObject {
             let nodesItem = NSMenuItem(title: "节点", action: nil, keyEquivalent: "")
             nodesItem.submenu = nodesMenu()
             menu.addItem(nodesItem)
+            if !state.engine.groupStates.isEmpty {
+                let groupsItem = NSMenuItem(title: "策略组", action: nil, keyEquivalent: "")
+                groupsItem.submenu = groupsMenu()
+                menu.addItem(groupsItem)
+            }
         }
         menu.addItem(.separator())
         let shareItem = item("局域网共享（PS5 等设备）", action: #selector(menuToggleShare), key: "")
@@ -279,6 +284,39 @@ final class StatusItemController: NSObject {
             menu.addItem(menuItem)
         }
         return menu
+    }
+
+    /// 「策略组」子菜单：每个组一个子菜单，列出成员，手动选择的组可以点选。
+    private func groupsMenu() -> NSMenu {
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+        let engine = state.engine
+        for group in engine.groupStates {
+            let groupItem = NSMenuItem(title: "\(group.name)　\(group.now ?? "")", action: nil, keyEquivalent: "")
+            let submenu = NSMenu()
+            submenu.autoenablesItems = false
+            submenu.addItem(header("\(group.kind.title)：\(group.kind.detail)"))
+            for member in group.members {
+                var title = member == "DIRECT" ? "直连" : member
+                if let node = engine.nodes.first(where: { $0.name == member }), !node.delayText.isEmpty {
+                    title += "　\(node.delayText)"
+                }
+                let menuItem = NSMenuItem(title: title, action: #selector(menuSelectGroupMember(_:)), keyEquivalent: "")
+                menuItem.target = self
+                menuItem.representedObject = ["group": group.name, "member": member]
+                menuItem.state = group.now == member ? .on : .off
+                menuItem.isEnabled = group.kind == .select
+                submenu.addItem(menuItem)
+            }
+            groupItem.submenu = submenu
+            menu.addItem(groupItem)
+        }
+        return menu
+    }
+
+    @objc private func menuSelectGroupMember(_ sender: NSMenuItem) {
+        guard let info = sender.representedObject as? [String: String], let group = info["group"], let member = info["member"] else { return }
+        Task { await state.engine.select(group: group, member: member) }
     }
 
     @objc private func menuSetMode(_ sender: NSMenuItem) {

@@ -1,33 +1,33 @@
 import AppKit
 import SwiftUI
 
-/// 节点与订阅页：订阅地址、代理模式、规则来源、端口、内核状态和日志。
+/// 节点与订阅页：订阅地址、节点列表、策略组、代理模式、端口、内核状态和日志。
 struct NodesPage: View {
     @ObservedObject var state: AppState
     @ObservedObject var engine: Engine
+    @ObservedObject var navigation: SettingsNavigation
     @State private var newName = ""
     @State private var newURL = ""
     @State private var addProblem: String?
-    @State private var customMode = false
-    @State private var customRuleURL = ""
     @State private var mixedPortText = ""
     @State private var apiPortText = ""
     @State private var showLog = false
     @State private var logText = ""
     @State private var nodeFilter = ""
-    @State private var newRulePattern = ""
-    @State private var newRulePolicy: RulePolicy = .proxy
-    @State private var ruleProblem: String?
+    @State private var newGroupName = ""
+    @State private var newGroupKind: PolicyGroupKind = .select
+    @State private var newGroupFilter = ""
+    @State private var groupProblem: String?
 
     var body: some View {
         VStack(spacing: 0) {
-            PageHeader(title: "节点与订阅", subtitle: "填一个机场的订阅地址，节点就会出现在面板里；支持全局代理和按规则分流")
+            PageHeader(title: "节点与订阅", subtitle: "填一个机场的订阅地址，节点就会出现在面板里；策略组给某类流量单独选节点")
             Form {
                 coreSection
                 subscriptionsSection
                 nodesSection
+                groupsSection
                 modeSection
-                customRulesSection
                 portsSection
                 if showLog {
                     logSection
@@ -39,7 +39,6 @@ struct NodesPage: View {
         .onAppear {
             mixedPortText = String(state.config.engine.mixedPort)
             apiPortText = String(state.config.engine.apiPort)
-            customRuleURL = state.config.engine.ruleSource.url ?? ""
         }
     }
 
@@ -228,7 +227,85 @@ struct NodesPage: View {
         .disabled(!engine.isRunning)
     }
 
-    // MARK: - 模式与规则
+    // MARK: - 策略组
+
+    private var nodeNames: [String] { engine.nodes.map(\.name) }
+
+    private var groupsSection: some View {
+        Section("策略组") {
+            if state.config.engine.groups.isEmpty {
+                Text("给某类流量单独选节点：比如建一个「流媒体」组，分流规则里把 Netflix、YouTube 指到它，面板里就能单独给它选节点。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            ForEach(state.config.engine.groups) { group in
+                PolicyGroupRow(
+                    group: group,
+                    nodeNames: nodeNames,
+                    current: engine.groupStates.first { $0.name == group.name }?.now,
+                    onSave: { engine.saveGroup($0) },
+                    onDelete: { engine.removeGroup(group.id) },
+                    onMove: { engine.moveGroup(group.id, up: $0) }
+                )
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 8) {
+                    TextField("", text: $newGroupName, prompt: Text("名字，比如 流媒体"))
+                        .labelsHidden()
+                        .frame(width: 140)
+                    Picker("", selection: $newGroupKind) {
+                        ForEach(PolicyGroupKind.allCases) { kind in
+                            Text(kind.title).tag(kind)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(width: 110)
+                    TextField("", text: $newGroupFilter, prompt: Text("节点名筛选（正则），比如 港|HK；空为全部节点"))
+                        .labelsHidden()
+                        .onSubmit { addGroup() }
+                    Button("添加") { addGroup() }
+                        .disabled(newGroupName.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+                Text(newGroupPreview)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if let groupProblem {
+                    Text(groupProblem)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+            }
+            Text("手动选择的组多了「节点」「自动选择」和直连三个候选，默认跟随「节点」，所以刚建好时行为不变；自动选择、故障转移、负载均衡只在筛出来的节点里挑，一个都筛不到时内核退回直连。组名不能和节点、内核保留的名字重复。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var newGroupPreview: String {
+        let draft = PolicyGroup(name: newGroupName, kind: newGroupKind, filter: newGroupFilter)
+        if PolicyGroup.validateFilter(draft.filter) != nil { return "筛选不是正确的正则表达式" }
+        let matched = draft.matches(nodeNames)
+        var text = newGroupKind.detail + "。"
+        if nodeNames.isEmpty {
+            text += "内核启动后能预览筛选到的节点。"
+        } else if draft.filter.isEmpty {
+            text += "没有筛选：全部 \(nodeNames.count) 个节点。"
+        } else {
+            text += "筛选到 \(matched.count) 个节点" + (matched.isEmpty ? "。" : "：\(matched.prefix(4).joined(separator: "、"))\(matched.count > 4 ? "…" : "")")
+        }
+        return text
+    }
+
+    private func addGroup() {
+        groupProblem = engine.addGroup(name: newGroupName, kind: newGroupKind, filter: newGroupFilter)
+        if groupProblem == nil {
+            newGroupName = ""
+            newGroupFilter = ""
+            newGroupKind = .select
+        }
+    }
+
+    // MARK: - 模式
 
     private var modeSection: some View {
         Section("模式") {
@@ -238,156 +315,14 @@ struct NodesPage: View {
                 }
             }
             .pickerStyle(.segmented)
-            Text(state.config.engine.mode == .global ? "全局代理：除局域网外的全部流量都走选中的节点。" : "规则分流：按规则决定哪些走节点、哪些直连、哪些拦截，其余按规则文件里的默认策略。")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            if state.config.engine.mode == .rule {
-                Picker("规则来源", selection: ruleSelection) {
-                    Text("内置：国内直连，其余走节点").tag("builtin")
-                    ForEach(RulePresets.all) { preset in
-                        Text("\(preset.name) — \(preset.detail)").tag(preset.url)
-                    }
-                    Text("自定义地址…").tag("custom")
-                }
-                if isCustom {
-                    HStack {
-                        TextField("", text: $customRuleURL, prompt: Text("小火箭 / Surge / Clash 格式的规则地址"))
-                            .labelsHidden()
-                            .onSubmit { applyCustomRule() }
-                        Button("应用") { applyCustomRule() }
-                            .disabled(customRuleURL.trimmingCharacters(in: .whitespaces).isEmpty)
-                    }
-                }
-                HStack {
-                    Text(engine.rulesInfo)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    if state.config.engine.ruleSource.url != nil {
-                        Button("重新下载规则") {
-                            Task { await engine.updateRules() }
-                        }
-                        .controlSize(.small)
-                    }
-                }
-                Text("预设来自 johnshall/Shadowrocket-ADBlock-Rules-Forever。规则里「Proxy」类的策略都走面板里选中的节点，规则每 7 天自动重新下载。")
+            HStack {
+                Text(state.config.engine.mode == .global ? "全局代理：除局域网和自定义规则外的全部流量都走选中的节点。" : "规则分流：按规则集和自定义规则决定哪些走节点、哪些直连、哪些拦截。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-            }
-        }
-    }
-
-    private var isCustom: Bool {
-        if customMode { return true }
-        if let url = state.config.engine.ruleSource.url, RulePresets.preset(for: url) == nil { return true }
-        return false
-    }
-
-    private var ruleSelection: Binding<String> {
-        Binding(
-            get: {
-                if customMode { return "custom" }
-                switch state.config.engine.ruleSource {
-                case .chinaDirect: return "builtin"
-                case .url(let url): return RulePresets.preset(for: url) != nil ? url : "custom"
-                }
-            },
-            set: { value in
-                switch value {
-                case "builtin":
-                    customMode = false
-                    engine.setRuleSource(.chinaDirect)
-                case "custom":
-                    customMode = true
-                default:
-                    customMode = false
-                    engine.setRuleSource(.url(value))
-                }
-            }
-        )
-    }
-
-    private func applyCustomRule() {
-        let url = customRuleURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !url.isEmpty else { return }
-        customMode = false
-        engine.setRuleSource(.url(url))
-    }
-
-    // MARK: - 自定义规则
-
-    private var customRulesSection: some View {
-        Section("自定义规则") {
-            if state.config.engine.customRules.isEmpty {
-                Text("让某个网站固定走节点、直连或者拦截。排在预设规则前面，全局模式下也生效。")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            ForEach(state.config.engine.customRules) { rule in
-                HStack(spacing: 10) {
-                    Toggle("", isOn: Binding(get: { rule.enabled }, set: { value in
-                        var updated = rule
-                        updated.enabled = value
-                        engine.updateCustomRule(updated)
-                    }))
-                    .labelsHidden()
-                    .toggleStyle(.switch)
+                Spacer()
+                Button("管理分流规则") { navigation.page = .rules }
                     .controlSize(.small)
-                    Text(rule.pattern)
-                        .font(.system(size: 12, design: .monospaced))
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                    Spacer()
-                    Picker("", selection: Binding(get: { rule.policy }, set: { value in
-                        var updated = rule
-                        updated.policy = value
-                        engine.updateCustomRule(updated)
-                    })) {
-                        ForEach(RulePolicy.allCases) { policy in
-                            Text(policy.title).tag(policy)
-                        }
-                    }
-                    .labelsHidden()
-                    .frame(width: 96)
-                    Button(role: .destructive) {
-                        engine.removeCustomRule(rule.id)
-                    } label: {
-                        Image(systemName: "trash")
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.secondary)
-                    .help("删除这条规则")
-                }
             }
-            HStack(spacing: 10) {
-                TextField("", text: $newRulePattern, prompt: Text("域名（含子域名）或 IP / 网段，比如 youtube.com、8.8.8.8、10.0.0.0/8"))
-                    .labelsHidden()
-                    .onSubmit { addRule() }
-                Picker("", selection: $newRulePolicy) {
-                    ForEach(RulePolicy.allCases) { policy in
-                        Text(policy.title).tag(policy)
-                    }
-                }
-                .labelsHidden()
-                .frame(width: 96)
-                Button("添加") { addRule() }
-                    .disabled(newRulePattern.trimmingCharacters(in: .whitespaces).isEmpty)
-            }
-            if let ruleProblem {
-                Text(ruleProblem)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-            }
-            Text("规则立刻生效，不用重启内核。「走节点」用面板里选中的节点。共享给 PS5 等设备的流量同样遵守这些规则；在「局域网共享」页的「最近的连接」上右键也能直接加。")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-    }
-
-    private func addRule() {
-        ruleProblem = engine.addCustomRule(pattern: newRulePattern, policy: newRulePolicy)
-        if ruleProblem == nil {
-            newRulePattern = ""
         }
     }
 
@@ -523,4 +458,108 @@ struct SubscriptionRow: View {
         formatter.timeStyle = .none
         return formatter
     }()
+}
+
+/// 策略组列表里的一行：名字、类型、筛选可以直接改，改了出现「保存」。
+struct PolicyGroupRow: View {
+    var group: PolicyGroup
+    var nodeNames: [String]
+    /// 内核里现在用的成员。
+    var current: String?
+    var onSave: (PolicyGroup) -> String?
+    var onDelete: () -> Void
+    var onMove: (Bool) -> Void
+    @State private var name: String
+    @State private var kind: PolicyGroupKind
+    @State private var filter: String
+    @State private var problem: String?
+
+    init(group: PolicyGroup, nodeNames: [String], current: String?, onSave: @escaping (PolicyGroup) -> String?, onDelete: @escaping () -> Void, onMove: @escaping (Bool) -> Void) {
+        self.group = group
+        self.nodeNames = nodeNames
+        self.current = current
+        self.onSave = onSave
+        self.onDelete = onDelete
+        self.onMove = onMove
+        _name = State(initialValue: group.name)
+        _kind = State(initialValue: group.kind)
+        _filter = State(initialValue: group.filter)
+    }
+
+    private var changed: Bool {
+        name.trimmingCharacters(in: .whitespacesAndNewlines) != group.name || kind != group.kind || filter.trimmingCharacters(in: .whitespaces) != group.filter
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Image(systemName: kind.symbol)
+                    .foregroundStyle(Color.accentColor)
+                    .frame(width: 16)
+                TextField("", text: $name, prompt: Text("名字"))
+                    .labelsHidden()
+                    .frame(width: 140)
+                    .onSubmit { save() }
+                Picker("", selection: $kind) {
+                    ForEach(PolicyGroupKind.allCases) { kind in
+                        Text(kind.title).tag(kind)
+                    }
+                }
+                .labelsHidden()
+                .frame(width: 110)
+                TextField("", text: $filter, prompt: Text("节点名筛选（正则），空为全部"))
+                    .labelsHidden()
+                    .onSubmit { save() }
+                if changed {
+                    Button("保存") { save() }
+                        .controlSize(.small)
+                }
+                Menu {
+                    Button("上移") { onMove(true) }
+                    Button("下移") { onMove(false) }
+                    Divider()
+                    Button("删除策略组", role: .destructive) { onDelete() }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .help("上移、下移、删除")
+            }
+            Text(detail)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            if let problem {
+                Text(problem)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    private var detail: String {
+        let draft = PolicyGroup(name: name, kind: kind, filter: filter)
+        var parts: [String] = []
+        if PolicyGroup.validateFilter(draft.filter) != nil {
+            parts.append("筛选不是正确的正则表达式")
+        } else if nodeNames.isEmpty {
+            parts.append("内核启动后能看到筛选到的节点")
+        } else {
+            let matched = draft.matches(nodeNames)
+            parts.append(draft.filter.isEmpty ? "全部 \(nodeNames.count) 个节点" : "筛选到 \(matched.count) 个节点")
+        }
+        if let current, !current.isEmpty {
+            parts.append("现在用 \(current)")
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    private func save() {
+        guard changed else { return }
+        var updated = PolicyGroup(name: name, kind: kind, filter: filter)
+        updated.id = group.id
+        problem = onSave(updated)
+    }
 }

@@ -64,7 +64,7 @@ enum EngineMode: String, Codable, CaseIterable, Identifiable {
     }
 }
 
-/// 分流规则的来源。
+/// 0.6 及以前的分流规则来源：只有一个。现在只用来读旧配置，迁移成规则集列表。
 enum RuleSource: Equatable, Codable {
     /// 内置：局域网和国内 IP 直连，其余走节点。
     case chinaDirect
@@ -100,66 +100,88 @@ enum RuleSource: Equatable, Codable {
         if case .url(let url) = self { return url }
         return nil
     }
-
-    var title: String {
-        switch self {
-        case .chinaDirect: return "内置：国内直连，其余走节点"
-        case .url(let url): return RulePresets.preset(for: url)?.name ?? url
-        }
-    }
 }
 
-/// 常用的小火箭分流规则（johnshall/Shadowrocket-ADBlock-Rules-Forever）。
-enum RulePresets {
-    struct Preset: Identifiable, Equatable {
-        let name: String
-        let file: String
-        let detail: String
-
-        var id: String { file }
-        var url: String { RulePresets.base + file }
-    }
-
-    static let base = "https://raw.githubusercontent.com/johnshall/Shadowrocket-ADBlock-Rules-Forever/master/"
-
-    static let all: [Preset] = [
-        Preset(name: "黑名单", file: "sr_top500_banlist.conf", detail: "被墙的常用网站走节点，其余直连"),
-        Preset(name: "黑名单 + 去广告", file: "sr_top500_banlist_ad.conf", detail: "黑名单，外加拦截广告和跟踪"),
-        Preset(name: "白名单", file: "sr_top500_whitelist.conf", detail: "国内常用网站和国内 IP 直连，其余走节点"),
-        Preset(name: "白名单 + 去广告", file: "sr_top500_whitelist_ad.conf", detail: "白名单，外加拦截广告和跟踪"),
-        Preset(name: "国内 IP 直连", file: "sr_cnip.conf", detail: "只按 IP 归属分流：国内直连，国外走节点"),
-        Preset(name: "国内 IP 直连 + 去广告", file: "sr_cnip_ad.conf", detail: "按 IP 归属分流，外加拦截广告"),
-        Preset(name: "全部直连 + 去广告", file: "sr_direct_banad.conf", detail: "不走节点，只拦广告"),
-        Preset(name: "全部走节点 + 去广告", file: "sr_proxy_banad.conf", detail: "全部走节点，外加拦截广告"),
-    ]
-
-    static func preset(for url: String) -> Preset? {
-        all.first { $0.url == url }
-    }
-}
-
-/// 自定义规则的去向。
-enum RulePolicy: String, Codable, CaseIterable, Identifiable {
+/// 规则的去向：「节点」组、直连、拦截，或者某个自定义策略组。
+/// 存成一个字符串："proxy"、"direct"、"reject"、"group:名字"，旧配置里只有前三个。
+enum RuleTarget: Codable, Equatable, Hashable {
     case proxy
     case direct
     case reject
+    case group(String)
 
-    var id: String { rawValue }
+    static let fixed: [RuleTarget] = [.proxy, .direct, .reject]
+
+    /// 选择器里的候选：固定的三个加上现有的策略组。
+    static func options(groups: [PolicyGroup]) -> [RuleTarget] {
+        fixed + groups.map { .group($0.name) }
+    }
+
+    init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = RuleTarget(rawValue: raw)
+    }
+
+    init(rawValue: String) {
+        switch rawValue {
+        case "proxy": self = .proxy
+        case "direct": self = .direct
+        case "reject": self = .reject
+        default:
+            if rawValue.hasPrefix("group:"), rawValue.count > 6 {
+                self = .group(String(rawValue.dropFirst(6)))
+            } else {
+                self = .proxy
+            }
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
+    }
+
+    var rawValue: String {
+        switch self {
+        case .proxy: return "proxy"
+        case .direct: return "direct"
+        case .reject: return "reject"
+        case .group(let name): return "group:" + name
+        }
+    }
 
     var title: String {
         switch self {
         case .proxy: return "走节点"
         case .direct: return "直连"
         case .reject: return "拦截"
+        case .group(let name): return name
         }
     }
 
-    /// 内核里的策略名。
-    var target: String {
+    /// 「让 xx …」句式里用的：走节点、直连、拦截、走「组名」。
+    var actionTitle: String {
+        if case .group(let name) = self { return "走「\(name)」" }
+        return title
+    }
+
+    /// 内核里的策略名。指向的策略组已经不存在时退回「节点」，免得内核因为找不到策略拒绝启动。
+    func resolved(groups: [String]) -> String {
         switch self {
         case .proxy: return RuleConverter.proxyGroup
         case .direct: return "DIRECT"
         case .reject: return "REJECT"
+        case .group(let name): return groups.contains(name) ? name : RuleConverter.proxyGroup
+        }
+    }
+
+    /// 内核策略名对应的显示文字。
+    static func title(forCorePolicy policy: String) -> String {
+        switch policy {
+        case "DIRECT": return "直连"
+        case "REJECT": return "拦截"
+        case RuleConverter.proxyGroup: return "走节点"
+        default: return "走「\(policy)」"
         }
     }
 }
@@ -168,10 +190,10 @@ enum RulePolicy: String, Codable, CaseIterable, Identifiable {
 struct CustomRule: Codable, Identifiable, Equatable, Hashable {
     var id: UUID = UUID()
     var pattern: String = ""
-    var policy: RulePolicy = .proxy
+    var policy: RuleTarget = .proxy
     var enabled: Bool = true
 
-    init(pattern: String, policy: RulePolicy) {
+    init(pattern: String, policy: RuleTarget) {
         self.pattern = CustomRule.normalize(pattern)
         self.policy = policy
     }
@@ -184,7 +206,7 @@ struct CustomRule: Codable, Identifiable, Equatable, Hashable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
         pattern = try container.decodeIfPresent(String.self, forKey: .pattern) ?? ""
-        policy = try container.decodeIfPresent(RulePolicy.self, forKey: .policy) ?? .proxy
+        policy = try container.decodeIfPresent(RuleTarget.self, forKey: .policy) ?? .proxy
         enabled = try container.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
     }
 
@@ -217,17 +239,20 @@ struct CustomRule: Codable, Identifiable, Equatable, Hashable {
         return "认不出「\(value)」：填域名（比如 youtube.com）或 IP / 网段（比如 8.8.8.8、10.0.0.0/8）"
     }
 
-    /// 内核规则行；认不出来的返回 nil。
-    var line: String? {
+    /// 内核规则行；认不出来的返回 nil。groups 是现有的策略组名，去向指向已删除的组时退回「节点」。
+    func line(groups: [String]) -> String? {
         let value = CustomRule.normalize(pattern)
+        let target = policy.resolved(groups: groups)
         if let prefix = IPPrefix.normalize(value) {
-            return "\(prefix.contains(":") ? "IP-CIDR6" : "IP-CIDR"),\(prefix),\(policy.target),no-resolve"
+            return "\(prefix.contains(":") ? "IP-CIDR6" : "IP-CIDR"),\(prefix),\(target),no-resolve"
         }
         if RuleConverter.looksLikeDomain(value) {
-            return "DOMAIN-SUFFIX,\(value),\(policy.target)"
+            return "DOMAIN-SUFFIX,\(value),\(target)"
         }
         return nil
     }
+
+    var line: String? { line(groups: []) }
 }
 
 /// 内置代理（内核）的设置。
@@ -235,20 +260,25 @@ struct EngineConfig: Codable, Equatable {
     var enabled: Bool = true
     var subscriptions: [Subscription] = []
     var mode: EngineMode = .rule
-    var ruleSource: RuleSource = .chinaDirect
     var mixedPort: Int = 7890
     var apiPort: Int = 9097
     /// 「节点」组里选中的节点；nil 表示自动选择。
     var selectedNode: String?
-    /// 订阅自动更新的间隔（小时）。
+    /// 订阅和规则自动更新的间隔（小时）。
     var updateIntervalHours: Int = 24
-    /// 自定义规则，排在预设规则前面。
+    /// 自定义规则，排在规则集前面。
     var customRules: [CustomRule] = []
+    /// 自定义策略组：在「节点」和「自动选择」之外，给某类流量单独选节点。
+    var groups: [PolicyGroup] = []
+    /// 分流规则集，按顺序匹配，靠前的优先。
+    var ruleSets: [RuleSet] = [RuleSet.chinaDirect()]
+    /// 没被任何规则命中的流量往哪走；nil 表示跟随规则文件里的 FINAL（没有就走节点）。
+    var finalPolicy: RuleTarget?
 
     init() {}
 
     private enum CodingKeys: String, CodingKey {
-        case enabled, subscriptions, mode, ruleSource, mixedPort, apiPort, selectedNode, updateIntervalHours, customRules
+        case enabled, subscriptions, mode, ruleSource, mixedPort, apiPort, selectedNode, updateIntervalHours, customRules, groups, ruleSets, finalPolicy
     }
 
     init(from decoder: Decoder) throws {
@@ -256,12 +286,36 @@ struct EngineConfig: Codable, Equatable {
         enabled = try container.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
         subscriptions = try container.decodeIfPresent([Subscription].self, forKey: .subscriptions) ?? []
         mode = try container.decodeIfPresent(EngineMode.self, forKey: .mode) ?? .rule
-        ruleSource = try container.decodeIfPresent(RuleSource.self, forKey: .ruleSource) ?? .chinaDirect
         mixedPort = try container.decodeIfPresent(Int.self, forKey: .mixedPort) ?? 7890
         apiPort = try container.decodeIfPresent(Int.self, forKey: .apiPort) ?? 9097
         selectedNode = try container.decodeIfPresent(String.self, forKey: .selectedNode)
         updateIntervalHours = try container.decodeIfPresent(Int.self, forKey: .updateIntervalHours) ?? 24
         customRules = try container.decodeIfPresent([CustomRule].self, forKey: .customRules) ?? []
+        groups = try container.decodeIfPresent([PolicyGroup].self, forKey: .groups) ?? []
+        if let sets = try container.decodeIfPresent([RuleSet].self, forKey: .ruleSets) {
+            ruleSets = sets
+        } else if let source = try container.decodeIfPresent(RuleSource.self, forKey: .ruleSource) {
+            // 旧配置：单一的规则来源变成一条规则集，行为和以前一样。
+            ruleSets = RuleSet.migrated(from: source)
+        } else {
+            ruleSets = [RuleSet.chinaDirect()]
+        }
+        finalPolicy = try container.decodeIfPresent(RuleTarget.self, forKey: .finalPolicy)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(enabled, forKey: .enabled)
+        try container.encode(subscriptions, forKey: .subscriptions)
+        try container.encode(mode, forKey: .mode)
+        try container.encode(mixedPort, forKey: .mixedPort)
+        try container.encode(apiPort, forKey: .apiPort)
+        try container.encodeIfPresent(selectedNode, forKey: .selectedNode)
+        try container.encode(updateIntervalHours, forKey: .updateIntervalHours)
+        try container.encode(customRules, forKey: .customRules)
+        try container.encode(groups, forKey: .groups)
+        try container.encode(ruleSets, forKey: .ruleSets)
+        try container.encodeIfPresent(finalPolicy, forKey: .finalPolicy)
     }
 
     var activeSubscriptions: [Subscription] { subscriptions.filter { $0.enabled && !$0.url.isEmpty } }
@@ -269,6 +323,26 @@ struct EngineConfig: Codable, Equatable {
     /// 有订阅且没关掉时内核才需要运行。
     var wantsCore: Bool { enabled && !activeSubscriptions.isEmpty }
 
+    /// 自定义策略组的名字，按配置里的顺序。
+    var groupNames: [String] { groups.map(\.name) }
+
     /// 启用的自定义规则对应的内核规则行。
-    var customRuleLines: [String] { customRules.filter(\.enabled).compactMap(\.line) }
+    var customRuleLines: [String] { customRules.filter(\.enabled).compactMap { $0.line(groups: groupNames) } }
+
+    /// 启用的规则集。
+    var activeRuleSets: [RuleSet] { ruleSets.filter(\.enabled) }
+
+    /// 策略组被删掉或改名后，把指向它的规则改到新的去向。
+    mutating func retarget(from name: String, to target: RuleTarget) {
+        let old = RuleTarget.group(name)
+        for index in customRules.indices where customRules[index].policy == old {
+            customRules[index].policy = target
+        }
+        for index in ruleSets.indices where ruleSets[index].policy == old {
+            ruleSets[index].policy = target
+        }
+        if finalPolicy == old {
+            finalPolicy = target
+        }
+    }
 }

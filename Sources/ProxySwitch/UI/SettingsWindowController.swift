@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 enum SettingsPage: String, CaseIterable, Identifiable {
     case profiles
@@ -8,6 +9,8 @@ enum SettingsPage: String, CaseIterable, Identifiable {
     case share
     case connections
     case diagnose
+    case automation
+    case advanced
     case general
     case hotkey
     case sync
@@ -24,6 +27,8 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         case .share: return "局域网共享"
         case .connections: return "连接"
         case .diagnose: return "网址诊断"
+        case .automation: return "自动化"
+        case .advanced: return "高级"
         case .general: return "通用"
         case .hotkey: return "快捷键"
         case .sync: return "iCloud 同步"
@@ -40,6 +45,8 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         case .share: return "wifi.router"
         case .connections: return "list.bullet.rectangle"
         case .diagnose: return "stethoscope"
+        case .automation: return "wand.and.stars"
+        case .advanced: return "slider.horizontal.3"
         case .general: return "gearshape"
         case .hotkey: return "keyboard"
         case .sync: return "icloud"
@@ -55,6 +62,8 @@ final class SettingsNavigation: ObservableObject {
     @Published var selectedProfileID: UUID?
     /// 从别处发起的诊断（proxyswitch://diagnose 等），诊断页拿走后清空。
     @Published var diagnoseRequest: DiagnoseRequest?
+    /// 要导入的配置（proxyswitch://import、拖进窗口的文件），高级页拿走后打开导入预览。
+    @Published var importRequest: String?
 }
 
 /// 设置窗口：透明标题栏、全尺寸内容，内容是 SwiftUI。
@@ -132,6 +141,18 @@ struct SettingsRootView: View {
                 .background(VisualEffectView(material: .underWindowBackground).ignoresSafeArea())
         }
         .frame(minWidth: 760, minHeight: 520)
+        // 把配置文件拖进窗口就导入（先预览）。
+        .onDrop(of: [UTType.fileURL], isTargeted: nil) { providers in
+            guard let provider = providers.first else { return false }
+            _ = provider.loadObject(ofClass: URL.self) { url, _ in
+                guard let url else { return }
+                Task { @MainActor in
+                    navigation.importRequest = url.absoluteString
+                    navigation.page = .advanced
+                }
+            }
+            return true
+        }
     }
 
     private var pageSelection: Binding<SettingsPage?> {
@@ -147,6 +168,8 @@ struct SettingsRootView: View {
         case .share: SharePage(state: state, engine: state.engine, sleepGuard: state.sleepGuard)
         case .connections: ConnectionsPage(state: state, engine: state.engine)
         case .diagnose: DiagnosePage(state: state, engine: state.engine, navigation: navigation)
+        case .automation: AutomationPage(state: state, control: state.control, network: state.network)
+        case .advanced: AdvancedPage(state: state, engine: state.engine, navigation: navigation)
         case .general: GeneralPage(state: state)
         case .hotkey: HotkeyPage(state: state)
         case .sync: SyncPage(state: state, sync: state.sync)
@@ -277,7 +300,7 @@ struct HotkeyPage: View {
                     }
                 }
                 Section("命令行与快捷指令") {
-                    Text("终端里可以用 open 命令控制：")
+                    Text("更多的命令、给 AI 助手用的接口和按网络自动切换在「自动化」页。终端里也可以用 open 命令控制：")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     ForEach(["open proxyswitch://toggle", "open proxyswitch://on", "open proxyswitch://off", "open \"proxyswitch://use?name=配置名\"", "open proxyswitch://share/on", "open proxyswitch://update"], id: \.self) { command in

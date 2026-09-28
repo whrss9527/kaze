@@ -96,7 +96,9 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     }
 }
 
-/// proxyswitch:// 命令：on、off、toggle、use?name=配置名、settings（可带 ?page=about 等）、panel、update、share（可带 /on、/off，不带就是切换）。
+/// proxyswitch:// 命令：on、off、toggle、use?name=配置名、settings（可带 ?page=about 等）、panel、update、share（可带 /on、/off，不带就是切换）、
+/// node?name=节点名、mode?value=rule|global、group?name=组名&member=成员、import?url=配置地址（先预览再确认）、
+/// run?tool=工具名&参数=值（只能用查看和日常操作类的工具，改配置要走导入）。
 /// 可以在终端里 open "proxyswitch://toggle"，也能接快捷指令。
 enum URLCommand: Equatable {
     case turnOn
@@ -111,6 +113,16 @@ enum URLCommand: Equatable {
     case share(Bool?)
     /// 网址诊断：url 可以为空（只打开页面），device 表示从局域网设备的视角。
     case diagnose(url: String?, device: Bool)
+    /// 切换节点；auto 是自动选择。
+    case node(String)
+    /// 切换模式。
+    case mode(EngineMode)
+    /// 切换策略组。
+    case group(name: String, member: String)
+    /// 导入配置：打开设置里的导入，预览后由用户确认。
+    case importConfig(String)
+    /// 执行一个控制接口的工具（只允许查看和日常操作）。
+    case tool(name: String, params: [String: String])
 
     static func parse(_ url: URL) -> URLCommand? {
         guard url.scheme?.lowercased() == "proxyswitch" else { return nil }
@@ -142,8 +154,36 @@ enum URLCommand: Equatable {
                 name = url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/")).removingPercentEncoding ?? ""
             }
             return name.isEmpty ? nil : .use(name)
+        case "node":
+            let name = value(query, "name") ?? pathValue(url)
+            return name.isEmpty ? nil : .node(name)
+        case "mode":
+            let text = (value(query, "value") ?? value(query, "mode") ?? pathValue(url)).lowercased()
+            return EngineMode(rawValue: text).map { .mode($0) }
+        case "group":
+            guard let name = value(query, "name"), let member = value(query, "member") else { return nil }
+            return .group(name: name, member: member)
+        case "import", "install-config", "add":
+            guard let target = value(query, "url") ?? value(query, "config") else { return nil }
+            return .importConfig(target)
+        case "run", "tool":
+            guard let name = value(query, "tool") ?? value(query, "name") else { return nil }
+            var params: [String: String] = [:]
+            for item in query where item.name != "tool" && item.name != "name" {
+                params[item.name] = item.value ?? ""
+            }
+            return .tool(name: name, params: params)
         default: return nil
         }
+    }
+
+    private static func value(_ query: [URLQueryItem], _ name: String) -> String? {
+        guard let value = query.first(where: { $0.name == name })?.value, !value.isEmpty else { return nil }
+        return value
+    }
+
+    private static func pathValue(_ url: URL) -> String {
+        url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/")).removingPercentEncoding ?? ""
     }
 }
 

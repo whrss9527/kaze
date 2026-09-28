@@ -14,20 +14,8 @@ final class Engine: ObservableObject {
         case failed(String)
     }
 
-    struct Node: Identifiable, Equatable {
-        var name: String
-        var type: String
-        /// nil 没测过；0 测试失败。
-        var delay: Int?
-        var subscription: String
-
-        var id: String { name }
-
-        var delayText: String {
-            guard let delay else { return "" }
-            return delay > 0 ? "\(delay) ms" : "超时"
-        }
-    }
+    /// 节点（定义在 ProxyNode.swift，筛选和排序也在那里）。
+    typealias Node = ProxyNode
 
     struct SubscriptionStatus: Equatable {
         var nodeCount: Int
@@ -103,6 +91,20 @@ final class Engine: ObservableObject {
     @Published private(set) var directExit: ExitInfo?
     @Published private(set) var directExitProblem: String?
     @Published private(set) var checkingDirectExit = false
+    /// 配置补丁的问题（写错了时用的是没打补丁的配置）；nil 表示没问题或没有补丁。
+    @Published private(set) var patchProblem: String?
+    /// 配置补丁合并时的提示（比如写了由 ProxySwitch 管理的键）。
+    @Published private(set) var patchNotes: [String] = []
+    /// 手动节点里内核认出来的个数；nil 表示还不知道。
+    @Published private(set) var manualNodeCount: Int?
+    /// 最近两分钟经内核的网速（每两秒一个点），连接页的图表用。
+    @Published private(set) var speedHistory: [SpeedSample] = []
+    /// 服务检测的结果，按节点名（当前节点是空字符串）。
+    @Published private(set) var serviceResults: [String: [ServiceCheckResult]] = [:]
+    /// 正在检测服务的节点；nil 表示没在测。
+    @Published private(set) var checkingServices: String?
+    /// 实时日志（高级页打开时才订阅），最新的在最后。
+    @Published private(set) var liveLog: [LogLine] = []
 
     var readConfig: () -> AppConfig = { AppConfig() }
     var writeEngine: ((EngineConfig) -> Void)?
@@ -137,6 +139,18 @@ final class Engine: ObservableObject {
     /// 上次下载失败的时间：后台补下载隔一会儿再试，不反复打扰。
     private var lastDownloadFailure: [String: Date] = [:]
     static let downloadRetryInterval: TimeInterval = 5 * 60
+    /// 服务检测用的本机入口端口：启动时挑一个空闲的，这次运行期间不变。
+    let probePort: Int = Engine.pickFreePort()
+    /// 上次校验过的补丁内容和结果：补丁没变就不重复跑 mihomo -t。
+    private var checkedPatch: (text: String, problem: String?)?
+    private var lastSpeedSample: (date: Date, traffic: TrafficTotal)?
+    private var logTask: Task<Void, Never>?
+    private var logSubscribers = 0
+    private var pendingLog: [LogLine] = []
+    private var logFlushScheduled = false
+    /// 「最近的网速」保留的点数（每两秒一个，共两分钟）。
+    static let speedHistoryLimit = 60
+    static let liveLogLimit = 500
 
     private struct InlineRules {
         var rules: [String]
@@ -144,7 +158,7 @@ final class Engine: ObservableObject {
         var warnings: [String]
     }
 
-    static var directory: URL { Store.directory.appendingPathComponent("core", isDirectory: true) }
+    nonisolated static var directory: URL { Store.directory.appendingPathComponent("core", isDirectory: true) }
     var configURL: URL { Self.directory.appendingPathComponent("config.yaml") }
     var engineConfig: EngineConfig { readConfig().engine }
     var coreAvailable: Bool { CoreBinary.executableURL != nil }
@@ -359,6 +373,9 @@ final class Engine: ObservableObject {
         exitInfo = nil
         exitNode = nil
         exitTask?.cancel()
+        speedHistory = []
+        lastSpeedSample = nil
+        manualNodeCount = nil
         onStatusChanged?()
     }
 
@@ -386,6 +403,16 @@ final class Engine: ObservableObject {
             }
         }
         onStatusChanged?()
+    }
+
+    /// 手动节点写进内核目录里的文件（一行一条链接），内容没变就不动它。
+    private func writeManualNodes(_ engine: EngineConfig) throws {
+        guard !engine.activeManualNodes.isEmpty else { return }
+        let url = CoreConfigBuilder.manualNodesPath(directory: Self.directory)
+        let text = CoreConfigBuilder.manualNodesText(engine)
+        if (try? String(contentsOf: url, encoding: .utf8)) == text { return }
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try text.write(to: url, atomically: true, encoding: .utf8)
     }
 
     /// file:// 订阅复制到内核目录里（内核不读别处的文件）。
@@ -438,9 +465,56 @@ final class Engine: ObservableObject {
 
     private func generateConfig(_ engine: EngineConfig) async throws -> String {
         try copyFileSubscriptions(engine)
+        try writeManualNodes(engine)
         let composed = composeRules(engine)
-        let input = CoreConfigBuilder.Input(engine: engine, secret: secret, directory: Self.directory, testURL: readConfig().testURL, rules: composed.rules, share: shareInputs, ruleProviders: composed.providers)
-        return CoreConfigBuilder.yaml(input)
+        let config = readConfig()
+        let input = CoreConfigBuilder.Input(engine: engine, secret: secret, directory: Self.directory, testURL: config.testURL, rules: composed.rules, share: shareInputs, ruleProviders: composed.providers, profiles: config.profiles, probePort: probePort)
+        let built = CoreConfigBuilder.build(input)
+        var problem = built.patchProblem
+        var text = built.text
+        if problem == nil, !engine.patch.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            // 打过补丁的配置先让内核自己检查一遍，通不过就用没打补丁的，免得内核起不来。
+            // 检查时内核要读 GeoIP 数据库，先把目录准备好（不然它会去下载）。
+            try? prepareDirectory()
+            if let checked = checkedPatch, checked.text == text {
+                problem = checked.problem
+            } else {
+                problem = await Self.testConfig(text)
+                checkedPatch = (text, problem)
+            }
+            if problem != nil {
+                text = CoreConfigBuilder.yaml(input)
+            }
+        }
+        if problem != patchProblem {
+            if let problem {
+                Log.error("配置补丁没有用上：\(problem)")
+            }
+            patchProblem = problem
+        }
+        if built.patchNotes != patchNotes {
+            patchNotes = built.patchNotes
+        }
+        return text
+    }
+
+    /// 用内核检查一份配置（mihomo -t），通过返回 nil，否则返回内核说的问题。
+    nonisolated static func testConfig(_ text: String) async -> String? {
+        guard let executable = CoreBinary.executableURL else { return nil }
+        return await Task.detached(priority: .userInitiated) { () -> String? in
+            let directory = Engine.directory
+            let file = directory.appendingPathComponent("config-check.yaml")
+            do {
+                try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                try text.write(to: file, atomically: true, encoding: .utf8)
+                defer { try? FileManager.default.removeItem(at: file) }
+                let result = try Shell.runSync(executable.path, ["-t", "-d", directory.path, "-f", file.path], timeout: 20)
+                if result.succeeded { return nil }
+                return CoreConfigCheck.problem(from: result.output)
+            } catch {
+                return error.localizedDescription
+            }
+        }.value
     }
 
     // MARK: - 局域网共享
@@ -523,8 +597,9 @@ final class Engine: ObservableObject {
         if session != sessionTraffic {
             sessionTraffic = session
         }
+        recordSpeed(session)
         record(list)
-        let delta = accumulator.ingest(list)
+        let delta = accumulator.ingestDetailed(list)
         if !delta.isEmpty {
             traffic.add(delta)
             trafficDirty = true
@@ -532,6 +607,23 @@ final class Engine: ObservableObject {
         if trafficDirty, Date().timeIntervalSince(lastTrafficSave) > 30 {
             saveTraffic()
         }
+    }
+
+    /// 按两次采样之间总流量的差算网速，留最近两分钟。
+    private func recordSpeed(_ total: TrafficTotal) {
+        let now = Date()
+        defer { lastSpeedSample = (now, total) }
+        guard let last = lastSpeedSample else { return }
+        let seconds = now.timeIntervalSince(last.date)
+        guard seconds > 0.5 else { return }
+        let up = max(0, total.upload - last.traffic.upload)
+        let down = max(0, total.download - last.traffic.download)
+        var history = speedHistory
+        history.append(SpeedSample(date: now, upload: Int64(Double(up) / seconds), download: Int64(Double(down) / seconds)))
+        if history.count > Self.speedHistoryLimit {
+            history.removeFirst(history.count - Self.speedHistoryLimit)
+        }
+        speedHistory = history
     }
 
     private func record(_ list: [CoreConnection]) {
@@ -989,8 +1081,19 @@ final class Engine: ObservableObject {
                 guard let provider = providers[subscription.providerName] else { continue }
                 statuses[subscription.id] = SubscriptionStatus(nodeCount: provider.proxies.count, info: provider.subscriptionInfo, updatedAt: Self.parseDate(provider.updatedAt))
                 for proxy in provider.proxies {
-                    list.append(Node(name: proxy.name, type: proxy.type, delay: proxy.lastDelay, subscription: subscription.name))
+                    list.append(Node(name: proxy.name, type: proxy.type, delay: proxy.lastDelay, subscription: subscription.name, source: subscription.id, provider: subscription.providerName))
                 }
+            }
+            if !engine.activeManualNodes.isEmpty {
+                let manual = providers[ManualNode.providerName]?.proxies ?? []
+                for proxy in manual {
+                    list.append(Node(name: proxy.name, type: proxy.type, delay: proxy.lastDelay, subscription: "手动节点", source: ManualNode.sourceID, provider: ManualNode.providerName))
+                }
+                if manualNodeCount != manual.count {
+                    manualNodeCount = manual.count
+                }
+            } else if manualNodeCount != nil {
+                manualNodeCount = nil
             }
             if list.map(\.name) != nodes.map(\.name) {
                 Log.info("读取到 \(list.count) 个节点")
@@ -1152,19 +1255,44 @@ final class Engine: ObservableObject {
     /// 新建策略组。返回问题描述，成功返回 nil。
     @discardableResult
     func addGroup(name: String, kind: PolicyGroupKind, filter: String) -> String? {
+        addGroup(PolicyGroup(name: name, kind: kind, filter: filter))
+    }
+
+    /// 新建策略组（带高级选项）。返回问题描述，成功返回 nil。
+    @discardableResult
+    func addGroup(_ draft: PolicyGroup) -> String? {
         var engine = engineConfig
-        if let problem = PolicyGroup.validate(name: name, filter: filter, others: engine.groups) { return problem }
-        let group = PolicyGroup(name: name, kind: kind, filter: filter)
+        if let problem = PolicyGroup.validate(name: draft.name, filter: draft.filter, others: engine.groups) { return problem }
+        let group = Self.cleaned(draft)
+        if let problem = PolicyGroup.validateAdvanced(group, all: engine.groups + [group]) { return problem }
         if nodes.contains(where: { $0.name.caseInsensitiveCompare(group.name) == .orderedSame }) {
             return "有个节点也叫「\(group.name)」，换一个名字"
         }
         engine.groups.append(group)
         writeEngine?(engine)
-        Log.info("新建策略组「\(group.name)」（\(kind.title)）")
+        Log.info("新建策略组「\(group.name)」（\(group.kind.title)）")
         return nil
     }
 
-    /// 改一个策略组；改了名字的话指向它的规则跟着改。返回问题描述，成功返回 nil。
+    /// 名字、筛选去掉首尾空白，包含的组去重。
+    private static func cleaned(_ group: PolicyGroup) -> PolicyGroup {
+        var result = PolicyGroup(name: group.name, kind: group.kind, filter: group.filter)
+        result.id = group.id
+        result.exclude = group.exclude.trimmingCharacters(in: .whitespaces)
+        var members: [String] = []
+        for member in group.includeGroups where !members.contains(member) {
+            members.append(member)
+        }
+        result.includeGroups = members
+        result.sources = group.sources
+        result.testURL = group.testURL.trimmingCharacters(in: .whitespaces)
+        result.interval = group.interval
+        result.tolerance = group.tolerance
+        result.strategy = group.strategy
+        return result
+    }
+
+    /// 改一个策略组；改了名字的话指向它的规则、包含它的组跟着改。返回问题描述，成功返回 nil。
     @discardableResult
     func saveGroup(_ group: PolicyGroup) -> String? {
         var engine = engineConfig
@@ -1172,12 +1300,19 @@ final class Engine: ObservableObject {
         let others = engine.groups.filter { $0.id != group.id }
         if let problem = PolicyGroup.validate(name: group.name, filter: group.filter, others: others) { return problem }
         let old = engine.groups[index]
-        var updated = PolicyGroup(name: group.name, kind: group.kind, filter: group.filter)
-        updated.id = group.id
+        let updated = Self.cleaned(group)
+        var renamedMembers = engine.groups
+        renamedMembers[index] = updated
+        if old.name != updated.name {
+            for position in renamedMembers.indices {
+                renamedMembers[position].renameMember(from: old.name, to: updated.name)
+            }
+        }
+        if let problem = PolicyGroup.validateAdvanced(renamedMembers[index], all: renamedMembers) { return problem }
         if old.name != updated.name, nodes.contains(where: { $0.name.caseInsensitiveCompare(updated.name) == .orderedSame }) {
             return "有个节点也叫「\(updated.name)」，换一个名字"
         }
-        engine.groups[index] = updated
+        engine.groups[index] = renamedMembers[index]
         if old.name != updated.name {
             engine.retarget(from: old.name, to: .group(updated.name))
         }
@@ -1269,21 +1404,30 @@ final class Engine: ObservableObject {
 
     // MARK: - 自定义规则
 
-    /// 加一条自定义规则；已有同样的域名就改它的去向。返回问题描述，成功返回 nil。
+    /// 加一条自定义规则；已有同样的就改它的去向。返回问题描述，成功返回 nil。
     @discardableResult
-    func addCustomRule(pattern: String, policy: RuleTarget) -> String? {
-        if let problem = CustomRule.validate(pattern) { return problem }
+    func addCustomRule(pattern: String, policy: RuleTarget, kind: CustomRuleKind = .auto) -> String? {
+        if let problem = CustomRule.validate(pattern, kind: kind) { return problem }
         var engine = engineConfig
-        let rule = CustomRule(pattern: pattern, policy: policy)
-        if let index = engine.customRules.firstIndex(where: { $0.pattern == rule.pattern }) {
+        let rule = CustomRule(pattern: pattern, policy: policy, kind: kind)
+        if let index = engine.customRules.firstIndex(where: { $0.sameMatch(as: rule) }) {
             engine.customRules[index].policy = policy
             engine.customRules[index].enabled = true
         } else {
             engine.customRules.append(rule)
         }
         writeEngine?(engine)
-        Log.info("自定义规则：\(rule.pattern) \(policy.title)")
+        Log.info("自定义规则：\(kind == .auto ? "" : kind.title + " ")\(rule.displayValue) \(policy.title)")
         return nil
+    }
+
+    func moveCustomRule(_ id: UUID, up: Bool) {
+        var engine = engineConfig
+        guard let index = engine.customRules.firstIndex(where: { $0.id == id }) else { return }
+        let target = up ? index - 1 : index + 1
+        guard engine.customRules.indices.contains(target) else { return }
+        engine.customRules.swapAt(index, target)
+        writeEngine?(engine)
     }
 
     func updateCustomRule(_ rule: CustomRule) {
@@ -1348,7 +1492,286 @@ final class Engine: ObservableObject {
         }
     }
 
+    // MARK: - 订阅的筛选、前缀和前置代理
+
+    /// 保存订阅的名字、地址、筛选、前缀和前置代理。返回问题描述，成功返回 nil。
+    @discardableResult
+    func saveSubscription(_ subscription: Subscription) -> String? {
+        let url = subscription.url.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let problem = Subscription.validate(url: url) { return problem }
+        let filter = subscription.filter.trimmingCharacters(in: .whitespaces)
+        let exclude = subscription.exclude.trimmingCharacters(in: .whitespaces)
+        if let problem = Subscription.validateOptions(filter: filter, exclude: exclude, prefix: subscription.prefix) { return problem }
+        let dialer = subscription.dialer?.trimmingCharacters(in: .whitespaces)
+        if let dialer, !dialer.isEmpty, let problem = validateDialer(dialer, provider: subscription.providerName) { return problem }
+        var engine = engineConfig
+        guard let index = engine.subscriptions.firstIndex(where: { $0.id == subscription.id }) else { return "这条订阅已经不存在了" }
+        var updated = engine.subscriptions[index]
+        let name = subscription.name.trimmingCharacters(in: .whitespaces)
+        if !name.isEmpty {
+            updated.name = name
+        }
+        updated.url = url
+        updated.filter = filter
+        updated.exclude = exclude
+        updated.prefix = subscription.prefix
+        updated.dialer = (dialer?.isEmpty ?? true) ? nil : dialer
+        engine.subscriptions[index] = updated
+        writeEngine?(engine)
+        Log.info("订阅「\(updated.name)」的设置已保存")
+        return nil
+    }
+
+    /// 前置代理能不能用：配置列表里的 HTTP / SOCKS5 代理、不含这个来源节点的策略组、别的来源的节点。
+    func validateDialer(_ reference: String, provider: String) -> String? {
+        let engine = engineConfig
+        if let id = DialerReference.profileID(reference) {
+            guard let profile = readConfig().profiles.first(where: { $0.id == id }) else { return "这个代理配置已经不存在了" }
+            return DialerReference.usable(profile) ? nil : "只有 HTTP 或 SOCKS5 代理能当前置"
+        }
+        if CoreConfigBuilder.dialerLoops(reference, provider: provider, engine: engine) {
+            return "「\(reference)」里有这个来源自己的节点，会绕回自己：选只用别的订阅的自动类策略组、别的订阅里的节点，或者配置列表里的代理"
+        }
+        if engine.groups.contains(where: { $0.name == reference }) { return nil }
+        if let node = nodes.first(where: { $0.name == reference }) {
+            return node.provider == provider ? "不能用这个来源自己的节点当前置" : nil
+        }
+        return nodes.isEmpty ? nil : "没有叫「\(reference)」的节点或策略组"
+    }
+
+    /// 前置代理的候选：配置列表里的 HTTP / SOCKS5 代理、不会绕回的策略组、别的来源的节点。
+    func dialerCandidates(for provider: String) -> [DialerCandidate] {
+        let engine = engineConfig
+        var result: [DialerCandidate] = []
+        for profile in readConfig().profiles where DialerReference.usable(profile) {
+            result.append(DialerCandidate(value: DialerReference.profile(profile.id), title: "代理「\(profile.name)」 \(profile.summary)"))
+        }
+        for group in engine.groups where !CoreConfigBuilder.dialerLoops(group.name, provider: provider, engine: engine) {
+            result.append(DialerCandidate(value: group.name, title: "策略组「\(group.name)」"))
+        }
+        for node in nodes where node.provider != provider {
+            result.append(DialerCandidate(value: node.name, title: "节点 \(node.name)（\(node.subscription)）"))
+        }
+        return result
+    }
+
+    // MARK: - 手动节点
+
+    /// 从一段文字里加节点：分享链接一行一条，或者整段 base64。返回加了几个，有问题时带上说明。
+    @discardableResult
+    func addManualNodes(from text: String) -> (added: Int, problem: String?) {
+        let links = NodeLink.extract(text)
+        guard !links.isEmpty else {
+            return (0, "没有认出节点链接：支持 ss://、ssr://、vmess://、vless://、trojan://、hysteria2://、tuic://、anytls:// 和带账号的 http:// / socks5://")
+        }
+        var engine = engineConfig
+        var added = 0
+        for link in links where !engine.manualNodes.contains(where: { $0.link == link }) {
+            engine.manualNodes.append(ManualNode(link: link))
+            added += 1
+        }
+        guard added > 0 else { return (0, "这些节点已经加过了") }
+        writeEngine?(engine)
+        Log.info("添加了 \(added) 个手动节点")
+        return (added, nil)
+    }
+
+    func removeManualNode(_ id: UUID) {
+        var engine = engineConfig
+        engine.manualNodes.removeAll { $0.id == id }
+        writeEngine?(engine)
+    }
+
+    func setManualNode(_ id: UUID, enabled: Bool) {
+        var engine = engineConfig
+        guard let index = engine.manualNodes.firstIndex(where: { $0.id == id }) else { return }
+        engine.manualNodes[index].enabled = enabled
+        writeEngine?(engine)
+    }
+
+    /// 手动节点的前置代理；nil 表示不用。返回问题描述，成功返回 nil。
+    @discardableResult
+    func setManualDialer(_ reference: String?) -> String? {
+        let value = reference?.trimmingCharacters(in: .whitespaces)
+        if let value, !value.isEmpty, let problem = validateDialer(value, provider: ManualNode.providerName) { return problem }
+        var engine = engineConfig
+        engine.manualDialer = (value?.isEmpty ?? true) ? nil : value
+        writeEngine?(engine)
+        return nil
+    }
+
+    // MARK: - DNS、Hosts、IPv6、配置补丁
+
+    /// 保存 DNS 设置。返回问题描述，成功返回 nil。
+    @discardableResult
+    func setDNS(_ dns: DNSSettings) -> String? {
+        if let problem = dns.validate() { return problem }
+        var engine = engineConfig
+        engine.dns = dns
+        writeEngine?(engine)
+        Log.info(dns.enabled ? "内核 DNS：开启" : "内核 DNS：关闭，用系统的 DNS")
+        return nil
+    }
+
+    /// 保存 Hosts。返回问题描述，成功返回 nil。
+    @discardableResult
+    func setHosts(_ hosts: [HostEntry]) -> String? {
+        for entry in hosts where entry.enabled {
+            if let problem = entry.validate() { return problem }
+        }
+        var engine = engineConfig
+        engine.hosts = hosts
+        writeEngine?(engine)
+        return nil
+    }
+
+    func setIPv6(_ enabled: Bool) {
+        var engine = engineConfig
+        engine.ipv6 = enabled
+        writeEngine?(engine)
+    }
+
+    /// 保存配置补丁：先检查能不能解析，内核在的话再让它检查合并后的完整配置。返回问题描述，成功返回 nil。
+    func setPatch(_ text: String) async -> String? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        var engine = engineConfig
+        engine.patch = trimmed
+        if !trimmed.isEmpty {
+            let config = readConfig()
+            let composed = composeRules(engine)
+            let input = CoreConfigBuilder.Input(engine: engine, secret: secret, directory: Self.directory, testURL: config.testURL, rules: composed.rules, share: shareInputs, ruleProviders: composed.providers, profiles: config.profiles, probePort: probePort)
+            let built = CoreConfigBuilder.build(input)
+            if let problem = built.patchProblem { return "补丁有问题：\(problem)" }
+            try? prepareDirectory()
+            if let problem = await Self.testConfig(built.text) { return "内核不认合并后的配置：\(problem)" }
+            checkedPatch = (built.text, nil)
+        }
+        writeEngine?(engine)
+        Log.info(trimmed.isEmpty ? "已清空配置补丁" : "配置补丁已保存")
+        return nil
+    }
+
+    // MARK: - 收藏与排序
+
+    func toggleFavorite(_ name: String) {
+        var engine = engineConfig
+        if let index = engine.favoriteNodes.firstIndex(of: name) {
+            engine.favoriteNodes.remove(at: index)
+        } else {
+            engine.favoriteNodes.append(name)
+        }
+        writeEngine?(engine)
+    }
+
+    func isFavorite(_ name: String) -> Bool { engineConfig.favoriteNodes.contains(name) }
+
+    func setNodeSort(_ sort: NodeSort) {
+        var engine = engineConfig
+        engine.nodeSort = sort
+        writeEngine?(engine)
+    }
+
+    /// 按设置排好的节点，收藏的在最前面。
+    var sortedNodes: [Node] {
+        let engine = engineConfig
+        return NodeQuery(sort: engine.nodeSort).apply(nodes, favorites: engine.favoriteNodes)
+    }
+
+    // MARK: - 服务检测
+
+    /// 检测各个服务能不能用。node 为 nil 时经当前在用的节点；指定了节点时经服务检测入口临时切到它，不影响正在用的。
+    func checkServices(node: String? = nil) async {
+        guard isRunning, engineConfig.wantsCore, checkingServices == nil else { return }
+        let key = node ?? ""
+        checkingServices = key
+        defer { checkingServices = nil }
+        var port = engineConfig.mixedPort
+        if let node {
+            guard let api else { return }
+            do {
+                try await api.select(group: CoreConfigBuilder.probeGroup, node: node)
+                port = probePort
+            } catch {
+                lastError = "切换检测用的节点失败：\(error.localizedDescription)"
+                return
+            }
+        }
+        let results = await ServiceChecker.run(proxyPort: port)
+        serviceResults[key] = results
+        let available = results.filter(\.isAvailable).map(\.service.title)
+        Log.info("服务检测（\(node ?? "当前节点")）：可用 \(available.isEmpty ? "无" : available.joined(separator: "、"))")
+    }
+
+    // MARK: - 实时日志
+
+    /// 高级页打开时订阅内核的实时日志，关掉时退订；内核重启后自动接上。
+    func subscribeLiveLog() {
+        logSubscribers += 1
+        guard logTask == nil else { return }
+        logTask = Task { @MainActor [weak self] in
+            var nextID = 0
+            while !Task.isCancelled {
+                guard let self else { return }
+                guard let api = self.api, self.isRunning else {
+                    try? await Task.sleep(for: .seconds(1))
+                    continue
+                }
+                do {
+                    let bytes = try await api.logBytes(level: "info")
+                    for try await line in bytes.lines {
+                        if Task.isCancelled { return }
+                        guard let data = line.data(using: .utf8),
+                              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                              let payload = json["payload"] as? String else { continue }
+                        nextID += 1
+                        self.appendLog(LogLine(id: nextID, date: Date(), level: (json["type"] as? String) ?? "info", text: payload))
+                    }
+                } catch {
+                    // 内核重启或者停了：稍后重连。
+                }
+                try? await Task.sleep(for: .seconds(1))
+            }
+        }
+    }
+
+    func unsubscribeLiveLog() {
+        logSubscribers = max(0, logSubscribers - 1)
+        if logSubscribers == 0 {
+            logTask?.cancel()
+            logTask = nil
+        }
+    }
+
+    func clearLiveLog() {
+        liveLog = []
+    }
+
+    /// 日志一行行来得很快：先攒着，每 0.3 秒刷新一次界面。
+    private func appendLog(_ line: LogLine) {
+        pendingLog.append(line)
+        guard !logFlushScheduled else { return }
+        logFlushScheduled = true
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(300))
+            self?.flushLog()
+        }
+    }
+
+    private func flushLog() {
+        logFlushScheduled = false
+        var lines = liveLog + pendingLog
+        pendingLog = []
+        if lines.count > Self.liveLogLimit {
+            lines.removeFirst(lines.count - Self.liveLogLimit)
+        }
+        liveLog = lines
+    }
+
     // MARK: - 工具
+
+    nonisolated static func pickFreePort() -> Int {
+        LocalPort.pickFree()
+    }
 
     nonisolated static func parseDate(_ text: String?) -> Date? {
         CoreDates.parse(text)
@@ -1372,25 +1795,5 @@ final class Engine: ObservableObject {
         if seconds < 60 { return "\(max(0, seconds)) 秒" }
         if seconds < 3600 { return "\(seconds / 60) 分钟" }
         return "\(seconds / 3600) 小时 \(seconds % 3600 / 60) 分"
-    }
-}
-
-/// 内核给的时间：ISO 8601，有的带小数秒。
-enum CoreDates {
-    private static let formatters: [ISO8601DateFormatter] = {
-        let fractional = ISO8601DateFormatter()
-        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return [fractional, ISO8601DateFormatter()]
-    }()
-
-    static func parse(_ text: String?) -> Date? {
-        guard let text else { return nil }
-        for formatter in formatters {
-            if let date = formatter.date(from: text) {
-                // 内核还没更新过时给的是零时间（0001-01-01）。
-                return date.timeIntervalSince1970 > 0 ? date : nil
-            }
-        }
-        return nil
     }
 }

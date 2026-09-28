@@ -6,6 +6,14 @@ struct Subscription: Codable, Identifiable, Equatable, Hashable {
     var name: String = "订阅"
     var url: String = ""
     var enabled: Bool = true
+    /// 只保留名字匹配这个正则的节点（不区分大小写）；空表示全部。
+    var filter: String = ""
+    /// 去掉名字匹配这个正则的节点（不区分大小写），比如「过期|剩余|官网」。
+    var exclude: String = ""
+    /// 节点名前面加上这段文字，几个机场的节点同名时好区分。
+    var prefix: String = ""
+    /// 前置代理：这个订阅的节点先经它再连出去（链式代理）。策略组名、节点名，或者 "profile:<配置 id>"。
+    var dialer: String?
 
     init(name: String, url: String) {
         self.name = name
@@ -13,7 +21,7 @@ struct Subscription: Codable, Identifiable, Equatable, Hashable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, url, enabled
+        case id, name, url, enabled, filter, exclude, prefix, dialer
     }
 
     init(from decoder: Decoder) throws {
@@ -22,6 +30,34 @@ struct Subscription: Codable, Identifiable, Equatable, Hashable {
         name = try container.decodeIfPresent(String.self, forKey: .name) ?? "订阅"
         url = try container.decodeIfPresent(String.self, forKey: .url) ?? ""
         enabled = try container.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
+        filter = try container.decodeIfPresent(String.self, forKey: .filter) ?? ""
+        exclude = try container.decodeIfPresent(String.self, forKey: .exclude) ?? ""
+        prefix = try container.decodeIfPresent(String.self, forKey: .prefix) ?? ""
+        dialer = try container.decodeIfPresent(String.self, forKey: .dialer)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(name, forKey: .name)
+        try container.encode(url, forKey: .url)
+        try container.encode(enabled, forKey: .enabled)
+        if !filter.isEmpty { try container.encode(filter, forKey: .filter) }
+        if !exclude.isEmpty { try container.encode(exclude, forKey: .exclude) }
+        if !prefix.isEmpty { try container.encode(prefix, forKey: .prefix) }
+        try container.encodeIfPresent(dialer, forKey: .dialer)
+    }
+
+    /// 有没有设置过筛选、前缀或前置代理。
+    var hasOptions: Bool { !filter.isEmpty || !exclude.isEmpty || !prefix.isEmpty || dialer != nil }
+
+    /// 校验筛选、排除和前缀，返回问题；没问题返回 nil。
+    static func validateOptions(filter: String, exclude: String, prefix: String) -> String? {
+        if let problem = PolicyGroup.validateFilter(filter) { return problem }
+        if let problem = PolicyGroup.validateFilter(exclude) { return problem.replacingOccurrences(of: "筛选", with: "排除") }
+        if prefix.count > 12 { return "前缀太长了，12 个字以内" }
+        if prefix.contains(where: { $0 == "," || $0 == "，" || $0.isNewline || $0 == "\"" || $0 == "#" }) { return "前缀里不能有逗号、引号、# 或换行" }
+        return nil
     }
 
     /// 内核配置里 provider 的名字，只用 ASCII，省得在 YAML 里折腾引号。
@@ -186,75 +222,6 @@ enum RuleTarget: Codable, Equatable, Hashable {
     }
 }
 
-/// 一条自定义分流规则：域名（含子域名）或 IP / 网段固定走某个去向。排在预设规则前面，全局模式下也生效。
-struct CustomRule: Codable, Identifiable, Equatable, Hashable {
-    var id: UUID = UUID()
-    var pattern: String = ""
-    var policy: RuleTarget = .proxy
-    var enabled: Bool = true
-
-    init(pattern: String, policy: RuleTarget) {
-        self.pattern = CustomRule.normalize(pattern)
-        self.policy = policy
-    }
-
-    private enum CodingKeys: String, CodingKey {
-        case id, pattern, policy, enabled
-    }
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
-        pattern = try container.decodeIfPresent(String.self, forKey: .pattern) ?? ""
-        policy = try container.decodeIfPresent(RuleTarget.self, forKey: .policy) ?? .proxy
-        enabled = try container.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
-    }
-
-    /// 把「https://www.YouTube.com/watch」「*.youtube.com」「youtube.com:443」这样的输入整理成 youtube.com 形式；IP 和网段原样保留。
-    static func normalize(_ text: String) -> String {
-        var value = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        for scheme in ["http://", "https://", "socks5://"] where value.hasPrefix(scheme) {
-            value = String(value.dropFirst(scheme.count))
-        }
-        if let slash = value.firstIndex(of: "/"), IPPrefix.normalize(value) == nil {
-            value = String(value[..<slash])
-        }
-        if value.hasPrefix("*.") {
-            value = String(value.dropFirst(2))
-        } else if value.hasPrefix(".") {
-            value = String(value.dropFirst())
-        }
-        // 域名后面带的端口去掉；IPv6 里的冒号不算。
-        if !value.contains("]"), let colon = value.lastIndex(of: ":"), value[value.index(after: colon)...].allSatisfy(\.isNumber), value.filter({ $0 == ":" }).count == 1 {
-            value = String(value[..<colon])
-        }
-        return value.trimmingCharacters(in: CharacterSet(charactersIn: "."))
-    }
-
-    /// 校验输入，返回问题；没问题返回 nil。
-    static func validate(_ text: String) -> String? {
-        let value = normalize(text)
-        if value.isEmpty { return "请填写域名或 IP" }
-        if IPPrefix.normalize(value) != nil || RuleConverter.looksLikeDomain(value) { return nil }
-        return "认不出「\(value)」：填域名（比如 youtube.com）或 IP / 网段（比如 8.8.8.8、10.0.0.0/8）"
-    }
-
-    /// 内核规则行；认不出来的返回 nil。groups 是现有的策略组名，去向指向已删除的组时退回「节点」。
-    func line(groups: [String]) -> String? {
-        let value = CustomRule.normalize(pattern)
-        let target = policy.resolved(groups: groups)
-        if let prefix = IPPrefix.normalize(value) {
-            return "\(prefix.contains(":") ? "IP-CIDR6" : "IP-CIDR"),\(prefix),\(target),no-resolve"
-        }
-        if RuleConverter.looksLikeDomain(value) {
-            return "DOMAIN-SUFFIX,\(value),\(target)"
-        }
-        return nil
-    }
-
-    var line: String? { line(groups: []) }
-}
-
 /// 内置代理（内核）的设置。
 struct EngineConfig: Codable, Equatable {
     var enabled: Bool = true
@@ -274,11 +241,28 @@ struct EngineConfig: Codable, Equatable {
     var ruleSets: [RuleSet] = [RuleSet.chinaDirect()]
     /// 没被任何规则命中的流量往哪走；nil 表示跟随规则文件里的 FINAL（没有就走节点）。
     var finalPolicy: RuleTarget?
+    /// 手动添加的节点（分享链接）。
+    var manualNodes: [ManualNode] = []
+    /// 手动节点的前置代理，写法和订阅的一样。
+    var manualDialer: String?
+    /// 内核的 DNS。
+    var dns = DNSSettings()
+    /// Hosts：固定解析。
+    var hosts: [HostEntry] = []
+    /// 允许 IPv6：内核解析和连接 IPv6 地址。
+    var ipv6: Bool = false
+    /// 内核配置补丁（YAML），合并进生成的配置；高级功能。
+    var patch: String = ""
+    /// 收藏的节点，排在列表和菜单的最前面。
+    var favoriteNodes: [String] = []
+    /// 节点列表的排序。
+    var nodeSort: NodeSort = .original
 
     init() {}
 
     private enum CodingKeys: String, CodingKey {
         case enabled, subscriptions, mode, ruleSource, mixedPort, apiPort, selectedNode, updateIntervalHours, customRules, groups, ruleSets, finalPolicy
+        case manualNodes, manualDialer, dns, hosts, ipv6, patch, favoriteNodes, nodeSort
     }
 
     init(from decoder: Decoder) throws {
@@ -301,6 +285,14 @@ struct EngineConfig: Codable, Equatable {
             ruleSets = [RuleSet.chinaDirect()]
         }
         finalPolicy = try container.decodeIfPresent(RuleTarget.self, forKey: .finalPolicy)
+        manualNodes = try container.decodeIfPresent([ManualNode].self, forKey: .manualNodes) ?? []
+        manualDialer = try container.decodeIfPresent(String.self, forKey: .manualDialer)
+        dns = try container.decodeIfPresent(DNSSettings.self, forKey: .dns) ?? DNSSettings()
+        hosts = try container.decodeIfPresent([HostEntry].self, forKey: .hosts) ?? []
+        ipv6 = try container.decodeIfPresent(Bool.self, forKey: .ipv6) ?? false
+        patch = try container.decodeIfPresent(String.self, forKey: .patch) ?? ""
+        favoriteNodes = try container.decodeIfPresent([String].self, forKey: .favoriteNodes) ?? []
+        nodeSort = (try? container.decodeIfPresent(NodeSort.self, forKey: .nodeSort)) ?? .original
     }
 
     func encode(to encoder: Encoder) throws {
@@ -316,12 +308,46 @@ struct EngineConfig: Codable, Equatable {
         try container.encode(groups, forKey: .groups)
         try container.encode(ruleSets, forKey: .ruleSets)
         try container.encodeIfPresent(finalPolicy, forKey: .finalPolicy)
+        try container.encode(manualNodes, forKey: .manualNodes)
+        try container.encodeIfPresent(manualDialer, forKey: .manualDialer)
+        try container.encode(dns, forKey: .dns)
+        try container.encode(hosts, forKey: .hosts)
+        try container.encode(ipv6, forKey: .ipv6)
+        try container.encode(patch, forKey: .patch)
+        try container.encode(favoriteNodes, forKey: .favoriteNodes)
+        try container.encode(nodeSort, forKey: .nodeSort)
     }
 
     var activeSubscriptions: [Subscription] { subscriptions.filter { $0.enabled && !$0.url.isEmpty } }
 
-    /// 有订阅且没关掉时内核才需要运行。
-    var wantsCore: Bool { enabled && !activeSubscriptions.isEmpty }
+    /// 启用的手动节点。
+    var activeManualNodes: [ManualNode] { manualNodes.filter { $0.enabled && !$0.link.isEmpty } }
+
+    /// 有订阅或手动节点、而且没关掉时内核才需要运行。
+    var wantsCore: Bool { enabled && (!activeSubscriptions.isEmpty || !activeManualNodes.isEmpty) }
+
+    /// 内核里的节点来源（订阅和手动节点）的名字，按顺序。
+    var providerNames: [String] {
+        var names = activeSubscriptions.map(\.providerName)
+        if !activeManualNodes.isEmpty {
+            names.append(ManualNode.providerName)
+        }
+        return names
+    }
+
+    /// 某个策略组用的节点来源：没限定时是全部；限定了就只要选中的（都不在了也退回全部，免得组是空的）。
+    func providerNames(for group: PolicyGroup) -> [String] {
+        let all = providerNames
+        guard !group.sources.isEmpty else { return all }
+        var picked: [String] = []
+        for subscription in activeSubscriptions where group.sources.contains(subscription.id) {
+            picked.append(subscription.providerName)
+        }
+        if group.sources.contains(ManualNode.sourceID), !activeManualNodes.isEmpty {
+            picked.append(ManualNode.providerName)
+        }
+        return picked.isEmpty ? all : picked
+    }
 
     /// 自定义策略组的名字，按配置里的顺序。
     var groupNames: [String] { groups.map(\.name) }
@@ -332,8 +358,21 @@ struct EngineConfig: Codable, Equatable {
     /// 启用的规则集。
     var activeRuleSets: [RuleSet] { ruleSets.filter(\.enabled) }
 
-    /// 策略组被删掉或改名后，把指向它的规则改到新的去向。
+    /// 策略组被删掉或改名后，把指向它的规则改到新的去向；包含它的组、用它当前置代理的订阅跟着改。
     mutating func retarget(from name: String, to target: RuleTarget) {
+        let newName: String? = {
+            if case .group(let renamed) = target { return renamed }
+            return nil
+        }()
+        for index in groups.indices {
+            groups[index].renameMember(from: name, to: newName)
+        }
+        for index in subscriptions.indices where subscriptions[index].dialer == name {
+            subscriptions[index].dialer = newName
+        }
+        if manualDialer == name {
+            manualDialer = newName
+        }
         let old = RuleTarget.group(name)
         for index in customRules.indices where customRules[index].policy == old {
             customRules[index].policy = target
@@ -344,5 +383,63 @@ struct EngineConfig: Codable, Equatable {
         if finalPolicy == old {
             finalPolicy = target
         }
+    }
+}
+
+/// 节点列表怎么排；收藏的节点总在最前面。
+enum NodeSort: String, Codable, CaseIterable, Identifiable {
+    /// 订阅里的顺序。
+    case original
+    /// 按名字。
+    case name
+    /// 按延迟，没测过和超时的在后面。
+    case delay
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .original: return "订阅顺序"
+        case .name: return "按名字"
+        case .delay: return "按延迟"
+        }
+    }
+}
+
+/// 前置代理的一个候选。
+struct DialerCandidate: Identifiable, Equatable {
+    /// 存进配置里的写法。
+    var value: String
+    var title: String
+
+    var id: String { value }
+}
+
+/// 前置代理（链式代理）的写法：策略组名或节点名原样写；"profile:<id>" 是配置列表里的一个 HTTP / SOCKS5 代理。
+enum DialerReference {
+    static let profilePrefix = "profile:"
+
+    static func profile(_ id: UUID) -> String { profilePrefix + id.uuidString }
+
+    /// 是配置列表里的代理时返回它的 id。
+    static func profileID(_ value: String) -> UUID? {
+        guard value.hasPrefix(profilePrefix) else { return nil }
+        return UUID(uuidString: String(value.dropFirst(profilePrefix.count)))
+    }
+
+    /// 配置列表里的代理在内核里的名字。
+    static func coreName(for profile: Profile) -> String { "前置·" + profile.name }
+
+    /// 能当前置代理的配置：HTTP 或 SOCKS5，不是内置代理自己。
+    static func usable(_ profile: Profile) -> Bool {
+        !profile.engine && (profile.kind == .http || profile.kind == .socks5)
+    }
+
+    /// 显示用的文字。
+    static func title(_ value: String, profiles: [Profile]) -> String {
+        if let id = profileID(value) {
+            return profiles.first { $0.id == id }.map { "代理「\($0.name)」" } ?? "已删除的代理"
+        }
+        return value
     }
 }

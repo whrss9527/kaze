@@ -45,6 +45,10 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<key>NSLocationUsageDescription</key>
+	<string>按网络自动切换需要读取现在连接的 Wi‑Fi 名字，macOS 把它算作定位信息。ProxySwitch 不会读取或保存你的位置。</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>按网络自动切换需要读取现在连接的 Wi‑Fi 名字，macOS 把它算作定位信息。ProxySwitch 不会读取或保存你的位置。</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSHumanReadableCopyright</key>

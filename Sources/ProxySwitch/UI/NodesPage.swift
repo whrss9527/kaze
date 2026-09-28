@@ -13,7 +13,9 @@ struct NodesPage: View {
     @State private var apiPortText = ""
     @State private var showLog = false
     @State private var logText = ""
-    @State private var nodeFilter = ""
+    @State private var editingSubscription: Subscription?
+    @State private var editingGroup: PolicyGroup?
+    @State private var importing = false
     @State private var newGroupName = ""
     @State private var newGroupKind: PolicyGroupKind = .select
     @State private var newGroupFilter = ""
@@ -25,7 +27,8 @@ struct NodesPage: View {
             Form {
                 coreSection
                 subscriptionsSection
-                nodesSection
+                ManualNodesSection(state: state, engine: engine)
+                NodeListSection(state: state, engine: engine)
                 groupsSection
                 modeSection
                 portsSection
@@ -39,6 +42,15 @@ struct NodesPage: View {
         .onAppear {
             mixedPortText = String(state.config.engine.mixedPort)
             apiPortText = String(state.config.engine.apiPort)
+        }
+        .sheet(item: $editingSubscription) { subscription in
+            SubscriptionEditor(state: state, engine: engine, subscription: subscription)
+        }
+        .sheet(item: $editingGroup) { group in
+            GroupEditor(state: state, engine: engine, group: group)
+        }
+        .sheet(isPresented: $importing) {
+            ImportSheet(state: state, initial: nil)
         }
     }
 
@@ -115,8 +127,10 @@ struct NodesPage: View {
                     status: engine.subscriptionStatus[subscription.id],
                     updating: engine.updatingSubscription == subscription.id,
                     canUpdate: engine.isRunning,
+                    options: optionsSummary(subscription),
                     onUpdate: { Task { await engine.updateSubscription(subscription.id) } },
                     onToggle: { engine.setSubscription(subscription.id, enabled: $0) },
+                    onEdit: { editingSubscription = subscription },
                     onDelete: { engine.removeSubscription(subscription.id) }
                 )
             }
@@ -136,13 +150,26 @@ struct NodesPage: View {
                         .font(.caption)
                         .foregroundStyle(.red)
                 }
+                Button("导入配置…") { importing = true }
+                    .controlSize(.small)
+                    .help("导入 Clash / Surge / 小火箭 / Quantumult X 的配置或者 ProxySwitch 的配置")
             }
             if !state.config.engine.subscriptions.isEmpty {
-                Text("订阅每 \(String(state.config.engine.updateIntervalHours)) 小时自动更新一次。内核以 clash.meta 的身份下载，机场返回 Clash 配置或 base64 节点列表都可以。")
+                Text("订阅每 \(String(state.config.engine.updateIntervalHours)) 小时自动更新一次。内核以 clash.meta 的身份下载，机场返回 Clash 配置或 base64 节点列表都可以。齿轮里能设筛选（只要某些地区、去掉「剩余流量」这类假节点）、名字前缀和前置代理。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
         }
+    }
+
+    /// 订阅设了哪些选项，一句话。
+    private func optionsSummary(_ subscription: Subscription) -> String {
+        var parts: [String] = []
+        if !subscription.filter.isEmpty { parts.append("只保留 \(subscription.filter)") }
+        if !subscription.exclude.isEmpty { parts.append("去掉 \(subscription.exclude)") }
+        if !subscription.prefix.isEmpty { parts.append("前缀「\(subscription.prefix)」") }
+        if let dialer = subscription.dialer { parts.append("经 \(DialerReference.title(dialer, profiles: state.config.profiles))") }
+        return parts.joined(separator: " · ")
     }
 
     private func add() {
@@ -152,79 +179,6 @@ struct NodesPage: View {
             newURL = ""
             state.selectEngineProfile()
         }
-    }
-
-    // MARK: - 节点
-
-    private var filteredNodes: [Engine.Node] {
-        let filter = nodeFilter.trimmingCharacters(in: .whitespaces)
-        if filter.isEmpty { return engine.nodes }
-        return engine.nodes.filter { $0.name.localizedCaseInsensitiveContains(filter) || $0.subscription.localizedCaseInsensitiveContains(filter) }
-    }
-
-    private var nodesSection: some View {
-        Section("节点") {
-            if engine.nodes.isEmpty {
-                Text(engine.isRunning ? "订阅里没有解析出节点" : "内核启动后这里会列出所有节点")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } else {
-                HStack {
-                    TextField("", text: $nodeFilter, prompt: Text("搜索节点"))
-                        .labelsHidden()
-                    Button(engine.testing ? "正在测速…" : "测速全部") {
-                        Task { await engine.testAll() }
-                    }
-                    .disabled(engine.testing || !engine.isRunning)
-                }
-                nodeRow(name: Engine.autoGroup, subtitle: engine.autoNode.map { "现在用的是 \($0)" } ?? "自动选延迟最低的节点", type: "自动", delay: nil, selected: engine.currentSelection == Engine.autoGroup) {
-                    Task { await engine.select(nil) }
-                }
-                ForEach(filteredNodes) { node in
-                    nodeRow(name: node.name, subtitle: node.subscription, type: node.type, delay: node.delay, selected: engine.currentSelection == node.name) {
-                        Task { await engine.select(node.name) }
-                    }
-                }
-                Text("点一行就切换到那个节点。面板里的节点卡片和右键菜单的「节点」子菜单里也能切。")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-    }
-
-    private func nodeRow(name: String, subtitle: String, type: String, delay: Int?, selected: Bool, action: @escaping () -> Void) -> some View {
-        Button {
-            state.selectEngineProfile()
-            action()
-        } label: {
-            HStack(spacing: 10) {
-                Image(systemName: selected ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(selected ? Color.accentColor : Color.secondary.opacity(0.5))
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(name)
-                        .font(.system(size: 12, weight: selected ? .semibold : .regular))
-                    Text(subtitle)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                Text(type.uppercased())
-                    .font(.system(size: 9, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 1)
-                    .background(Capsule().fill(Color.primary.opacity(0.08)))
-                if let delay {
-                    Text(delay > 0 ? "\(delay) ms" : "超时")
-                        .font(.system(size: 11, weight: .medium, design: .rounded))
-                        .foregroundStyle(delay <= 0 ? Color.red : (delay < 300 ? Color.green : (delay < 800 ? Color.orange : Color.red)))
-                        .frame(width: 64, alignment: .trailing)
-                }
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .disabled(!engine.isRunning)
     }
 
     // MARK: - 策略组
@@ -244,6 +198,7 @@ struct NodesPage: View {
                     nodeNames: nodeNames,
                     current: engine.groupStates.first { $0.name == group.name }?.now,
                     onSave: { engine.saveGroup($0) },
+                    onEdit: { editingGroup = group },
                     onDelete: { engine.removeGroup(group.id) },
                     onMove: { engine.moveGroup(group.id, up: $0) }
                 )
@@ -275,7 +230,7 @@ struct NodesPage: View {
                         .foregroundStyle(.red)
                 }
             }
-            Text("手动选择的组多了「节点」「自动选择」和直连三个候选，默认跟随「节点」，所以刚建好时行为不变；自动选择、故障转移、负载均衡只在筛出来的节点里挑，一个都筛不到时内核退回直连。组名不能和节点、内核保留的名字重复。")
+            Text("手动选择的组多了「节点」「自动选择」和直连三个候选，默认跟随「节点」，所以刚建好时行为不变；自动选择、故障转移、负载均衡只在筛出来的节点里挑，一个都筛不到时内核退回直连。组名不能和节点、内核保留的名字重复。每个组的「高级」里能限定只用某几个订阅、排除节点、把别的组放进来、单独设测速地址和间隔；节点列表里也能按筛选条件直接建组。")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -391,8 +346,11 @@ struct SubscriptionRow: View {
     var status: Engine.SubscriptionStatus?
     var updating: Bool
     var canUpdate: Bool
+    /// 筛选、前缀、前置代理的一句话；空表示没设。
+    var options: String = ""
     var onUpdate: () -> Void
     var onToggle: (Bool) -> Void
+    var onEdit: () -> Void = {}
     var onDelete: () -> Void
 
     var body: some View {
@@ -412,8 +370,23 @@ struct SubscriptionRow: View {
                 Text(detail)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                if !options.isEmpty {
+                    Text(options)
+                        .font(.caption)
+                        .foregroundStyle(Color.accentColor)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
             }
             Spacer()
+            Button {
+                onEdit()
+            } label: {
+                Image(systemName: "gearshape")
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+            .help("筛选、前缀、前置代理")
             if updating {
                 ProgressView()
                     .controlSize(.small)
@@ -467,6 +440,7 @@ struct PolicyGroupRow: View {
     /// 内核里现在用的成员。
     var current: String?
     var onSave: (PolicyGroup) -> String?
+    var onEdit: () -> Void
     var onDelete: () -> Void
     var onMove: (Bool) -> Void
     @State private var name: String
@@ -474,11 +448,12 @@ struct PolicyGroupRow: View {
     @State private var filter: String
     @State private var problem: String?
 
-    init(group: PolicyGroup, nodeNames: [String], current: String?, onSave: @escaping (PolicyGroup) -> String?, onDelete: @escaping () -> Void, onMove: @escaping (Bool) -> Void) {
+    init(group: PolicyGroup, nodeNames: [String], current: String?, onSave: @escaping (PolicyGroup) -> String?, onEdit: @escaping () -> Void, onDelete: @escaping () -> Void, onMove: @escaping (Bool) -> Void) {
         self.group = group
         self.nodeNames = nodeNames
         self.current = current
         self.onSave = onSave
+        self.onEdit = onEdit
         self.onDelete = onDelete
         self.onMove = onMove
         _name = State(initialValue: group.name)
@@ -514,6 +489,9 @@ struct PolicyGroupRow: View {
                     Button("保存") { save() }
                         .controlSize(.small)
                 }
+                Button("高级") { onEdit() }
+                    .controlSize(.small)
+                    .help("只用某几个订阅、排除节点、包含别的组、测速地址和间隔")
                 Menu {
                     Button("上移") { onMove(true) }
                     Button("下移") { onMove(false) }
@@ -540,7 +518,9 @@ struct PolicyGroupRow: View {
     }
 
     private var detail: String {
-        let draft = PolicyGroup(name: name, kind: kind, filter: filter)
+        var draft = group
+        draft.kind = kind
+        draft.filter = filter.trimmingCharacters(in: .whitespaces)
         var parts: [String] = []
         if PolicyGroup.validateFilter(draft.filter) != nil {
             parts.append("筛选不是正确的正则表达式")
@@ -553,13 +533,25 @@ struct PolicyGroupRow: View {
         if let current, !current.isEmpty {
             parts.append("现在用 \(current)")
         }
+        if group.hasAdvancedOptions {
+            var advanced: [String] = []
+            if !group.sources.isEmpty { advanced.append("限定来源") }
+            if !group.exclude.isEmpty { advanced.append("排除 \(group.exclude)") }
+            if !group.includeGroups.isEmpty { advanced.append("包含 \(group.includeGroups.joined(separator: "、"))") }
+            if !group.testURL.isEmpty || group.interval != 0 { advanced.append("单独测速") }
+            if group.kind == .loadBalance && group.strategy != .roundRobin { advanced.append(group.strategy.title) }
+            parts.append(advanced.joined(separator: "，"))
+        }
         return parts.joined(separator: " · ")
     }
 
     private func save() {
         guard changed else { return }
-        var updated = PolicyGroup(name: name, kind: kind, filter: filter)
-        updated.id = group.id
+        // 只改名字、类型、筛选，高级选项保持原样。
+        var updated = group
+        updated.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        updated.kind = kind
+        updated.filter = filter.trimmingCharacters(in: .whitespaces)
         problem = onSave(updated)
     }
 }

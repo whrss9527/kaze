@@ -412,6 +412,13 @@ final class Diagnoser: ObservableObject {
         }
     }
 
+    /// 跑完一次诊断再返回结论（命令行和 AI 助手用）。
+    func runAndWait(_ target: DiagnoseTarget) async -> Verdict? {
+        run(target)
+        await task?.value
+        return verdict
+    }
+
     func cancel() {
         task?.cancel()
         task = nil

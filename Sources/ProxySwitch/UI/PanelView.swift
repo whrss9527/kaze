@@ -292,10 +292,11 @@ struct PanelView: View {
         return member
     }
 
+    /// 按设置里的排序（收藏的在最前面），再按搜索筛选。
     private var filteredNodes: [Engine.Node] {
-        let filter = nodeFilter.trimmingCharacters(in: .whitespaces)
-        if filter.isEmpty { return engine.nodes }
-        return engine.nodes.filter { $0.name.localizedCaseInsensitiveContains(filter) }
+        var query = NodeQuery(sort: state.config.engine.nodeSort)
+        query.text = nodeFilter
+        return query.apply(engine.nodes, favorites: state.config.engine.favoriteNodes)
     }
 
     private var nodeList: some View {
@@ -324,8 +325,13 @@ struct PanelView: View {
                         Task { await engine.select(nil) }
                     }
                     ForEach(filteredNodes) { node in
-                        nodeRow(name: node.name, type: node.type, delay: node.delay, subtitle: node.subscription, selected: engine.currentSelection == node.name) {
+                        let favorite = state.config.engine.favoriteNodes.contains(node.name)
+                        nodeRow(name: favorite ? "★ " + node.name : node.name, type: node.typeTitle, delay: node.delay, subtitle: node.subscription, selected: engine.currentSelection == node.name) {
                             Task { await engine.select(node.name) }
+                        }
+                        .contextMenu {
+                            Button(favorite ? "取消收藏" : "收藏") { engine.toggleFavorite(node.name) }
+                            Button("测速") { Task { await engine.test(node: node.name) } }
                         }
                     }
                 }

@@ -484,16 +484,29 @@ final class ParsingTests: XCTestCase {
     }
 
     func testSpeedFormatter() {
-        let figure = "\u{2007}"
-        XCTAssertEqual(SpeedFormatter.compact(bytesPerSecond: 0), figure + figure + figure + "0B")
-        XCTAssertEqual(SpeedFormatter.compact(bytesPerSecond: 999), figure + "999B")
-        XCTAssertEqual(SpeedFormatter.compact(bytesPerSecond: 1024), figure + "1.0K")
-        XCTAssertEqual(SpeedFormatter.compact(bytesPerSecond: 9_900), figure + "9.7K")
-        XCTAssertEqual(SpeedFormatter.compact(bytesPerSecond: 512_000), figure + "500K")
-        XCTAssertEqual(SpeedFormatter.compact(bytesPerSecond: 1_258_291), figure + "1.2M")
-        XCTAssertEqual(SpeedFormatter.compact(bytesPerSecond: 125_829_120), figure + "120M")
-        XCTAssertEqual(SpeedFormatter.compact(bytesPerSecond: 2_147_483_648), figure + "2.0G")
-        XCTAssertTrue(SpeedFormatter.compact(bytesPerSecond: -5).hasSuffix("0B"))
+        // 数字固定 3 位：整数部分不满 3 位时用小数补足，其余四舍五入；到 999.5 进位到下一个单位。
+        XCTAssertEqual(SpeedFormatter.compact(bytesPerSecond: 0), "0.00B")
+        XCTAssertEqual(SpeedFormatter.compact(bytesPerSecond: 5), "5.00B")
+        XCTAssertEqual(SpeedFormatter.compact(bytesPerSecond: 12), "12.0B")
+        XCTAssertEqual(SpeedFormatter.compact(bytesPerSecond: 999), "999B")
+        XCTAssertEqual(SpeedFormatter.compact(bytesPerSecond: 1000), "0.98K")
+        XCTAssertEqual(SpeedFormatter.compact(bytesPerSecond: 1024), "1.00K")
+        XCTAssertEqual(SpeedFormatter.compact(bytesPerSecond: 6_144), "6.00K")
+        XCTAssertEqual(SpeedFormatter.compact(bytesPerSecond: 9_900), "9.67K")
+        XCTAssertEqual(SpeedFormatter.compact(bytesPerSecond: 12_595), "12.3K")
+        XCTAssertEqual(SpeedFormatter.compact(bytesPerSecond: 512_000), "500K")
+        XCTAssertEqual(SpeedFormatter.compact(bytesPerSecond: 1_023_500), "0.98M")
+        XCTAssertEqual(SpeedFormatter.compact(bytesPerSecond: 1_258_291), "1.20M")
+        XCTAssertEqual(SpeedFormatter.compact(bytesPerSecond: 125_829_120), "120M")
+        XCTAssertEqual(SpeedFormatter.compact(bytesPerSecond: 2_147_483_648), "2.00G")
+        XCTAssertEqual(SpeedFormatter.compact(bytesPerSecond: 5_000_000_000_000), "999G")
+        XCTAssertEqual(SpeedFormatter.compact(bytesPerSecond: -5), "0.00B")
+        // 任何数值都是 3 位数字加 B / K / M / G。
+        for value in Array(stride(from: 0, to: 5_000_000_000, by: 7_777_777)) + [9, 99, 100, 999, 1000, 1023, 1024, 10_234, 102_400, 1_023_999, 1_048_575, 1_048_576] {
+            let text = SpeedFormatter.compact(bytesPerSecond: value)
+            XCTAssertEqual(text.filter(\.isNumber).count, 3, "\(value) → \(text)")
+            XCTAssertTrue(["B", "K", "M", "G"].contains(String(text.last ?? " ")), "\(value) → \(text)")
+        }
         XCTAssertTrue(SpeedFormatter.full(bytesPerSecond: 2048).hasSuffix("/s"))
         // 32 位计数回绕后的差值也对。
         let old = ["en0": InterfaceCounters.Sample(received: UInt32.max - 10, sent: 100)]
@@ -540,12 +553,16 @@ final class ParsingTests: XCTestCase {
                     // 数字紧跟箭头：每行里相邻墨迹之间最大的空隙（箭头和数字之间）不超过几个像素，不会空出一截补位的空格。
                     XCTAssertLessThanOrEqual(largestGap(bitmap, xRange: textRange, yRange: 0..<half), 8, "\(upload) \(side)：箭头和数字之间空得太大")
                     XCTAssertLessThanOrEqual(largestGap(bitmap, xRange: textRange, yRange: half..<bitmap.pixelsHigh), 8, "\(download) \(side)：箭头和数字之间空得太大")
-                    // 开关和网速之间留着间距，没有画到一起。
+                    // 开关和网速之间留着间距，没有画到一起；但也挨得很近，不超过 6 个点。
                     let iconColumns = try XCTUnwrap(inkColumns(bitmap, xRange: iconRange, yRange: 0..<bitmap.pixelsHigh))
                     if side == .left {
-                        XCTAssertGreaterThan(iconColumns.min, top.max)
+                        let textEnd = max(top.max, bottom.max)
+                        XCTAssertGreaterThan(iconColumns.min, textEnd)
+                        XCTAssertLessThanOrEqual(iconColumns.min - textEnd, Int(6 * scale), "\(upload)/\(download)：网速和开关之间空得太大")
                     } else {
-                        XCTAssertLessThan(iconColumns.max, top.min)
+                        let textStart = min(top.min, bottom.min)
+                        XCTAssertLessThan(iconColumns.max, textStart)
+                        XCTAssertLessThanOrEqual(textStart - iconColumns.max, Int(6 * scale), "\(upload)/\(download)：开关和网速之间空得太大")
                     }
                 }
             }

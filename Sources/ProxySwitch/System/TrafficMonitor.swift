@@ -43,24 +43,28 @@ enum InterfaceCounters {
 
 /// 网速的显示文字：固定 5 个字符宽（数字用等宽字体），例如「   0B」「 9.9K」「 999K」「 1.2M」。
 enum SpeedFormatter {
+    /// 菜单栏里的网速：数字固定 3 位，整数部分不满 3 位时用小数补足（0.00B、1.23K、12.3K、123K），其余四舍五入；
+    /// 单位 B / K / M / G，到 999.5 就进位到下一个单位。位数固定，文字宽度几乎不变，开关可以紧挨着文字。
     static func compact(bytesPerSecond: Int) -> String {
-        let value = max(0, bytesPerSecond)
-        let text: String
-        if value < 1000 {
-            text = "\(value)B"
-        } else {
-            let units: [(Double, String)] = [(1_073_741_824, "G"), (1_048_576, "M"), (1024, "K")]
-            var chosen = "\(value)B"
-            for (size, unit) in units where Double(value) >= size * 0.9995 {
-                let scaled = Double(value) / size
-                chosen = scaled < 9.95 ? String(format: "%.1f%@", scaled, unit) : String(format: "%.0f%@", scaled, unit)
-                break
+        var value = Double(max(0, bytesPerSecond))
+        for unit in ["B", "K", "M", "G"] {
+            if value < 999.5 || unit == "G" {
+                return threeDigits(value) + unit
             }
-            text = chosen
+            value /= 1024
         }
-        // 用「数字宽度的空格」补到 5 位，等宽数字下宽度稳定，图标不会跟着抖。
-        let padding = max(0, 5 - text.count)
-        return String(repeating: "\u{2007}", count: padding) + text
+        return threeDigits(value) + "G"
+    }
+
+    /// 3 位数字：9.99 以内两位小数，99.9 以内一位小数，再大取整（最大 999）。
+    static func threeDigits(_ value: Double) -> String {
+        if value < 9.995 {
+            return String(format: "%.2f", value)
+        }
+        if value < 99.95 {
+            return String(format: "%.1f", value)
+        }
+        return String(format: "%.0f", min(value, 999))
     }
 
     /// 带单位的完整写法，提示和面板里用。

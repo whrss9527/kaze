@@ -23,7 +23,7 @@ enum StatusIcon {
     /// 两行网速基线之间的距离。
     static let speedLinePitch: CGFloat = 9.5
     /// 开关和文字之间的间距。
-    static let speedGap: CGFloat = 4
+    static let speedGap: CGFloat = 2
     /// 带网速时整张图的高度（两行 8.5 号字刚好放下，菜单栏里也放得下）。
     static let speedHeight: CGFloat = 20
 
@@ -39,15 +39,21 @@ enum StatusIcon {
     /// 箭头和数字之间的间距。
     static let arrowGap: CGFloat = 1.5
 
-    /// 开关加两行网速（上行、下行），网速在开关的左边或右边。箭头单独占一列，数字紧跟在箭头后面：数值位数不同时两个箭头仍然上下对齐，
-    /// 箭头和数字之间也不会空出一截，多出来的空隙落在数字和开关之间。textColor 是菜单栏当前外观下的文字颜色；关闭状态是模板图，颜色由系统决定。
+    /// 数字一栏的宽度：3 位数字加小数点再加最宽的单位。网速的数字固定 3 位，数值怎么变都放得下，
+    /// 开关不会跟着左右跳，数字后面也只剩一两个点的空隙。
+    static let valueColumnWidth: CGFloat = {
+        let samples = ["0.00", "00.0", "000"].flatMap { number in ["B", "K", "M", "G"].map { number + $0 } }
+        return ceil(samples.map { width(makeLine($0)) }.max() ?? 0)
+    }()
+
+    /// 开关加两行网速（上行、下行），网速在开关的左边或右边。箭头单独占一列，数字紧跟在箭头后面：两个箭头上下对齐，
+    /// 箭头和数字之间不空出一截；数字固定 3 位，数字一栏只比实际的字宽一点点，开关紧挨着文字。
+    /// textColor 是菜单栏当前外观下的文字颜色；关闭状态是模板图，颜色由系统决定。
     static func image(for state: StatusIconState, upload: String, download: String, textColor: CGColor, speedSide: SpeedSide = .left) -> NSImage {
         let arrows = [makeLine("↑"), makeLine("↓")]
-        // compact() 用数字宽度的空格补位是为了以前整行右对齐；现在数字紧跟箭头，补位去掉。
         let values = [makeLine(trimmed(upload)), makeLine(trimmed(download))]
         let arrowWidth = ceil(arrows.map { width($0) }.max() ?? 0)
-        // 数字一栏按最宽的可能值（四位数加 M）定宽，图标不会随数值跳动。
-        let valueWidth = ceil(max(width(makeLine("0000M")), values.map { width($0) }.max() ?? 0))
+        let valueWidth = max(valueColumnWidth, ceil(values.map { width($0) }.max() ?? 0))
         let textWidth = arrowWidth + arrowGap + valueWidth
         let size = NSSize(width: textWidth + speedGap + iconSize.width, height: speedHeight)
         let image = NSImage(size: size, flipped: false) { rect in

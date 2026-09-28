@@ -4,6 +4,8 @@ name: release
 # 用 CHANGELOG.md 里对应版本的内容创建 GitHub Release 并上传 zip 和校验和。
 # Release 先以草稿创建，附件上传完才发布。
 # 也可以在 Actions 页面手动运行：填一个标签名，标签不存在时在所选分支的最新提交上创建并推送，存在时重新上传附件。
+# 仓库的 Secrets 里配了 Developer ID 证书和公证凭据时（见 docs/signing.md），用证书签名并提交苹果公证，
+# 用户下载后双击就能打开；没配时照旧 ad-hoc 签名。
 on:
   push:
     tags: ["v*"]
@@ -44,9 +46,32 @@ jobs:
           swift --version
       - name: 单元测试
         run: swift test
+      - name: 导入签名证书
+        env:
+          CERTIFICATE_P12_BASE64: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        run: |
+          if [ -z "$CERTIFICATE_P12_BASE64" ]; then
+            echo "::warning::没有配置 MACOS_CERTIFICATE_P12：这次用 ad-hoc 签名、不公证，用户第一次打开会被系统拦下。配置方法见 docs/signing.md"
+            exit 0
+          fi
+          Scripts/import-certificate.sh
       - name: 打包通用二进制的 .app 和单架构的精简包
         run: |
           VERSION="${TAG#v}" THIN_ARCHIVES=1 Scripts/build-app.sh
+          ls -la dist/*.zip
+      - name: 提交苹果公证并钉上票据
+        if: env.CODESIGN_IDENTITY != ''
+        env:
+          NOTARY_KEY_P8: ${{ secrets.NOTARY_KEY_P8 }}
+          NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
+          NOTARY_APPLE_ID: ${{ secrets.NOTARY_APPLE_ID }}
+          NOTARY_PASSWORD: ${{ secrets.NOTARY_PASSWORD }}
+          NOTARY_TEAM_ID: ${{ secrets.NOTARY_TEAM_ID }}
+        run: Scripts/notarize.sh dist/ProxySwitch-macos.zip dist/ProxySwitch-macos-arm64.zip dist/ProxySwitch-macos-x86_64.zip
+      - name: 校验和
+        run: |
           cd dist && shasum -a 256 ProxySwitch-macos.zip ProxySwitch-macos-arm64.zip ProxySwitch-macos-x86_64.zip > SHA256SUMS.txt && cat SHA256SUMS.txt
           ls -la *.zip
       - name: 发布
@@ -55,9 +80,15 @@ jobs:
         run: |
           VERSION="${TAG#v}"
           awk -v version="$VERSION" '/^## /{ if (printing) exit; if (index($0, version)) { printing = 1; next } } printing' CHANGELOG.md > notes.md
+          if [ -n "${CODESIGN_IDENTITY:-}" ]; then
+            printf '\n已用 Developer ID 签名并通过苹果公证，下载解压后双击就能打开。\n' >> notes.md
+          fi
           if ! gh release view "$TAG" >/dev/null 2>&1; then
             gh release create "$TAG" --draft --title "ProxySwitch for Mac $TAG" --notes-file notes.md
           fi
           gh release upload "$TAG" dist/ProxySwitch-macos.zip dist/ProxySwitch-macos-arm64.zip dist/ProxySwitch-macos-x86_64.zip dist/SHA256SUMS.txt --clobber
           gh release edit "$TAG" --draft=false --latest
           echo "已发布到 https://github.com/${GITHUB_REPOSITORY}/releases/tag/$TAG"
+      - name: 删除临时钥匙串
+        if: always() && env.CODESIGN_KEYCHAIN != ''
+        run: security delete-keychain "$CODESIGN_KEYCHAIN" || true

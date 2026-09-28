@@ -36,6 +36,10 @@ jobs:
           [ -f dist/ProxySwitch-macos-arm64.zip ] || { echo "没有生成 arm64 精简包"; exit 1; }
           lipo -archs dist/thin-arm64/ProxySwitch.app/Contents/MacOS/mihomo
           [ "$(lipo -archs dist/thin-arm64/ProxySwitch.app/Contents/MacOS/mihomo)" = "arm64" ] || { echo "精简包里的内核不是单架构"; exit 1; }
+          # 程序和内核都开着 hardened runtime（公证要求），后面的冒烟和更新测试跑的就是这种运行方式。
+          for code in dist/ProxySwitch.app dist/ProxySwitch.app/Contents/MacOS/mihomo dist/thin-arm64/ProxySwitch.app; do
+            codesign -dv "$code" 2>&1 | grep -q 'flags=.*runtime' || { codesign -dv "$code"; echo "$code 没有开 hardened runtime"; exit 1; }
+          done
           ls -la dist/*.zip
       - name: 冒烟启动并截图
         run: |
@@ -226,6 +230,57 @@ jobs:
           pkill -x ProxySwitch || true
           sleep 2
           rm -rf /Applications/ProxySwitch.app
+      - name: 签名流程自测（临时的自签名证书）
+        run: |
+          # 发布时用 Developer ID 证书签名：这里造一张临时的自签名证书，把导入钥匙串、找证书、签名、校验、启动走一遍。
+          work="$RUNNER_TEMP/signing-selftest"
+          rm -rf "$work" && mkdir -p "$work"
+          cat > "$work/openssl.cnf" <<'EOF'
+          [req]
+          distinguished_name = dn
+          x509_extensions = ext
+          prompt = no
+          [dn]
+          CN = ProxySwitch CI Test
+          [ext]
+          basicConstraints = critical, CA:false
+          keyUsage = critical, digitalSignature
+          extendedKeyUsage = critical, codeSigning
+          EOF
+          /usr/bin/openssl req -x509 -newkey rsa:2048 -nodes -days 2 -config "$work/openssl.cnf" -keyout "$work/key.pem" -out "$work/cert.pem"
+          /usr/bin/openssl pkcs12 -export -inkey "$work/key.pem" -in "$work/cert.pem" -out "$work/cert.p12" -passout pass:ci-test
+          : > "$work/env"
+          CERTIFICATE_P12_BASE64="$(base64 -i "$work/cert.p12")" CERTIFICATE_PASSWORD=ci-test GITHUB_ENV="$work/env" Scripts/import-certificate.sh
+          cat "$work/env"
+          identity=$(awk -F= '/^CODESIGN_IDENTITY=/{print $2}' "$work/env")
+          keychain=$(awk -F= '/^CODESIGN_KEYCHAIN=/{print $2}' "$work/env")
+          [ -n "$identity" ] && [ -n "$keychain" ] || { echo "导入脚本没有给出签名身份和钥匙串"; exit 1; }
+          CODESIGN_IDENTITY="$identity" CODESIGN_KEYCHAIN="$keychain" VERSION=0.0.0 ARCHS="" THIN_ARCHIVES=1 Scripts/build-app.sh
+          for app in dist/ProxySwitch.app dist/thin-arm64/ProxySwitch.app; do
+            for code in "$app" "$app/Contents/MacOS/mihomo"; do
+              info=$(codesign -dvv "$code" 2>&1)
+              echo "$info" | grep -q "Authority=ProxySwitch CI Test" || { echo "$info"; echo "$code 不是用证书签的"; exit 1; }
+              echo "$info" | grep -q "flags=.*runtime" || { echo "$info"; echo "$code 没有开 hardened runtime"; exit 1; }
+              echo "$info" | grep -q "^Timestamp=" || { echo "$info"; echo "$code 没有安全时间戳"; exit 1; }
+            done
+          done
+          codesign -dvv dist/ProxySwitch.app 2>&1 | grep -E "^(Authority|Timestamp|TeamIdentifier)=|flags="
+          # 用证书签名的程序照样能启动。
+          dist/ProxySwitch.app/Contents/MacOS/ProxySwitch >/dev/null 2>&1 &
+          sleep 6
+          pgrep -x ProxySwitch >/dev/null || { echo "用证书签名的程序没有在运行"; exit 1; }
+          pkill -x ProxySwitch || true
+          sleep 2
+          security delete-keychain "$keychain"
+          # 公证脚本用到的命令和参数，这个 Xcode 里都有。
+          for command in submit wait; do
+            help=$(xcrun notarytool "$command" --help 2>&1)
+            for option in --key --key-id --issuer --apple-id --password --team-id --output-format; do
+              echo "$help" | grep -qE -- "${option}( |,|\$)" || { echo "$help"; echo "notarytool ${command} 没有 ${option} 参数"; exit 1; }
+            done
+          done
+          xcrun notarytool log --help >/dev/null
+          xcrun --find stapler
       - uses: actions/upload-artifact@v4
         if: always()
         with:

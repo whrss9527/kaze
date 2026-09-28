@@ -250,6 +250,25 @@ final class ParsingTests: XCTestCase {
         XCTAssertTrue(Translocation.isTranslocated(URL(fileURLWithPath: "/private/var/folders/ab/T/AppTranslocation/1234/d/ProxySwitch.app")))
     }
 
+    func testCodeSignatureTeam() throws {
+        XCTAssertEqual(CodeSignature.requirementText(teamIdentifier: "ABCDE12345"),
+                       #"anchor apple generic and certificate leaf[subject.OU] = "ABCDE12345""#)
+        // 苹果自带的程序没有 Team ID，不存在的路径也没有。
+        XCTAssertNil(CodeSignature.teamIdentifier(of: URL(fileURLWithPath: "/System/Applications/Calculator.app")))
+        XCTAssertNil(CodeSignature.teamIdentifier(of: URL(fileURLWithPath: "/nonexistent/ProxySwitch.app")))
+        XCTAssertFalse(CodeSignature.isSigned(URL(fileURLWithPath: "/nonexistent/ProxySwitch.app"), byTeam: "ABCDE12345"))
+        // 拿 runner 上别家用 Developer ID 签名的程序验证读取和比对：同一个 Team ID 通过，换一个就不通过。
+        let candidates = ["/Applications/Firefox.app", "/Applications/Google Chrome.app", "/Applications/Microsoft Edge.app"]
+        guard let path = candidates.first(where: { FileManager.default.fileExists(atPath: $0) }) else {
+            throw XCTSkip("本机没有 Developer ID 签名的程序可以对照")
+        }
+        let app = URL(fileURLWithPath: path)
+        let team = try XCTUnwrap(CodeSignature.teamIdentifier(of: app), path)
+        XCTAssertEqual(team.count, 10)
+        XCTAssertTrue(CodeSignature.isSigned(app, byTeam: team), path)
+        XCTAssertFalse(CodeSignature.isSigned(app, byTeam: team == "ABCDE12345" ? "ZYXWV98765" : "ABCDE12345"), path)
+    }
+
     func testNetworkRoutes() {
         let github = URL(string: "https://github.com/whrss9527/proxyswitch-mac/releases/download/v1/ProxySwitch-macos.zip")!
         var off = ProxySnapshot()

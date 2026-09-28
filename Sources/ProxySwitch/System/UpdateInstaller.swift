@@ -224,8 +224,9 @@ enum UpdateInstaller {
         return app
     }
 
-    /// 确认解压出来的确实是对应版本的 ProxySwitch，签名完整。
-    static func validate(app: URL, expectedVersion: String) async throws {
+    /// 确认解压出来的确实是对应版本的 ProxySwitch，签名完整；
+    /// 当前版本是开发者签名的（requiredTeam 不是 nil）时，新版本也必须是同一个开发者签的。
+    static func validate(app: URL, expectedVersion: String, requiredTeam: String? = CodeSignature.currentTeam) async throws {
         let plistURL = app.appendingPathComponent("Contents/Info.plist")
         guard let data = try? Data(contentsOf: plistURL),
               let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] else {
@@ -241,6 +242,11 @@ enum UpdateInstaller {
         }
         let result = try await Shell.run(codesignPath, ["--verify", "--deep", "--strict", app.path], timeout: 120)
         guard result.succeeded else { throw UpdateError.wrongApp("签名校验失败：\(result.trimmedOutput)") }
+        if let requiredTeam, !CodeSignature.isSigned(app, byTeam: requiredTeam) {
+            let found = CodeSignature.teamIdentifier(of: app) ?? "没有开发者签名"
+            Log.error("新版本的签名不是 \(requiredTeam)（是 \(found)），不安装")
+            throw UpdateError.wrongSigner(requiredTeam)
+        }
     }
 
     /// 把 newApp 放到 target：先挪到同一个文件夹里的隐藏名字，旧的（有的话）挪开，再改名，失败就换回去。

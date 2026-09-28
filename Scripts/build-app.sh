@@ -1,9 +1,12 @@
 #!/bin/bash
-# 编译并组装 ProxySwitch.app（通用二进制），带上内核 mihomo 和 GeoIP 数据库，ad-hoc 签名后打成 dist/ProxySwitch-macos.zip。
+# 编译并组装 ProxySwitch.app（通用二进制），带上内核 mihomo 和 GeoIP 数据库，签名后打成 dist/ProxySwitch-macos.zip。
 #   VERSION=1.0.0 Scripts/build-app.sh          发布构建
 #   CONFIG=debug ARCHS="" Scripts/build-app.sh   本机架构的调试构建
 #   SKIP_CORE=1 Scripts/build-app.sh             不下载内核（只能用外部代理的功能）
 #   THIN_ARCHIVES=1 Scripts/build-app.sh         另外打两个单架构的精简包（一键更新用，只有通用包一半大）
+#   CODESIGN_IDENTITY="Developer ID Application: …" Scripts/build-app.sh
+#                                                用开发者证书签名（可以是证书名字或 SHA-1），带安全时间戳，之后能提交公证（Scripts/notarize.sh）；
+#                                                不设时 ad-hoc 签名。CODESIGN_KEYCHAIN 可以指定证书所在的钥匙串。
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -20,6 +23,21 @@ fetch() {
   if [ -s "$dest" ]; then return 0; fi
   echo "下载 $url"
   curl -fsSL --retry 3 --retry-delay 3 -o "$dest.tmp" "$url" && mv "$dest.tmp" "$dest"
+}
+
+# 签名。都开 hardened runtime（公证要求；ad-hoc 的构建也开，CI 里测到的就是发布出去的运行方式）。
+# 有开发者证书时加安全时间戳（公证要求，证书过期后签名照样有效）；ad-hoc 签名不能带时间戳。
+# 由内向外签：先签 mihomo，再签整个 .app，不用 --deep（它会用同样的参数重签里面的东西）。
+IDENTITY="${CODESIGN_IDENTITY:--}"
+sign() {
+  local args=(--force --options runtime --sign "$IDENTITY")
+  if [ "$IDENTITY" != "-" ]; then
+    args+=(--timestamp)
+  fi
+  if [ -n "${CODESIGN_KEYCHAIN:-}" ]; then
+    args+=(--keychain "$CODESIGN_KEYCHAIN")
+  fi
+  codesign "${args[@]}" "$1"
 }
 
 # shellcheck disable=SC2086
@@ -52,12 +70,18 @@ if [ -z "${SKIP_CORE:-}" ]; then
   cp "$CORE_CACHE/country.mmdb" "$APP/Contents/Resources/country.mmdb"
   fetch "https://raw.githubusercontent.com/MetaCubeX/mihomo/$CORE_VERSION/LICENSE" "$CORE_CACHE/mihomo-LICENSE.txt"
   cp "$CORE_CACHE/mihomo-LICENSE.txt" "$APP/Contents/Resources/mihomo-LICENSE.txt"
-  codesign --force --sign "${CODESIGN_IDENTITY:--}" "$APP/Contents/MacOS/mihomo"
+  sign "$APP/Contents/MacOS/mihomo"
   echo "内核 mihomo ${CORE_VERSION}：$(lipo -archs "${APP}/Contents/MacOS/mihomo")"
 fi
 
 # 没有开发者证书时用 ad-hoc 签名，Apple 芯片上必须有签名才能运行。
-codesign --force --deep --sign "${CODESIGN_IDENTITY:--}" "$APP"
+sign "$APP"
+codesign --verify --deep --strict "$APP"
+if [ "$IDENTITY" = "-" ]; then
+  echo "签名：ad-hoc"
+else
+  echo "签名：$(codesign -dvv "$APP" 2>&1 | awk -F= '/^Authority=/{print $2; exit}')"
+fi
 
 (cd dist && rm -f ProxySwitch-macos.zip && ditto -c -k --keepParent ProxySwitch.app ProxySwitch-macos.zip)
 echo "已生成 ${APP} 和 dist/ProxySwitch-macos.zip（版本 ${VERSION}）"
@@ -88,9 +112,9 @@ if [ -n "${THIN_ARCHIVES:-}" ]; then
       continue
     fi
     if [ -f "${dir}/ProxySwitch.app/Contents/MacOS/mihomo" ]; then
-      codesign --force --sign "${CODESIGN_IDENTITY:--}" "${dir}/ProxySwitch.app/Contents/MacOS/mihomo"
+      sign "${dir}/ProxySwitch.app/Contents/MacOS/mihomo"
     fi
-    codesign --force --deep --sign "${CODESIGN_IDENTITY:--}" "${dir}/ProxySwitch.app"
+    sign "${dir}/ProxySwitch.app"
     codesign --verify --deep --strict "${dir}/ProxySwitch.app"
     (cd "$dir" && ditto -c -k --keepParent ProxySwitch.app "../ProxySwitch-macos-${arch}.zip")
     echo "已生成 dist/ProxySwitch-macos-${arch}.zip：$(du -h "dist/ProxySwitch-macos-${arch}.zip" | cut -f1)"

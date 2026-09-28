@@ -32,6 +32,8 @@ enum UpdateError: LocalizedError, Equatable {
     case cancelledByUser
     /// macOS 不让替换（「App 管理」权限或者别的系统保护）。
     case appManagement
+    /// 新版本不是当前版本的开发者（这个 Team ID）签名的。
+    case wrongSigner(String)
 
     var errorDescription: String? {
         switch self {
@@ -47,6 +49,7 @@ enum UpdateError: LocalizedError, Equatable {
         case .install(let text): return "替换程序失败：\(text)"
         case .cancelledByUser: return "已取消授权，程序没有改动"
         case .appManagement: return "macOS 不允许 ProxySwitch 替换自己。到「系统设置 → 隐私与安全性 → App 管理」里打开 ProxySwitch，再点重试"
+        case .wrongSigner(let team): return "新版本不是同一个开发者签名的（应该是 \(team)），为了安全没有安装。可以到发布页确认后手动下载"
         }
     }
 }

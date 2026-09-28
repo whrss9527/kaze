@@ -4,14 +4,16 @@ macOS 菜单栏里的代理开关：一键切换系统代理、环境变量、gi
 
 Windows 版在 [proxyswitch](https://github.com/whrss9527/proxyswitch)，两边功能各自演进。
 
-<p align="center"><img src="docs/panel.jpg" width="360" alt="菜单栏面板"></p>
-<p align="center"><img src="docs/settings.jpg" width="720" alt="设置窗口"></p>
+<p align="center"><img src="docs/hero.png" width="1000" alt="设置窗口、菜单栏面板和菜单栏里的网速"></p>
+
+<p align="center"><img src="docs/tour.gif" width="720" alt="设置页：节点与订阅、局域网共享、iCloud 同步"></p>
 
 ## 功能
 
 - **内置节点代理**：填一个机场的订阅地址，节点就出现在面板里，可以选节点、自动选择延迟最低的、一键测速；支持全局代理和按规则分流，规则可以直接用 [johnshall 的小火箭规则](https://github.com/johnshall/Shadowrocket-ADBlock-Rules-Forever)（黑名单、白名单、去广告等预设）或任何小火箭 / Surge / Clash 格式的规则地址。不用再装 Clash 或小火箭。
 - **局域网共享**：打开后 PS5、Switch、手机等同一局域网里的设备把这台 Mac 当代理服务器（`Mac 的 IP:7892`），就能享受和本机一样的网络：本机走节点它们就走同样的节点和规则，本机用公司代理它们就转发给公司代理，本机没开代理就经这台 Mac 直连，切换配置时几秒内跟着变。默认只允许局域网网段里的设备，也可以只允许指定的 IP。
 - **网址诊断**：某个网站打不开时，填上网址，从这台 Mac 或 PS5 等设备的视角把链路走一遍——本机 / 共享状态、DNS、直连、经代理（从内核日志里抓命中的规则和走的节点）、节点延迟——给一句结论和修复按钮（开启节点代理、让这个域名走节点、自动选择节点）。`open "proxyswitch://diagnose?url=https://youtube.com"` 也能直接发起。
+- **菜单栏网速**：图标旁边两行小字显示实时上行、下行速度，可以统计系统整体流量或只算内置代理，网速放在图标左边或右边都行。
 - **菜单栏面板**：点图标弹出，大开关、配置列表和每个配置的延迟、复制在当前终端里用代理的命令、一键测速、进设置。右键或 Control + 点击是简洁菜单。
 - **多套配置**：HTTP / SOCKS5 / PAC 三种。每套可以选生效范围：系统代理、环境变量、git、npm。
 - **系统代理**：读取和监听用 SystemConfiguration，别的程序（Clash、Surge、公司脚本）改了代理会立刻反映在图标上，可以一键保存成配置。写入用 `networksetup`。

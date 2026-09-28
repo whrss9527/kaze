@@ -260,6 +260,11 @@ final class ParsingTests: XCTestCase {
         // 拿 runner 上别家用 Developer ID 签名的程序验证读取和比对：同一个 Team ID 通过，换一个就不通过。
         let candidates = ["/Applications/Firefox.app", "/Applications/Google Chrome.app", "/Applications/Microsoft Edge.app"]
         guard let path = candidates.first(where: { FileManager.default.fileExists(atPath: $0) }) else {
+            // CI 里必须测到（PROXYSWITCH_REQUIRE_SIGNED_SAMPLE=1），本机开发时可以跳过。
+            if ProcessInfo.processInfo.environment["PROXYSWITCH_REQUIRE_SIGNED_SAMPLE"] == "1" {
+                XCTFail("没有找到 Developer ID 签名的程序：\(candidates)")
+                return
+            }
             throw XCTSkip("本机没有 Developer ID 签名的程序可以对照")
         }
         let app = URL(fileURLWithPath: path)

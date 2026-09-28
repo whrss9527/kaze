@@ -22,9 +22,12 @@ jobs:
         run: swift build
       - name: 单元测试
         run: |
+          set -o pipefail
           # 顺便把菜单栏图标各种状态的对照图画出来，最后一步打进日志。
+          # Team ID 的比对必须拿 runner 上真实的 Developer ID 程序测到，不许跳过。
           mkdir -p screenshots
-          PROXYSWITCH_ICON_PREVIEW_DIR="$PWD/screenshots" swift test
+          PROXYSWITCH_ICON_PREVIEW_DIR="$PWD/screenshots" PROXYSWITCH_REQUIRE_SIGNED_SAMPLE=1 swift test 2>&1 | tee "$RUNNER_TEMP/test.log"
+          grep -E "testCodeSignatureTeam|Executed [0-9]+ tests" "$RUNNER_TEMP/test.log" | tail -3 > screenshots/summary.txt || true
       - name: 缓存内核下载
         uses: actions/cache@v4
         with:
@@ -264,7 +267,7 @@ jobs:
               echo "$info" | grep -q "^Timestamp=" || { echo "$info"; echo "$code 没有安全时间戳"; exit 1; }
             done
           done
-          codesign -dvv dist/ProxySwitch.app 2>&1 | grep -E "^(Authority|Timestamp|TeamIdentifier)=|flags="
+          codesign -dvv dist/ProxySwitch.app 2>&1 | grep -E "^(Authority|Timestamp|TeamIdentifier)=|flags=" | tee -a screenshots/summary.txt
           # 用证书签名的程序照样能启动。
           dist/ProxySwitch.app/Contents/MacOS/ProxySwitch >/dev/null 2>&1 &
           sleep 6
@@ -272,6 +275,34 @@ jobs:
           pkill -x ProxySwitch || true
           sleep 2
           security delete-keychain "$keychain"
+          # 公证脚本的流程：用假的 xcrun（只模拟 notarytool 和 stapler）走一遍通过、没通过、没有凭据三种情况。
+          fake="$work/fakebin"
+          mkdir -p "$fake"
+          cat > "$fake/xcrun" <<'EOF'
+          #!/bin/bash
+          case "$1 $2" in
+            "notarytool submit") echo '{"id":"00000000-0000-4000-8000-000000000000","message":"Successfully uploaded file"}' ;;
+            "notarytool wait") echo "{\"id\":\"$3\",\"status\":\"${FAKE_NOTARY_STATUS:-Accepted}\",\"message\":\"Processing complete\"}" ;;
+            "notarytool log") echo '{"issues":[{"message":"fake notary issue"}]}' ;;
+            "stapler staple"|"stapler validate") echo "The $2 action worked!" ;;
+            *) echo "fake xcrun: unexpected $*" >&2; exit 1 ;;
+          esac
+          EOF
+          printf '#!/bin/bash\necho "$*: accepted"\n' > "$fake/spctl"
+          chmod +x "$fake/xcrun" "$fake/spctl"
+          cp dist/ProxySwitch-macos-arm64.zip "$work/test.zip"
+          PATH="$fake:$PATH" NOTARY_APPLE_ID=ci@example.com NOTARY_PASSWORD=x NOTARY_TEAM_ID=ABCDE12345 Scripts/notarize.sh "$work/test.zip"
+          ditto -x -k "$work/test.zip" "$work/unzipped"
+          codesign --verify --deep --strict "$work/unzipped/ProxySwitch.app"
+          if PATH="$fake:$PATH" FAKE_NOTARY_STATUS=Invalid NOTARY_APPLE_ID=ci@example.com NOTARY_PASSWORD=x NOTARY_TEAM_ID=ABCDE12345 \
+              Scripts/notarize.sh "$work/test.zip" > "$work/invalid.log" 2>&1; then
+            cat "$work/invalid.log"; echo "公证没通过时脚本应该失败"; exit 1
+          fi
+          grep -q "fake notary issue" "$work/invalid.log" || { cat "$work/invalid.log"; echo "公证没通过时没有打印苹果的日志"; exit 1; }
+          if Scripts/notarize.sh "$work/test.zip" > "$work/nocreds.log" 2>&1; then
+            cat "$work/nocreds.log"; echo "没有公证凭据时脚本应该失败"; exit 1
+          fi
+          echo "公证脚本的三种情况都符合预期" | tee -a screenshots/summary.txt
           # 公证脚本用到的命令和参数，这个 Xcode 里都有。
           for command in submit wait; do
             help=$(xcrun notarytool "$command" --help 2>&1)
@@ -337,4 +368,10 @@ jobs:
             echo "=====BEGIN icon-preview.jpg====="
             base64 -b 76 -i icon-preview.jpg
             echo "=====END icon-preview.jpg====="
+          fi
+          # 签名相关的检查结果放在日志最后，截图再多也看得到。
+          if [ -f summary.txt ]; then
+            echo "=====BEGIN summary====="
+            cat summary.txt
+            echo "=====END summary====="
           fi

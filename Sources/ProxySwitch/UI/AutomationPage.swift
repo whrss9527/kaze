@@ -307,7 +307,7 @@ struct NetworkRulesSection: View {
                 .frame(width: 120)
                 if matchKind == "ssid" {
                     TextField("", text: $ssid, prompt: Text("Wi‑Fi 名字"))
-                        .frame(width: 140)
+                        .frame(minWidth: 80, maxWidth: 140)
                 } else if matchKind == "current" {
                     Text(network.currentMatch?.title ?? "没有连接网络")
                         .font(.caption)
@@ -325,8 +325,8 @@ struct NetworkRulesSection: View {
                     }
                 }
                 .labelsHidden()
-                .frame(width: 160)
-                Spacer()
+                .frame(minWidth: 110, maxWidth: 160)
+                Spacer(minLength: 0)
                 Button("添加") { add() }
                     .disabled(match == nil)
             }

@@ -78,44 +78,83 @@ struct NodeListSection: View {
                 Button(engine.testing || testingFiltered ? "正在测速…" : (query.isFiltering ? "测速这些" : "测速全部")) { test() }
                     .disabled(engine.testing || testingFiltered || !engine.isRunning)
             }
-            HStack(spacing: 8) {
-                Picker("", selection: $query.source) {
-                    Text("全部来源").tag(UUID?.none)
-                    ForEach(sources) { source in
-                        Text(source.title).tag(UUID(uuidString: source.value))
+            // 窗口窄的时候，两个勾选框换到下一行。
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) {
+                    conditionPickers
+                    conditionToggles
+                    Spacer(minLength: 0)
+                }
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 8) {
+                        conditionPickers
+                        Spacer(minLength: 0)
+                    }
+                    HStack(spacing: 12) {
+                        conditionToggles
+                        Spacer(minLength: 0)
                     }
                 }
-                .labelsHidden()
-                .frame(width: 130)
-                Picker("", selection: $query.region) {
-                    Text("全部地区").tag(String?.none)
-                    ForEach(NodeQuery.regions(in: engine.nodes)) { item in
-                        Text("\(item.region?.title ?? "其他地区") \(item.count)").tag(Optional(item.id))
-                    }
-                }
-                .labelsHidden()
-                .frame(width: 130)
-                Picker("", selection: $query.type) {
-                    Text("全部协议").tag(String?.none)
-                    ForEach(NodeQuery.types(in: engine.nodes)) { item in
-                        Text("\(NodeQuery.typeTitle(item.type)) \(item.count)").tag(Optional(item.type))
-                    }
-                }
-                .labelsHidden()
-                .frame(width: 120)
-                Toggle("只看能用的", isOn: $query.onlyAvailable)
-                    .toggleStyle(.checkbox)
-                Toggle("只看收藏", isOn: $query.onlyFavorites)
-                    .toggleStyle(.checkbox)
-                Spacer()
             }
         }
     }
 
+    @ViewBuilder
+    private var conditionPickers: some View {
+        Picker("", selection: $query.source) {
+            Text("全部来源").tag(UUID?.none)
+            ForEach(sources) { source in
+                Text(source.title).tag(UUID(uuidString: source.value))
+            }
+        }
+        .labelsHidden()
+        .frame(width: 130)
+        Picker("", selection: $query.region) {
+            Text("全部地区").tag(String?.none)
+            ForEach(NodeQuery.regions(in: engine.nodes)) { item in
+                Text("\(item.region?.title ?? "其他地区") \(item.count)").tag(Optional(item.id))
+            }
+        }
+        .labelsHidden()
+        .frame(width: 130)
+        Picker("", selection: $query.type) {
+            Text("全部协议").tag(String?.none)
+            ForEach(NodeQuery.types(in: engine.nodes)) { item in
+                Text("\(NodeQuery.typeTitle(item.type)) \(item.count)").tag(Optional(item.type))
+            }
+        }
+        .labelsHidden()
+        .frame(width: 120)
+    }
+
+    @ViewBuilder
+    private var conditionToggles: some View {
+        Toggle("只看能用的", isOn: $query.onlyAvailable)
+            .toggleStyle(.checkbox)
+        Toggle("只看收藏", isOn: $query.onlyFavorites)
+            .toggleStyle(.checkbox)
+    }
+
+    /// 数量和清除、建组按钮；放不下时按钮换到下一行。
     private var summaryLine: some View {
-        HStack {
-            let shown = results.count
-            Text(query.isFiltering ? "筛出 \(shown) / \(engine.nodes.count) 个节点" : "共 \(engine.nodes.count) 个节点")
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 8) {
+                summaryText
+                Spacer(minLength: 8)
+                filterActions
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                summaryText
+                HStack(spacing: 8) {
+                    filterActions
+                }
+            }
+        }
+    }
+
+    private var summaryText: some View {
+        HStack(spacing: 4) {
+            Text(query.isFiltering ? "筛出 \(results.count) / \(engine.nodes.count) 个节点" : "共 \(engine.nodes.count) 个节点")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             if query.onlyAvailable && !engine.nodes.contains(where: { $0.delay != nil }) {
@@ -123,14 +162,17 @@ struct NodeListSection: View {
                     .font(.caption)
                     .foregroundStyle(.orange)
             }
-            Spacer()
-            if query.isFiltering {
-                Button("清除条件") { query.reset() }
-                    .controlSize(.small)
-                Button("按这些条件建策略组…") { showGroupSheet = true }
-                    .controlSize(.small)
-                    .disabled(results.isEmpty)
-            }
+        }
+    }
+
+    @ViewBuilder
+    private var filterActions: some View {
+        if query.isFiltering {
+            Button("清除条件") { query.reset() }
+                .controlSize(.small)
+            Button("按这些条件建策略组…") { showGroupSheet = true }
+                .controlSize(.small)
+                .disabled(results.isEmpty)
         }
     }
 

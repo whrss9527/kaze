@@ -1,5 +1,5 @@
 #!/bin/bash
-# 编译并组装 ProxySwitch.app（通用二进制），带上内核 mihomo 和 GeoIP 数据库，签名后打成 dist/ProxySwitch-macos.zip。
+# 编译并组装 Kaze.app（通用二进制），带上内核 mihomo 和 GeoIP 数据库，签名后打成 dist/Kaze-macos.zip。
 #   VERSION=1.0.0 Scripts/build-app.sh          发布构建
 #   CONFIG=debug ARCHS="" Scripts/build-app.sh   本机架构的调试构建
 #   SKIP_CORE=1 Scripts/build-app.sh             不下载内核（只能用外部代理的功能）
@@ -29,8 +29,8 @@ fetch() {
 # 有开发者证书时加安全时间戳（公证要求，证书过期后签名照样有效）；ad-hoc 签名不能带时间戳。
 # 由内向外签：先签 mihomo，再签整个 .app，不用 --deep（它会用同样的参数重签里面的东西）。
 IDENTITY="${CODESIGN_IDENTITY:--}"
-# 程序本身带上权限声明（Resources/ProxySwitch.entitlements：读 Wi‑Fi 名字要的定位权限），内核不用。
-ENTITLEMENTS="Resources/ProxySwitch.entitlements"
+# 程序本身带上权限声明（Resources/Kaze.entitlements：读 Wi‑Fi 名字要的定位权限），内核不用。
+ENTITLEMENTS="Resources/Kaze.entitlements"
 sign() {
   local args=(--force --options runtime --sign "$IDENTITY")
   if [ "$IDENTITY" != "-" ]; then
@@ -46,15 +46,15 @@ sign() {
 }
 
 # shellcheck disable=SC2086
-swift build -c "$CONFIG" $ARCHS --product ProxySwitch
+swift build -c "$CONFIG" $ARCHS --product Kaze
 # shellcheck disable=SC2086
 BIN_DIR="$(swift build -c "$CONFIG" $ARCHS --show-bin-path)"
 
-APP="dist/ProxySwitch.app"
+APP="dist/Kaze.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 sed -e "s/__VERSION__/$VERSION/g" -e "s/__BUILD__/$BUILD/g" Resources/Info.plist > "$APP/Contents/Info.plist"
-cp "$BIN_DIR/ProxySwitch" "$APP/Contents/MacOS/ProxySwitch"
+cp "$BIN_DIR/Kaze" "$APP/Contents/MacOS/Kaze"
 cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 # 关于页的赞赏码（「请我喝杯咖啡」）。
 [ -f Resources/donate-wechat.png ] && cp Resources/donate-wechat.png "$APP/Contents/Resources/donate-wechat.png"
@@ -90,17 +90,17 @@ else
   echo "签名：$(codesign -dvv "$APP" 2>&1 | awk -F= '/^Authority=/{print $2; exit}')"
 fi
 
-(cd dist && rm -f ProxySwitch-macos.zip && ditto -c -k --keepParent ProxySwitch.app ProxySwitch-macos.zip)
-echo "已生成 ${APP} 和 dist/ProxySwitch-macos.zip（版本 ${VERSION}）"
+(cd dist && rm -f Kaze-macos.zip && ditto -c -k --keepParent Kaze.app Kaze-macos.zip)
+echo "已生成 ${APP} 和 dist/Kaze-macos.zip（版本 ${VERSION}）"
 
 if [ -n "${THIN_ARCHIVES:-}" ]; then
   # 从通用包里各取一种芯片的部分：内核占了包的大头，单架构的包只有一半大。
   for arch in arm64 x86_64; do
     dir="dist/thin-${arch}"
     rm -rf "$dir" && mkdir -p "$dir"
-    ditto "$APP" "${dir}/ProxySwitch.app"
+    ditto "$APP" "${dir}/Kaze.app"
     missing=""
-    for bin in "${dir}/ProxySwitch.app/Contents/MacOS/ProxySwitch" "${dir}/ProxySwitch.app/Contents/MacOS/mihomo"; do
+    for bin in "${dir}/Kaze.app/Contents/MacOS/Kaze" "${dir}/Kaze.app/Contents/MacOS/mihomo"; do
       [ -f "$bin" ] || continue
       archs="$(lipo -archs "$bin")"
       if [ "$archs" = "$arch" ]; then
@@ -118,12 +118,12 @@ if [ -n "${THIN_ARCHIVES:-}" ]; then
       rm -rf "$dir"
       continue
     fi
-    if [ -f "${dir}/ProxySwitch.app/Contents/MacOS/mihomo" ]; then
-      sign "${dir}/ProxySwitch.app/Contents/MacOS/mihomo"
+    if [ -f "${dir}/Kaze.app/Contents/MacOS/mihomo" ]; then
+      sign "${dir}/Kaze.app/Contents/MacOS/mihomo"
     fi
-    sign "${dir}/ProxySwitch.app" "$ENTITLEMENTS"
-    codesign --verify --deep --strict "${dir}/ProxySwitch.app"
-    (cd "$dir" && ditto -c -k --keepParent ProxySwitch.app "../ProxySwitch-macos-${arch}.zip")
-    echo "已生成 dist/ProxySwitch-macos-${arch}.zip：$(du -h "dist/ProxySwitch-macos-${arch}.zip" | cut -f1)"
+    sign "${dir}/Kaze.app" "$ENTITLEMENTS"
+    codesign --verify --deep --strict "${dir}/Kaze.app"
+    (cd "$dir" && ditto -c -k --keepParent Kaze.app "../Kaze-macos-${arch}.zip")
+    echo "已生成 dist/Kaze-macos-${arch}.zip：$(du -h "dist/Kaze-macos-${arch}.zip" | cut -f1)"
   done
 fi

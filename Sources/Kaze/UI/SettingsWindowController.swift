@@ -468,7 +468,7 @@ struct AboutPage: View {
             Divider()
                 .padding(.horizontal, 40)
             UpdateSection(updater: state.updater)
-            Text("MIT License")
+            Text("GPL-3.0 License")
                 .font(.caption)
                 .foregroundStyle(.tertiary)
         }

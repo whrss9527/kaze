@@ -9,7 +9,7 @@ set -euo pipefail
 : "${CERTIFICATE_P12_BASE64:?没有设置 CERTIFICATE_P12_BASE64（.p12 证书的 base64）}"
 : "${CERTIFICATE_PASSWORD:?没有设置 CERTIFICATE_PASSWORD（导出 .p12 时设的密码）}"
 
-work="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/kaze-signing"
+work="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/proxi-signing"
 rm -rf "$work" && mkdir -p "$work"
 keychain="$work/signing.keychain-db"
 keychain_password="$(/usr/bin/openssl rand -hex 24)"

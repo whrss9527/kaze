@@ -30,7 +30,7 @@ jobs:
           # 顺便把菜单栏图标各种状态的对照图画出来，最后一步打进日志。
           # Team ID 的比对必须拿 runner 上真实的 Developer ID 程序测到，不许跳过。
           mkdir -p screenshots
-          KAZE_ICON_PREVIEW_DIR="$PWD/screenshots" KAZE_REQUIRE_SIGNED_SAMPLE=1 swift test 2>&1 | tee "$RUNNER_TEMP/test.log"
+          PROXI_ICON_PREVIEW_DIR="$PWD/screenshots" PROXI_REQUIRE_SIGNED_SAMPLE=1 swift test 2>&1 | tee "$RUNNER_TEMP/test.log"
           grep -E "testCodeSignatureTeam|Executed [0-9]+ tests" "$RUNNER_TEMP/test.log" | tail -3 > screenshots/summary.txt || true
       - name: 缓存内核下载
         uses: actions/cache@v4
@@ -40,18 +40,18 @@ jobs:
       - name: 打包 .app（本机架构）
         run: |
           VERSION=0.0.0 ARCHS="" THIN_ARCHIVES=1 Scripts/build-app.sh
-          [ -f dist/Kaze-macos-arm64.zip ] || { echo "没有生成 arm64 精简包"; exit 1; }
-          lipo -archs dist/thin-arm64/Kaze.app/Contents/MacOS/mihomo
-          [ "$(lipo -archs dist/thin-arm64/Kaze.app/Contents/MacOS/mihomo)" = "arm64" ] || { echo "精简包里的内核不是单架构"; exit 1; }
-          [ -f dist/Kaze.app/Contents/Resources/donate-wechat.png ] || { echo "关于页的赞赏码没有打包进去"; exit 1; }
+          [ -f dist/Proxi-macos-arm64.zip ] || { echo "没有生成 arm64 精简包"; exit 1; }
+          lipo -archs dist/thin-arm64/Proxi.app/Contents/MacOS/mihomo
+          [ "$(lipo -archs dist/thin-arm64/Proxi.app/Contents/MacOS/mihomo)" = "arm64" ] || { echo "精简包里的内核不是单架构"; exit 1; }
+          [ -f dist/Proxi.app/Contents/Resources/donate-wechat.png ] || { echo "关于页的赞赏码没有打包进去"; exit 1; }
           # 程序和内核都开着 hardened runtime（公证要求），后面的冒烟和更新测试跑的就是这种运行方式。
-          for code in dist/Kaze.app dist/Kaze.app/Contents/MacOS/mihomo dist/thin-arm64/Kaze.app; do
+          for code in dist/Proxi.app dist/Proxi.app/Contents/MacOS/mihomo dist/thin-arm64/Proxi.app; do
             codesign -dv "$code" 2>&1 | grep -q 'flags=.*runtime' || { codesign -dv "$code"; echo "$code 没有开 hardened runtime"; exit 1; }
           done
           ls -la dist/*.zip
       - name: 冒烟启动并截图
         run: |
-          support="$HOME/Library/Application Support/Kaze"
+          support="$HOME/Library/Application Support/Proxi"
           mkdir -p "$support" screenshots
           # 预置几套配置，面板里有内容可看。
           cat > "$support/config.json" <<'JSON'
@@ -92,53 +92,53 @@ jobs:
           sed -i '' "s|file://SUBFILE|file://$(pwd)/feed0/sub.txt|" "$cloud/config.json"
           # 本机状态里同时开着局域网共享：内核会在 0.0.0.0:7892 多开一个给 PS5 这类设备用的入口。
           echo '{"syncEnabled":true,"share":{"enabled":true,"port":7892}}' > "$support/state.json"
-          echo "KAZE_SYNC_DIR=$cloud" >> "$GITHUB_ENV"
-          # 直接运行 .app 里的二进制，环境变量才能传进去；系统仍把它当作 dist/Kaze.app 在运行，kaze:// 命令照常送达。
-          KAZE_SYNC_DIR="$cloud" dist/Kaze.app/Contents/MacOS/Kaze >/dev/null 2>&1 &
+          echo "PROXI_SYNC_DIR=$cloud" >> "$GITHUB_ENV"
+          # 直接运行 .app 里的二进制，环境变量才能传进去；系统仍把它当作 dist/Proxi.app 在运行，proxi:// 命令照常送达。
+          PROXI_SYNC_DIR="$cloud" dist/Proxi.app/Contents/MacOS/Proxi >/dev/null 2>&1 &
           sleep 8
-          if ! pgrep -x Kaze >/dev/null; then
+          if ! pgrep -x Proxi >/dev/null; then
             echo "程序没有在运行"
-            cat "$support/kaze.log" || true
+            cat "$support/proxi.log" || true
             exit 1
           fi
           # 面板打开前先拍一张整屏，留着裁出菜单栏右半边看图标和网速。
           screencapture -x screenshots/desktop.png || true
-          open "kaze://panel"; sleep 3
+          open "proxi://panel"; sleep 3
           screencapture -x screenshots/panel.png || true
-          open "kaze://settings"; sleep 4
+          open "proxi://settings"; sleep 4
           screencapture -x screenshots/settings.png || true
-          open "kaze://settings?page=sync"; sleep 3
+          open "proxi://settings?page=sync"; sleep 3
           screencapture -x screenshots/sync.png || true
           # 内核应该已经跟着假订阅启动，读到订阅里的 3 个节点（「过期节点」被筛掉）加 1 个手动节点。
           for i in $(seq 1 20); do
-            grep -q "读取到 4 个节点" "$support/kaze.log" && break
+            grep -q "读取到 4 个节点" "$support/proxi.log" && break
             sleep 1
           done
-          open "kaze://settings?page=nodes"; sleep 3
+          open "proxi://settings?page=nodes"; sleep 3
           screencapture -x screenshots/nodes.png || true
-          open "kaze://settings?page=rules"; sleep 3
+          open "proxi://settings?page=rules"; sleep 3
           screencapture -x screenshots/rules.png || true
           # 经内核访问一次，连接页里有东西可看。
           curl -s -m 10 -x http://127.0.0.1:7890 -o /dev/null https://cp.cloudflare.com/generate_204 || true
-          open "kaze://settings?page=connections"; sleep 4
+          open "proxi://settings?page=connections"; sleep 4
           screencapture -x screenshots/connections.png || true
           # 局域网共享的入口应该已经监听起来；本机没开代理，所以经它出去的流量直连。
           for i in $(seq 1 20); do
-            grep -q "局域网共享已开启" "$support/kaze.log" && break
+            grep -q "局域网共享已开启" "$support/proxi.log" && break
             sleep 1
           done
-          open "kaze://settings?page=share"; sleep 3
+          open "proxi://settings?page=share"; sleep 3
           screencapture -x screenshots/share.png || true
-          open "kaze://settings?page=automation"; sleep 3
+          open "proxi://settings?page=automation"; sleep 3
           screencapture -x screenshots/automation.png || true
-          open "kaze://settings?page=advanced"; sleep 3
+          open "proxi://settings?page=advanced"; sleep 3
           screencapture -x screenshots/advanced.png || true
           share_code=$(curl -s -m 15 -x http://127.0.0.1:7892 -o /dev/null -w '%{http_code}' https://cp.cloudflare.com/generate_204 || true)
           echo "经共享端口访问外网：$share_code"
           # 网址诊断：本机没开代理，应该得出「直连正常」之类的结论并写进日志。
-          open "kaze://diagnose?url=https://cp.cloudflare.com/generate_204"
+          open "proxi://diagnose?url=https://cp.cloudflare.com/generate_204"
           for i in $(seq 1 40); do
-            grep -q "诊断完成" "$support/kaze.log" && break
+            grep -q "诊断完成" "$support/proxi.log" && break
             sleep 1
           done
           sleep 2
@@ -147,13 +147,13 @@ jobs:
           echo "经内核访问外网：$(curl -s -m 10 -x http://127.0.0.1:7890 -o /dev/null -w '%{http_code}' https://cp.cloudflare.com/generate_204 || true)"
           echo "===== 内核配置 ====="; cat "$support/core/config.yaml" | head -60
           echo "===== 内核日志 ====="; cat "$support/core/core.log" || true
-          echo "===== 程序日志 ====="; cat "$support/kaze.log" || true
-          grep -q "应用了来自 另一台 Mac 的配置" "$support/kaze.log" || { echo "没有从假 iCloud 拉到配置"; exit 1; }
+          echo "===== 程序日志 ====="; cat "$support/proxi.log" || true
+          grep -q "应用了来自 另一台 Mac 的配置" "$support/proxi.log" || { echo "没有从假 iCloud 拉到配置"; exit 1; }
           grep -q "iCloud 来的" "$support/config.json" || { echo "拉到的配置没有写到本机"; cat "$support/config.json"; exit 1; }
-          grep -q "内核已启动" "$support/kaze.log" || { echo "内核没有启动"; exit 1; }
-          grep -q "读取到 4 个节点" "$support/kaze.log" || { echo "没有读到假订阅的 3 个节点和 1 个手动节点"; exit 1; }
+          grep -q "内核已启动" "$support/proxi.log" || { echo "内核没有启动"; exit 1; }
+          grep -q "读取到 4 个节点" "$support/proxi.log" || { echo "没有读到假订阅的 3 个节点和 1 个手动节点"; exit 1; }
           grep -q '"name":"节点代理"' "$support/config.json" || grep -q '"name" : "节点代理"' "$support/config.json" || { echo "没有自动加上「节点代理」配置"; exit 1; }
-          grep -q "局域网共享已开启" "$support/kaze.log" || { echo "局域网共享没有开启"; exit 1; }
+          grep -q "局域网共享已开启" "$support/proxi.log" || { echo "局域网共享没有开启"; exit 1; }
           grep -q 'name: "lan-share"' "$support/core/config.yaml" || { echo "内核配置里没有共享入口"; exit 1; }
           grep -q 'MATCH,DIRECT' "$support/core/config.yaml" || { echo "本机没开代理，共享入口应该直连"; exit 1; }
           grep -q '^sniffer:' "$support/core/config.yaml" || { echo "内核配置里没有开域名嗅探"; exit 1; }
@@ -166,8 +166,8 @@ jobs:
           grep -q 'GEOIP,CN,DIRECT' "$support/core/config.yaml" || { echo "内置的国内直连规则集没有写进内核配置"; exit 1; }
           grep -q '"MATCH,节点"' "$support/core/config.yaml" || { echo "其余流量应该走节点"; exit 1; }
           # 共享开着时应该在阻止空闲睡眠（runner 没有电池，算接电源）。
-          pmset -g assertions | grep -q "Kaze" || { pmset -g assertions; echo "共享期间没有阻止睡眠"; exit 1; }
-          grep -q "诊断完成：cp.cloudflare.com" "$support/kaze.log" || { echo "网址诊断没有跑完"; exit 1; }
+          pmset -g assertions | grep -q "Proxi" || { pmset -g assertions; echo "共享期间没有阻止睡眠"; exit 1; }
+          grep -q "诊断完成：cp.cloudflare.com" "$support/proxi.log" || { echo "网址诊断没有跑完"; exit 1; }
           nc -z 127.0.0.1 7892 || { echo "共享端口没有监听"; exit 1; }
           # 这次新增的配置都进了内核配置，而且内核认了（上面已经确认内核启动、读到节点）。
           core="$support/core/config.yaml"
@@ -183,8 +183,8 @@ jobs:
           grep -q 'ps-probe' "$core" || { echo "服务检测的入口没有写进内核配置"; exit 1; }
           grep -q 'manual' "$core" || { echo "手动节点没有写进内核配置"; exit 1; }
           # 命令行、MCP、导入和撤销：经本机控制接口操作正在运行的程序。
-          cli=dist/Kaze.app/Contents/MacOS/Kaze
-          [ -S "$support/control.sock" ] || { echo "本机控制接口没有开"; cat "$support/kaze.log"; exit 1; }
+          cli=dist/Proxi.app/Contents/MacOS/Proxi
+          [ -S "$support/control.sock" ] || { echo "本机控制接口没有开"; cat "$support/proxi.log"; exit 1; }
           "$cli" status --json | tee "$RUNNER_TEMP/status.json"
           grep -q '"engine"' "$RUNNER_TEMP/status.json" || { echo "命令行读不到状态"; exit 1; }
           "$cli" nodes 测试
@@ -207,7 +207,7 @@ jobs:
           "$cli" import "$RUNNER_TEMP/import.yaml"
           for i in $(seq 1 30); do grep -q 'DOMAIN-SUFFIX,imported.example,导入的组' "$core" && break; sleep 0.5; done
           grep -q 'name: "导入的组"' "$core" || { echo "导入的策略组没有进内核配置"; exit 1; }
-          grep -q 'DOMAIN-SUFFIX,imported.example,导入的组' "$core" || { echo "导入的规则没有进内核配置"; cat "$support/kaze.log" | tail -20; exit 1; }
+          grep -q 'DOMAIN-SUFFIX,imported.example,导入的组' "$core" || { echo "导入的规则没有进内核配置"; cat "$support/proxi.log" | tail -20; exit 1; }
           "$cli" history
           "$cli" undo
           # 经接口导出的配置描述里，手动节点的链接只留名字，密码不出现。
@@ -235,18 +235,18 @@ jobs:
           for i in $(seq 1 20); do "$cli" helper status && break; sleep 0.5; done
           "$cli" helper status || { echo "特权助手没有运行"; sudo cat /Library/Logs/ProxySwitch-helper.log || true; exit 1; }
           fwd_before=$(sysctl -n net.inet.ip.forwarding)
-          printf '%s' '{"kaze":1,"patch":"log-level: info\ntun:\n  route-address: [\"1.1.1.1/32\", \"1.0.0.1/32\"]\n"}' > "$RUNNER_TEMP/tun-patch.json"
+          printf '%s' '{"proxi":1,"patch":"log-level: info\ntun:\n  route-address: [\"1.1.1.1/32\", \"1.0.0.1/32\"]\n"}' > "$RUNNER_TEMP/tun-patch.json"
           "$cli" import "$RUNNER_TEMP/tun-patch.json"
           "$cli" gateway on
           for i in $(seq 1 60); do ifconfig | grep -q "inet 198\.18\." && break; sleep 0.5; done
           helper_log="/Library/Application Support/ProxySwitch/core/core.log"
           if ! ifconfig | grep -q "inet 198\.18\."; then
-            echo "虚拟网卡没有起来"; "$cli" status --json || true; cat "$helper_log" || true; tail -30 "$support/kaze.log"; sudo tail -30 /Library/Logs/ProxySwitch-helper.log || true
+            echo "虚拟网卡没有起来"; "$cli" status --json || true; cat "$helper_log" || true; tail -30 "$support/proxi.log"; sudo tail -30 /Library/Logs/ProxySwitch-helper.log || true
             exit 1
           fi
           for i in $(seq 1 20); do [ "$(sysctl -n net.inet.ip.forwarding)" = "1" ] && break; sleep 0.5; done
-          [ "$(sysctl -n net.inet.ip.forwarding)" = "1" ] || { echo "网关模式没有打开 IP 转发"; tail -20 "$support/kaze.log"; exit 1; }
-          grep -q "经特权助手开着虚拟网卡" "$support/kaze.log" || { echo "内核没有经特权助手启动"; exit 1; }
+          [ "$(sysctl -n net.inet.ip.forwarding)" = "1" ] || { echo "网关模式没有打开 IP 转发"; tail -20 "$support/proxi.log"; exit 1; }
+          grep -q "经特权助手开着虚拟网卡" "$support/proxi.log" || { echo "内核没有经特权助手启动"; exit 1; }
           grep -q '^tun:' "$support/core/config.yaml" || { echo "内核配置里没有虚拟网卡"; exit 1; }
           grep -q 'listen: "0.0.0.0:53"' "$support/core/config.yaml" || { echo "网关模式的 DNS 没有监听"; exit 1; }
           grep -q '"/Library/Application Support/ProxySwitch/core/providers/' "$support/core/config.yaml" || { echo "经助手运行时路径没有换成 root 的目录"; exit 1; }
@@ -266,7 +266,7 @@ jobs:
           case "$served" in 198.18.*) ;; *) echo "网关模式的 DNS 没有回答"; exit 1 ;; esac
           "$cli" status --json | tee "$RUNNER_TEMP/tun-status.json"
           grep -q '"helper" : "ready"\|"helper":"ready"' "$RUNNER_TEMP/tun-status.json" || { echo "状态里的特权助手不对"; exit 1; }
-          open "kaze://settings?page=advanced"; sleep 3
+          open "proxi://settings?page=advanced"; sleep 3
           screencapture -x screenshots/advanced-tun.png || true
           # 关掉网关模式：虚拟网卡拆掉、IP 转发恢复，内核回到本机进程，照常上网。
           "$cli" gateway off
@@ -277,40 +277,40 @@ jobs:
           for i in $(seq 1 30); do pgrep -f "com.whrss9527.proxyswitch.mihomo" >/dev/null || break; sleep 0.5; done
           pgrep -f "com.whrss9527.proxyswitch.mihomo" >/dev/null && { echo "关掉后助手的内核还在运行"; exit 1; }
           for i in $(seq 1 30); do pgrep -x mihomo >/dev/null && break; sleep 0.5; done
-          pgrep -x mihomo >/dev/null || { echo "关掉网关模式后内核没有回到本机进程"; tail -20 "$support/kaze.log"; exit 1; }
+          pgrep -x mihomo >/dev/null || { echo "关掉网关模式后内核没有回到本机进程"; tail -20 "$support/proxi.log"; exit 1; }
           echo "关掉后访问外网：$(curl -s -m 15 -o /dev/null -w '%{http_code}' https://cp.cloudflare.com/generate_204 || true)"
           "$cli" undo
           sudo "$cli" helper uninstall
           [ ! -e /Library/LaunchDaemons/com.whrss9527.proxyswitch.helper.plist ] || { echo "特权助手没有卸载干净"; exit 1; }
           [ ! -e /Library/PrivilegedHelperTools/com.whrss9527.proxyswitch.helper ] || { echo "特权助手没有卸载干净"; exit 1; }
-          pkill -x Kaze || true
+          pkill -x Proxi || true
           sleep 3
           pgrep -x mihomo && { echo "程序退出后内核还在运行"; exit 1; }
           ls -la screenshots
       - uses: actions/upload-artifact@v4
         with:
-          name: Kaze-macos
-          path: dist/Kaze-macos.zip
+          name: Proxi-macos
+          path: dist/Proxi-macos.zip
       - name: 端到端更新测试（本地假发布）
         run: |
           # 输出另存一份：失败时最后一步把末尾打在日志最后（前面是几万行截图）。
           exec > >(tee "$RUNNER_TEMP/update.log") 2>&1
-          support="$HOME/Library/Application Support/Kaze"
+          support="$HOME/Library/Application Support/Proxi"
           # 留一份原版，后面测「从临时位置运行」时用。
-          rm -rf relocate-src && mkdir -p relocate-src && ditto dist/Kaze.app relocate-src/Kaze.app
+          rm -rf relocate-src && mkdir -p relocate-src && ditto dist/Proxi.app relocate-src/Proxi.app
           # 用打包好的程序造一个 9.9.9 版本，放到本地 HTTP 服务器上当作 GitHub 的最新发布：通用包和 arm64 精简包各一份。
           rm -rf feed && mkdir -p feed
-          cp -R dist/Kaze.app feed/Kaze.app
-          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 9.9.9" feed/Kaze.app/Contents/Info.plist
-          codesign --force --deep --sign - feed/Kaze.app
-          (cd feed && ditto -c -k --keepParent Kaze.app Kaze-macos.zip && cp Kaze-macos.zip Kaze-macos-arm64.zip && rm -rf Kaze.app \
-            && shasum -a 256 Kaze-macos.zip Kaze-macos-arm64.zip > SHA256SUMS.txt && cat SHA256SUMS.txt)
-          size=$(stat -f %z feed/Kaze-macos.zip)
+          cp -R dist/Proxi.app feed/Proxi.app
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 9.9.9" feed/Proxi.app/Contents/Info.plist
+          codesign --force --deep --sign - feed/Proxi.app
+          (cd feed && ditto -c -k --keepParent Proxi.app Proxi-macos.zip && cp Proxi-macos.zip Proxi-macos-arm64.zip && rm -rf Proxi.app \
+            && shasum -a 256 Proxi-macos.zip Proxi-macos-arm64.zip > SHA256SUMS.txt && cat SHA256SUMS.txt)
+          size=$(stat -f %z feed/Proxi-macos.zip)
           cat > feed/latest.json <<JSON
           {"tag_name":"v9.9.9","html_url":"http://127.0.0.1:8765/latest.json","published_at":"2026-01-01T00:00:00Z",
            "body":"## 9.9.9\n\n- 这是 CI 里用来测试一键更新的假版本。\n- 下载、校验、替换、重新启动都会走一遍。",
-           "assets":[{"name":"Kaze-macos.zip","size":$size,"browser_download_url":"http://127.0.0.1:8765/Kaze-macos.zip"},
-                     {"name":"Kaze-macos-arm64.zip","size":$size,"browser_download_url":"http://127.0.0.1:8765/Kaze-macos-arm64.zip"},
+           "assets":[{"name":"Proxi-macos.zip","size":$size,"browser_download_url":"http://127.0.0.1:8765/Proxi-macos.zip"},
+                     {"name":"Proxi-macos-arm64.zip","size":$size,"browser_download_url":"http://127.0.0.1:8765/Proxi-macos-arm64.zip"},
                      {"name":"SHA256SUMS.txt","size":100,"browser_download_url":"http://127.0.0.1:8765/SHA256SUMS.txt"}]}
           JSON
           (cd feed && python3 -m http.server 8765 --bind 127.0.0.1 >/dev/null 2>&1 &)
@@ -320,97 +320,97 @@ jobs:
             sleep 0.5
           done
           curl -sSf -o /dev/null http://127.0.0.1:8765/latest.json || { echo "本地的假发布服务器没有起来"; exit 1; }
-          : > "$support/kaze.log"
-          KAZE_UPDATE_URL=http://127.0.0.1:8765/latest.json dist/Kaze.app/Contents/MacOS/Kaze >/dev/null 2>&1 &
+          : > "$support/proxi.log"
+          PROXI_UPDATE_URL=http://127.0.0.1:8765/latest.json dist/Proxi.app/Contents/MacOS/Proxi >/dev/null 2>&1 &
           # 启动 5 秒后自动检查，等它发现新版本。
           for i in $(seq 1 20); do
-            grep -q "有新版本 9.9.9" "$support/kaze.log" && break
+            grep -q "有新版本 9.9.9" "$support/proxi.log" && break
             sleep 1
           done
-          open "kaze://settings?page=about"; sleep 4
+          open "proxi://settings?page=about"; sleep 4
           screencapture -x screenshots/about.png || true
-          open "kaze://panel"; sleep 3
+          open "proxi://panel"; sleep 3
           screencapture -x screenshots/panel-update.png || true
-          open "kaze://update"
+          open "proxi://update"
           # 等下载、替换和重新启动完成。
           version=""
           for i in $(seq 1 60); do
-            version=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" dist/Kaze.app/Contents/Info.plist 2>/dev/null || true)
-            if [ "$version" = "9.9.9" ] && grep -q "已启动，版本 9.9.9" "$support/kaze.log"; then break; fi
+            version=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" dist/Proxi.app/Contents/Info.plist 2>/dev/null || true)
+            if [ "$version" = "9.9.9" ] && grep -q "已启动，版本 9.9.9" "$support/proxi.log"; then break; fi
             sleep 1
           done
           sleep 3
-          open "kaze://settings?page=about"; sleep 4
+          open "proxi://settings?page=about"; sleep 4
           screencapture -x screenshots/about-after.png || true
           echo "===== 日志 ====="
-          cat "$support/kaze.log" || true
+          cat "$support/proxi.log" || true
           echo "================"
           [ "$version" = "9.9.9" ] || { echo "程序没有被替换成 9.9.9（现在是 ${version}）"; exit 1; }
-          grep -q "已启动，版本 9.9.9" "$support/kaze.log" || { echo "新版本没有重新启动"; exit 1; }
-          grep -q "下载 http://127.0.0.1:8765/Kaze-macos-arm64.zip" "$support/kaze.log" || { echo "没有下载本机架构的精简包"; exit 1; }
-          pgrep -x Kaze >/dev/null || { echo "更新后程序没有在运行"; exit 1; }
-          codesign --verify --deep --strict dist/Kaze.app
+          grep -q "已启动，版本 9.9.9" "$support/proxi.log" || { echo "新版本没有重新启动"; exit 1; }
+          grep -q "下载 http://127.0.0.1:8765/Proxi-macos-arm64.zip" "$support/proxi.log" || { echo "没有下载本机架构的精简包"; exit 1; }
+          pgrep -x Proxi >/dev/null || { echo "更新后程序没有在运行"; exit 1; }
+          codesign --verify --deep --strict dist/Proxi.app
           ls -la dist
-          pkill -x Kaze || true
+          pkill -x Proxi || true
           sleep 3
-          rm -rf dist/Kaze.app
+          rm -rf dist/Proxi.app
 
           # 再模拟「在下载文件夹里直接打开、被系统搬到只读的临时位置运行」：更新应该装进「应用程序」、旧的那份移到废纸篓、从新位置重新打开。
-          rm -rf /Applications/Kaze.app
-          : > "$support/kaze.log"
-          KAZE_UPDATE_URL=http://127.0.0.1:8765/latest.json KAZE_TEST_TRANSLOCATED=1 relocate-src/Kaze.app/Contents/MacOS/Kaze >/dev/null 2>&1 &
+          rm -rf /Applications/Proxi.app
+          : > "$support/proxi.log"
+          PROXI_UPDATE_URL=http://127.0.0.1:8765/latest.json PROXI_TEST_TRANSLOCATED=1 relocate-src/Proxi.app/Contents/MacOS/Proxi >/dev/null 2>&1 &
           for i in $(seq 1 20); do
-            grep -q "有新版本 9.9.9" "$support/kaze.log" && break
+            grep -q "有新版本 9.9.9" "$support/proxi.log" && break
             sleep 1
           done
-          app="$PWD/relocate-src/Kaze.app"
-          open -a "$app" "kaze://settings?page=about"; sleep 4
+          app="$PWD/relocate-src/Proxi.app"
+          open -a "$app" "proxi://settings?page=about"; sleep 4
           screencapture -x screenshots/about-relocate.png || true
-          open -a "$app" "kaze://update"
+          open -a "$app" "proxi://update"
           version=""
           for i in $(seq 1 60); do
-            version=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" /Applications/Kaze.app/Contents/Info.plist 2>/dev/null || true)
-            if [ "$version" = "9.9.9" ] && grep -q "已启动，版本 9.9.9" "$support/kaze.log"; then break; fi
+            version=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" /Applications/Proxi.app/Contents/Info.plist 2>/dev/null || true)
+            if [ "$version" = "9.9.9" ] && grep -q "已启动，版本 9.9.9" "$support/proxi.log"; then break; fi
             sleep 1
           done
           sleep 3
           echo "===== 日志（从临时位置运行） ====="
-          cat "$support/kaze.log" || true
+          cat "$support/proxi.log" || true
           echo "================"
           [ "$version" = "9.9.9" ] || { echo "没有装进「应用程序」（/Applications 里的版本是 ${version}）"; exit 1; }
           [ ! -e "$app" ] || { echo "旧的那份没有移到废纸篓"; exit 1; }
-          grep -q "移到废纸篓" "$support/kaze.log" || { echo "日志里没有移到废纸篓的记录"; exit 1; }
-          pgrep -f "/Applications/Kaze.app/Contents/MacOS/Kaze" >/dev/null || { echo "没有从「应用程序」重新打开"; exit 1; }
-          codesign --verify --deep --strict /Applications/Kaze.app
-          if xattr /Applications/Kaze.app | grep -q com.apple.quarantine; then echo "新程序还带着隔离标记"; exit 1; fi
-          pkill -x Kaze || true
+          grep -q "移到废纸篓" "$support/proxi.log" || { echo "日志里没有移到废纸篓的记录"; exit 1; }
+          pgrep -f "/Applications/Proxi.app/Contents/MacOS/Proxi" >/dev/null || { echo "没有从「应用程序」重新打开"; exit 1; }
+          codesign --verify --deep --strict /Applications/Proxi.app
+          if xattr /Applications/Proxi.app | grep -q com.apple.quarantine; then echo "新程序还带着隔离标记"; exit 1; fi
+          pkill -x Proxi || true
           sleep 2
-          rm -rf /Applications/Kaze.app
+          rm -rf /Applications/Proxi.app
           echo "更新测试通过"
       - name: 从改名前的版本（ProxySwitch 0.10.0）一键更新
         run: |
           # 输出另存一份：失败时最后一步把末尾打在日志最后（前面是几万行截图）。
           exec > >(tee "$RUNNER_TEMP/legacy.log") 2>&1
           # 真实的旧版本经本地假发布更新到这次的程序：它找的是旧名字的包（发布流程里另存的副本），装好后还叫 ProxySwitch.app；
-          # 新程序第一次启动时把数据目录挪到 Kaze、把自己改名为 Kaze.app 再重新打开，并改好改名前装的命令行工具。
+          # 新程序第一次启动时把数据目录挪到 Proxi、把自己改名为 Proxi.app 再重新打开，并改好改名前装的命令行工具。
           old_support="$HOME/Library/Application Support/ProxySwitch"
-          support="$HOME/Library/Application Support/Kaze"
+          support="$HOME/Library/Application Support/Proxi"
           rm -rf "$support" "$old_support"
           work="$RUNNER_TEMP/legacy-update"
           rm -rf "$work" && mkdir -p "$work/apps" "$work/feed"
           curl -fsSL --retry 3 --retry-delay 3 -o "$work/old.zip" "https://github.com/${GITHUB_REPOSITORY}/releases/download/v0.10.0/ProxySwitch-macos-arm64.zip"
           ditto -x -k "$work/old.zip" "$work/apps"
           old_app="$work/apps/ProxySwitch.app"
-          new_app="$work/apps/Kaze.app"
+          new_app="$work/apps/Proxi.app"
           [ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$old_app/Contents/Info.plist")" = "0.10.0" ] || { echo "下载的不是 0.10.0"; exit 1; }
           # 和发布流程一样：新名字的包另存几份旧名字的副本，校验和都列上。包是上一步造的 9.9.9。
-          for name in Kaze-macos.zip Kaze-macos-arm64.zip ProxySwitch-macos.zip ProxySwitch-macos-arm64.zip; do
-            cp feed/Kaze-macos.zip "$work/feed/$name"
+          for name in Proxi-macos.zip Proxi-macos-arm64.zip ProxySwitch-macos.zip ProxySwitch-macos-arm64.zip; do
+            cp feed/Proxi-macos.zip "$work/feed/$name"
           done
           (cd "$work/feed" && shasum -a 256 *.zip > SHA256SUMS.txt && cat SHA256SUMS.txt)
-          size=$(stat -f %z "$work/feed/Kaze-macos.zip")
+          size=$(stat -f %z "$work/feed/Proxi-macos.zip")
           assets=""
-          for name in Kaze-macos.zip Kaze-macos-arm64.zip ProxySwitch-macos.zip ProxySwitch-macos-arm64.zip; do
+          for name in Proxi-macos.zip Proxi-macos-arm64.zip ProxySwitch-macos.zip ProxySwitch-macos-arm64.zip; do
             assets="$assets{\"name\":\"$name\",\"size\":$size,\"browser_download_url\":\"http://127.0.0.1:8766/$name\"},"
           done
           cat > "$work/feed/latest.json" <<JSON
@@ -434,7 +434,7 @@ jobs:
           JSON
           # 改名前装过命令行工具：/usr/local/bin/proxyswitch 转给旧程序里的 ProxySwitch。
           sudo mkdir -p /usr/local/bin && sudo chown "$(id -un)" /usr/local/bin
-          rm -f /usr/local/bin/kaze
+          rm -f /usr/local/bin/proxi
           printf '#!/bin/sh\n# ProxySwitch 的命令行工具：proxyswitch help 看用法。\nexec %s "$@"\n' "'$old_app/Contents/MacOS/ProxySwitch'" > /usr/local/bin/proxyswitch
           chmod 755 /usr/local/bin/proxyswitch
           PROXYSWITCH_UPDATE_URL=http://127.0.0.1:8766/latest.json "$old_app/Contents/MacOS/ProxySwitch" >/dev/null 2>&1 &
@@ -446,43 +446,43 @@ jobs:
           # proxyswitch:// 这次的程序也认，用 -a 指定交给旧版本。
           open -a "$old_app" "proxyswitch://update"
           for i in $(seq 1 90); do
-            [ -d "$new_app" ] && grep -q "已启动，版本 9.9.9" "$support/kaze.log" 2>/dev/null && break
+            [ -d "$new_app" ] && grep -q "已启动，版本 9.9.9" "$support/proxi.log" 2>/dev/null && break
             sleep 1
           done
           sleep 3
           echo "===== 日志（旧版本的日志挪过来后接着写） ====="
-          cat "$support/kaze.log" 2>/dev/null || cat "$old_support/proxyswitch.log" 2>/dev/null || true
+          cat "$support/proxi.log" 2>/dev/null || cat "$old_support/proxyswitch.log" 2>/dev/null || true
           echo "================"
           ls -la "$work/apps"
-          [ -d "$new_app" ] || { echo "程序没有改名为 Kaze.app"; exit 1; }
+          [ -d "$new_app" ] || { echo "程序没有改名为 Proxi.app"; exit 1; }
           [ ! -e "$old_app" ] || { echo "旧名字的程序还在"; exit 1; }
-          [ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$new_app/Contents/Info.plist")" = "9.9.9" ] || { echo "Kaze.app 不是新版本"; exit 1; }
-          grep -q "下载 http://127.0.0.1:8766/ProxySwitch-macos-arm64.zip" "$support/kaze.log" || { echo "旧版本没有按旧名字下载精简包"; exit 1; }
-          grep -q "数据目录已从" "$support/kaze.log" || { echo "日志里没有挪数据目录的记录"; exit 1; }
-          grep -q "程序已改名" "$support/kaze.log" || { echo "日志里没有改名的记录"; exit 1; }
-          grep -q "已启动，版本 9.9.9" "$support/kaze.log" || { echo "改名后没有重新打开"; exit 1; }
+          [ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$new_app/Contents/Info.plist")" = "9.9.9" ] || { echo "Proxi.app 不是新版本"; exit 1; }
+          grep -q "下载 http://127.0.0.1:8766/ProxySwitch-macos-arm64.zip" "$support/proxi.log" || { echo "旧版本没有按旧名字下载精简包"; exit 1; }
+          grep -q "数据目录已从" "$support/proxi.log" || { echo "日志里没有挪数据目录的记录"; exit 1; }
+          grep -q "程序已改名" "$support/proxi.log" || { echo "日志里没有改名的记录"; exit 1; }
+          grep -q "已启动，版本 9.9.9" "$support/proxi.log" || { echo "改名后没有重新打开"; exit 1; }
           [ ! -e "$old_support" ] || { echo "旧的数据目录还在"; ls -la "$old_support"; exit 1; }
           grep -q "旧配置" "$support/config.json" || { echo "配置没有带过来"; cat "$support/config.json"; exit 1; }
           python3 - "$support/config.json" <<'PY' || { echo "订阅里的文件地址没有换成新目录"; cat "$support/config.json"; exit 1; }
           import json, sys
           urls = [s["url"] for s in json.load(open(sys.argv[1]))["engine"]["subscriptions"]]
           print(urls)
-          sys.exit(0 if urls and all("/Kaze/imports/local.yaml" in u and "/ProxySwitch/" not in u for u in urls) else 1)
+          sys.exit(0 if urls and all("/Proxi/imports/local.yaml" in u and "/ProxySwitch/" not in u for u in urls) else 1)
           PY
-          pgrep -f "$new_app/Contents/MacOS/Kaze" >/dev/null || { echo "没有从 Kaze.app 重新打开"; exit 1; }
-          # 改名前的命令行工具改好了，还多了一个 kaze。
-          for i in $(seq 1 20); do grep -q "$new_app/Contents/MacOS/Kaze" /usr/local/bin/proxyswitch && break; sleep 0.5; done
+          pgrep -f "$new_app/Contents/MacOS/Proxi" >/dev/null || { echo "没有从 Proxi.app 重新打开"; exit 1; }
+          # 改名前的命令行工具改好了，还多了一个 proxi。
+          for i in $(seq 1 20); do grep -q "$new_app/Contents/MacOS/Proxi" /usr/local/bin/proxyswitch && break; sleep 0.5; done
           cat /usr/local/bin/proxyswitch
-          grep -q "$new_app/Contents/MacOS/Kaze" /usr/local/bin/proxyswitch || { echo "改名前的 proxyswitch 命令没有改好"; exit 1; }
-          grep -q "$new_app/Contents/MacOS/Kaze" /usr/local/bin/kaze || { echo "没有装上 kaze 命令"; exit 1; }
-          /usr/local/bin/kaze version | tee "$RUNNER_TEMP/kaze-version.txt"
-          grep -q "Kaze 9.9.9" "$RUNNER_TEMP/kaze-version.txt" || { echo "kaze 命令不能用"; exit 1; }
+          grep -q "$new_app/Contents/MacOS/Proxi" /usr/local/bin/proxyswitch || { echo "改名前的 proxyswitch 命令没有改好"; exit 1; }
+          grep -q "$new_app/Contents/MacOS/Proxi" /usr/local/bin/proxi || { echo "没有装上 proxi 命令"; exit 1; }
+          /usr/local/bin/proxi version | tee "$RUNNER_TEMP/proxi-version.txt"
+          grep -q "Proxi 9.9.9" "$RUNNER_TEMP/proxi-version.txt" || { echo "proxi 命令不能用"; exit 1; }
           /usr/local/bin/proxyswitch status --json > "$RUNNER_TEMP/legacy-status.json" || true
           grep -q '"engine"' "$RUNNER_TEMP/legacy-status.json" || { echo "改名前的 proxyswitch 命令读不到状态"; cat "$RUNNER_TEMP/legacy-status.json"; exit 1; }
           codesign --verify --deep --strict "$new_app"
-          pkill -x Kaze || true
+          pkill -x Proxi || true
           sleep 2
-          rm -f /usr/local/bin/kaze /usr/local/bin/proxyswitch
+          rm -f /usr/local/bin/proxi /usr/local/bin/proxyswitch
           echo "从改名前的版本更新的测试通过"
       - name: 签名流程自测（临时的自签名证书）
         run: |
@@ -497,7 +497,7 @@ jobs:
           x509_extensions = ext
           prompt = no
           [dn]
-          CN = Kaze CI Test
+          CN = Proxi CI Test
           [ext]
           basicConstraints = critical, CA:false
           keyUsage = critical, digitalSignature
@@ -512,20 +512,20 @@ jobs:
           keychain=$(awk -F= '/^CODESIGN_KEYCHAIN=/{print $2}' "$work/env")
           [ -n "$identity" ] && [ -n "$keychain" ] || { echo "导入脚本没有给出签名身份和钥匙串"; exit 1; }
           CODESIGN_IDENTITY="$identity" CODESIGN_KEYCHAIN="$keychain" VERSION=0.0.0 ARCHS="" THIN_ARCHIVES=1 Scripts/build-app.sh
-          for app in dist/Kaze.app dist/thin-arm64/Kaze.app; do
+          for app in dist/Proxi.app dist/thin-arm64/Proxi.app; do
             for code in "$app" "$app/Contents/MacOS/mihomo"; do
               info=$(codesign -dvv "$code" 2>&1)
-              echo "$info" | grep -q "Authority=Kaze CI Test" || { echo "$info"; echo "$code 不是用证书签的"; exit 1; }
+              echo "$info" | grep -q "Authority=Proxi CI Test" || { echo "$info"; echo "$code 不是用证书签的"; exit 1; }
               echo "$info" | grep -q "flags=.*runtime" || { echo "$info"; echo "$code 没有开 hardened runtime"; exit 1; }
               echo "$info" | grep -q "^Timestamp=" || { echo "$info"; echo "$code 没有安全时间戳"; exit 1; }
             done
           done
-          codesign -dvv dist/Kaze.app 2>&1 | grep -E "^(Authority|Timestamp|TeamIdentifier)=|flags=" | tee -a screenshots/summary.txt
+          codesign -dvv dist/Proxi.app 2>&1 | grep -E "^(Authority|Timestamp|TeamIdentifier)=|flags=" | tee -a screenshots/summary.txt
           # 用证书签名的程序照样能启动。
-          dist/Kaze.app/Contents/MacOS/Kaze >/dev/null 2>&1 &
+          dist/Proxi.app/Contents/MacOS/Proxi >/dev/null 2>&1 &
           sleep 6
-          pgrep -x Kaze >/dev/null || { echo "用证书签名的程序没有在运行"; exit 1; }
-          pkill -x Kaze || true
+          pgrep -x Proxi >/dev/null || { echo "用证书签名的程序没有在运行"; exit 1; }
+          pkill -x Proxi || true
           sleep 2
           security delete-keychain "$keychain"
           # 公证脚本的流程：用假的 xcrun（只模拟 notarytool 和 stapler）走一遍通过、没通过、没有凭据三种情况。
@@ -543,10 +543,10 @@ jobs:
           EOF
           printf '#!/bin/bash\necho "$*: accepted"\n' > "$fake/spctl"
           chmod +x "$fake/xcrun" "$fake/spctl"
-          cp dist/Kaze-macos-arm64.zip "$work/test.zip"
+          cp dist/Proxi-macos-arm64.zip "$work/test.zip"
           PATH="$fake:$PATH" NOTARY_APPLE_ID=ci@example.com NOTARY_PASSWORD=x NOTARY_TEAM_ID=ABCDE12345 Scripts/notarize.sh "$work/test.zip"
           ditto -x -k "$work/test.zip" "$work/unzipped"
-          codesign --verify --deep --strict "$work/unzipped/Kaze.app"
+          codesign --verify --deep --strict "$work/unzipped/Proxi.app"
           if PATH="$fake:$PATH" FAKE_NOTARY_STATUS=Invalid NOTARY_APPLE_ID=ci@example.com NOTARY_PASSWORD=x NOTARY_TEAM_ID=ABCDE12345 \
               Scripts/notarize.sh "$work/test.zip" > "$work/invalid.log" 2>&1; then
             cat "$work/invalid.log"; echo "公证没通过时脚本应该失败"; exit 1

@@ -1,14 +1,14 @@
 #!/bin/bash
 # 把签好名的 zip 提交苹果公证，通过后把公证票据钉（staple）到 .app 上，再重新打成同名的 zip。
 # 钉上票据后，用户第一次打开时就算没联网，系统也能确认它经过了公证。
-#   Scripts/notarize.sh dist/Kaze-macos.zip dist/Kaze-macos-arm64.zip …
+#   Scripts/notarize.sh dist/Proxi-macos.zip dist/Proxi-macos-arm64.zip …
 # 凭据二选一（发布流程从 GitHub Secrets 传进来，见 docs/signing.md）：
 #   App Store Connect API 密钥：NOTARY_KEY_P8（.p8 文件的内容，或者它的 base64）、NOTARY_KEY_ID、NOTARY_ISSUER_ID（个人密钥不填）
 #   Apple ID：NOTARY_APPLE_ID、NOTARY_PASSWORD（App 专用密码）、NOTARY_TEAM_ID
 set -euo pipefail
 
 [ $# -gt 0 ] || { echo "用法：Scripts/notarize.sh 文件.zip …"; exit 1; }
-work="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/kaze-notary"
+work="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/proxi-notary"
 rm -rf "$work" && mkdir -p "$work"
 trap 'rm -f "$work/AuthKey.p8"' EXIT
 
@@ -75,12 +75,12 @@ for zip in "$@"; do
   dir="$work/staple-${name%.zip}"
   rm -rf "$dir" && mkdir -p "$dir"
   ditto -x -k "$zip" "$dir"
-  app="$dir/Kaze.app"
+  app="$dir/Proxi.app"
   xcrun stapler staple "$app"
   xcrun stapler validate "$app"
   spctl --assess --type execute --verbose=2 "$app"
   target="$(cd "$(dirname "$zip")" && pwd)/$name"
   rm -f "$target"
-  (cd "$dir" && ditto -c -k --keepParent Kaze.app "$target")
+  (cd "$dir" && ditto -c -k --keepParent Proxi.app "$target")
   echo "${name}：已钉上公证票据"
 done

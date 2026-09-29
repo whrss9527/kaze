@@ -1,7 +1,8 @@
 name: release
 
-# 推送 v* 标签时：跑单元测试，打包通用二进制的 ProxySwitch.app（版本号取自标签），
+# 推送 v* 标签时：跑单元测试，打包通用二进制的 Kaze.app（版本号取自标签），
 # 用 CHANGELOG.md 里对应版本的内容创建 GitHub Release 并上传 zip 和校验和。
+# 改名前的版本（ProxySwitch）的一键更新按 ProxySwitch-macos*.zip 找安装包，所以同样的包再用旧名字各传一份。
 # Release 先以草稿创建，附件上传完才发布。
 # 也可以在 Actions 页面手动运行：填一个标签名，标签不存在时在所选分支的最新提交上创建并推送，存在时重新上传附件。
 # CI 在合并进 main、发现 CHANGELOG.md 最上面的版本还没有标签时，也会调用这里自动发布（见 ci.yml 的「发布新版本」）。
@@ -86,10 +87,15 @@ jobs:
           NOTARY_APPLE_ID: ${{ secrets.NOTARY_APPLE_ID }}
           NOTARY_PASSWORD: ${{ secrets.NOTARY_PASSWORD }}
           NOTARY_TEAM_ID: ${{ secrets.NOTARY_TEAM_ID }}
-        run: Scripts/notarize.sh dist/ProxySwitch-macos.zip dist/ProxySwitch-macos-arm64.zip dist/ProxySwitch-macos-x86_64.zip
-      - name: 校验和
+        run: Scripts/notarize.sh dist/Kaze-macos.zip dist/Kaze-macos-arm64.zip dist/Kaze-macos-x86_64.zip
+      - name: 旧名字的副本和校验和
         run: |
-          cd dist && shasum -a 256 ProxySwitch-macos.zip ProxySwitch-macos-arm64.zip ProxySwitch-macos-x86_64.zip > SHA256SUMS.txt && cat SHA256SUMS.txt
+          cd dist
+          # 旧版本的一键更新找这几个名字：它把新程序原地装在 ProxySwitch.app，新程序第一次启动时把自己改名为 Kaze.app。
+          for arch in "" -arm64 -x86_64; do
+            cp "Kaze-macos${arch}.zip" "ProxySwitch-macos${arch}.zip"
+          done
+          shasum -a 256 Kaze-macos.zip Kaze-macos-arm64.zip Kaze-macos-x86_64.zip ProxySwitch-macos.zip ProxySwitch-macos-arm64.zip ProxySwitch-macos-x86_64.zip > SHA256SUMS.txt && cat SHA256SUMS.txt
           ls -la *.zip
       - name: 发布
         env:
@@ -101,9 +107,10 @@ jobs:
             printf '\n已用 Developer ID 签名并通过苹果公证，下载解压后双击就能打开。\n' >> notes.md
           fi
           if ! gh release view "$TAG" >/dev/null 2>&1; then
-            gh release create "$TAG" --draft --title "ProxySwitch for Mac $TAG" --notes-file notes.md
+            gh release create "$TAG" --draft --title "Kaze $TAG" --notes-file notes.md
           fi
-          gh release upload "$TAG" dist/ProxySwitch-macos.zip dist/ProxySwitch-macos-arm64.zip dist/ProxySwitch-macos-x86_64.zip dist/SHA256SUMS.txt --clobber
+          gh release upload "$TAG" dist/Kaze-macos.zip dist/Kaze-macos-arm64.zip dist/Kaze-macos-x86_64.zip \
+            dist/ProxySwitch-macos.zip dist/ProxySwitch-macos-arm64.zip dist/ProxySwitch-macos-x86_64.zip dist/SHA256SUMS.txt --clobber
           gh release edit "$TAG" --draft=false --latest
           echo "已发布到 https://github.com/${GITHUB_REPOSITORY}/releases/tag/$TAG"
       - name: 删除临时钥匙串

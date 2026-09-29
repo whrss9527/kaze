@@ -65,14 +65,11 @@ enum UpdateChecker {
 
     static var releasesURL: URL { URL(string: "https://github.com/\(AppInfo.repository)/releases")! }
 
-    static var apiURL: URL { apiURLs[0] }
-
-    /// 依次查询的地址：新仓库名查不到（404）时再按改名前的仓库名查。
-    static var apiURLs: [URL] {
+    static var apiURL: URL {
         if let text = ProcessInfo.processInfo.environment[overrideVariable], let url = URL(string: text) {
-            return [url]
+            return url
         }
-        return [AppInfo.repository, AppInfo.legacyRepository].map { URL(string: "https://api.github.com/repos/\($0)/releases/latest")! }
+        return URL(string: "https://api.github.com/repos/\(AppInfo.repository)/releases/latest")!
     }
 
     static var currentVersion: String {
@@ -117,21 +114,16 @@ enum UpdateChecker {
         route.apply(to: configuration)
         let session = URLSession(configuration: configuration)
         defer { session.finishTasksAndInvalidate() }
-        let urls = apiURLs
-        for (index, url) in urls.enumerated() {
-            var request = URLRequest(url: url)
-            request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-            request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
-            request.cachePolicy = .reloadIgnoringLocalCacheData
-            let (data, response) = try await session.data(for: request)
-            if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
-                if http.statusCode == 404 && index + 1 < urls.count { continue }
-                throw UpdateError.server(http.statusCode)
-            }
-            guard let release = parse(data) else { throw UpdateError.badResponse }
-            return release
+        var request = URLRequest(url: apiURL)
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        let (data, response) = try await session.data(for: request)
+        if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+            throw UpdateError.server(http.statusCode)
         }
-        throw UpdateError.badResponse
+        guard let release = parse(data) else { throw UpdateError.badResponse }
+        return release
     }
 
     /// 解析 GitHub releases 接口返回的 JSON；压缩包优先选本机架构的精简包。

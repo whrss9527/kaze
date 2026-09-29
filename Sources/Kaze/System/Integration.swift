@@ -246,8 +246,6 @@ enum TerminalCommands {
 /// 项目地址；换仓库只需要改这里。
 enum AppInfo {
     static let repository = "whrss9527/kaze"
-    /// 改名前的仓库名。GitHub 会把旧名字转到新仓库；仓库还没改名时新名字查不到，检查更新就用它。
-    static let legacyRepository = "whrss9527/proxyswitch-mac"
     static var repositoryURL: URL { URL(string: "https://github.com/\(repository)")! }
     static var issuesURL: URL { URL(string: "https://github.com/\(repository)/issues")! }
 }

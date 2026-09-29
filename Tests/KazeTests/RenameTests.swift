@@ -166,12 +166,8 @@ final class RenameTests: XCTestCase {
         """
         XCTAssertEqual(UpdateChecker.parse(Data(json.utf8), architecture: "arm64")?.archiveName, "Kaze-macos-arm64.zip")
         XCTAssertEqual(UpdateChecker.parse(Data(json.utf8), architecture: "x86_64")?.archiveName, "Kaze-macos.zip")
-        // 先查新仓库名，查不到（仓库还没改名）再查旧的。
         if ProcessInfo.processInfo.environment[UpdateChecker.overrideVariable] == nil {
-            XCTAssertEqual(UpdateChecker.apiURLs.map(\.absoluteString), [
-                "https://api.github.com/repos/whrss9527/kaze/releases/latest",
-                "https://api.github.com/repos/whrss9527/proxyswitch-mac/releases/latest",
-            ])
+            XCTAssertEqual(UpdateChecker.apiURL.absoluteString, "https://api.github.com/repos/whrss9527/kaze/releases/latest")
         }
         XCTAssertEqual(InstallLocation.appName, "Kaze.app")
     }

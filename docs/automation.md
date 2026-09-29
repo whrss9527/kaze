@@ -1,6 +1,6 @@
 # 自动化：命令行、AI 助手、快捷指令和配置导入
 
-Kaze 在本机开了一个控制接口（Unix 套接字 `~/Library/Application Support/Kaze/control.sock`，只有你自己的账户能连）。命令行工具、MCP 服务器（给 AI 助手用）和 URL 命令都经它操作正在运行的 Kaze，用的是同一套工具。
+Proxi 在本机开了一个控制接口（Unix 套接字 `~/Library/Application Support/Proxi/control.sock`，只有你自己的账户能连）。命令行工具、MCP 服务器（给 AI 助手用）和 URL 命令都经它操作正在运行的 Proxi，用的是同一套工具。
 
 能做到哪一步由设置 →「自动化」里的**权限**决定：
 
@@ -11,43 +11,43 @@ Kaze 在本机开了一个控制接口（Unix 套接字 `~/Library/Application S
 | 日常操作 | 另外可以开关代理、切换节点 / 策略组 / 模式、测速、服务检测、更新订阅和规则、断开连接、开关局域网共享 |
 | 完全控制（默认） | 另外可以加删规则、订阅、节点、规则集、策略组，导入配置，撤销 |
 
-改配置的操作都记在「自动化」页的**操作记录**里，可以撤销（命令行 `kaze undo`，AI 助手用 `undo` 工具）。设置窗口里的导入也记在这里。
+改配置的操作都记在「自动化」页的**操作记录**里，可以撤销（命令行 `proxi undo`，AI 助手用 `undo` 工具）。设置窗口里的导入也记在这里。
 
 ## 命令行
 
-在「自动化」页点「安装命令行工具」，会在 `/usr/local/bin/kaze` 放一个小脚本（要输一次管理员密码）；不装也可以直接运行 `/Applications/Kaze.app/Contents/MacOS/Kaze <命令>`。Kaze 没在运行时会自动在后台打开。改名前装过 `proxyswitch` 命令的，它会一直转给新程序，照样能用。
+在「自动化」页点「安装命令行工具」，会在 `/usr/local/bin/proxi` 放一个小脚本（要输一次管理员密码）；不装也可以直接运行 `/Applications/Proxi.app/Contents/MacOS/Proxi <命令>`。Proxi 没在运行时会自动在后台打开。改名前装过 `proxyswitch` 命令的，它会一直转给新程序，照样能用。
 
 ```bash
-kaze status                      # 代理现在的状态
-kaze on 节点代理                  # 开启某个配置（不写就开上次用的）
-kaze off
-kaze nodes 香港                   # 列出名字里有「香港」的节点和延迟
-kaze node 香港 02                 # 切换节点（名字可以只写一部分，唯一匹配就行）
-kaze node auto                   # 自动选择
-kaze group 流媒体 日本 01          # 给策略组选成员
-kaze mode global                 # 全局代理；rule 是规则分流
-kaze test 香港                    # 测名字里有「香港」的节点的延迟
-kaze services                    # 检测 ChatGPT、Netflix 等服务经现在的节点能不能用
-kaze services 日本 01             # 经某个节点检测（不影响正在用的节点）
-kaze diagnose https://www.youtube.com
-kaze tun on                      # 增强模式：所有程序都经过内置代理（要先装特权助手）
-kaze gateway on                  # 网关模式：设备的路由器和 DNS 填这台 Mac
-sudo kaze helper install         # 安装特权助手；uninstall 卸载，status 看状态（不用 sudo）
-kaze rule add openai.com 美国      # 加规则：openai.com 走「美国」这个策略组
-kaze rule add /Applications/Telegram.app proxy --type app
-kaze rule add 192.168.1.20 direct --type device
-kaze rule remove openai.com
-kaze final direct                # 其余流量直连；follow 跟随规则文件
-kaze sub add https://example.com/sub 机场
-kaze add-nodes 'trojan://密码@example.com:443#日本'
-kaze ruleset add 广告拦截 reject    # 从规则库按名字添加
-kaze group-add 美国 url-test 美|US
-kaze import ~/Downloads/config.yaml --preview   # 预览
-kaze import https://example.com/config.yaml     # 合并导入；--replace 替换同类设置
-kaze export describe > kaze.json         # 配置描述；backup 是备份，core 是内核配置（订阅地址、节点链接都隐藏）
-kaze history                     # 操作记录
-kaze undo                        # 撤销最近一次改动
-kaze call select_node '{"name":"香港"}'          # 直接调用某个工具
+proxi status                      # 代理现在的状态
+proxi on 节点代理                  # 开启某个配置（不写就开上次用的）
+proxi off
+proxi nodes 香港                   # 列出名字里有「香港」的节点和延迟
+proxi node 香港 02                 # 切换节点（名字可以只写一部分，唯一匹配就行）
+proxi node auto                   # 自动选择
+proxi group 流媒体 日本 01          # 给策略组选成员
+proxi mode global                 # 全局代理；rule 是规则分流
+proxi test 香港                    # 测名字里有「香港」的节点的延迟
+proxi services                    # 检测 ChatGPT、Netflix 等服务经现在的节点能不能用
+proxi services 日本 01             # 经某个节点检测（不影响正在用的节点）
+proxi diagnose https://www.youtube.com
+proxi tun on                      # 增强模式：所有程序都经过内置代理（要先装特权助手）
+proxi gateway on                  # 网关模式：设备的路由器和 DNS 填这台 Mac
+sudo proxi helper install         # 安装特权助手；uninstall 卸载，status 看状态（不用 sudo）
+proxi rule add openai.com 美国      # 加规则：openai.com 走「美国」这个策略组
+proxi rule add /Applications/Telegram.app proxy --type app
+proxi rule add 192.168.1.20 direct --type device
+proxi rule remove openai.com
+proxi final direct                # 其余流量直连；follow 跟随规则文件
+proxi sub add https://example.com/sub 机场
+proxi add-nodes 'trojan://密码@example.com:443#日本'
+proxi ruleset add 广告拦截 reject    # 从规则库按名字添加
+proxi group-add 美国 url-test 美|US
+proxi import ~/Downloads/config.yaml --preview   # 预览
+proxi import https://example.com/config.yaml     # 合并导入；--replace 替换同类设置
+proxi export describe > proxi.json         # 配置描述；backup 是备份，core 是内核配置（订阅地址、节点链接都隐藏）
+proxi history                     # 操作记录
+proxi undo                        # 撤销最近一次改动
+proxi call select_node '{"name":"香港"}'          # 直接调用某个工具
 ```
 
 加 `--json` 输出完整的 JSON。退出码：0 成功，1 出错，2 用法不对，3 权限不够。
@@ -59,8 +59,8 @@ kaze call select_node '{"name":"香港"}'          # 直接调用某个工具
 ```json
 {
   "mcpServers": {
-    "kaze": {
-      "command": "/Applications/Kaze.app/Contents/MacOS/Kaze",
+    "proxi": {
+      "command": "/Applications/Proxi.app/Contents/MacOS/Proxi",
       "args": ["mcp"]
     }
   }
@@ -70,7 +70,7 @@ kaze call select_node '{"name":"香港"}'          # 直接调用某个工具
 Claude Code 可以用命令添加：
 
 ```bash
-claude mcp add kaze -- /Applications/Kaze.app/Contents/MacOS/Kaze mcp
+claude mcp add proxi -- /Applications/Proxi.app/Contents/MacOS/Proxi mcp
 ```
 
 「自动化」页里有现成的配置，路径是按程序实际的位置生成的，点「复制」就行。改名前加过的配置写的是 `ProxySwitch.app` 里的路径，要换成新的。
@@ -89,7 +89,7 @@ MCP 服务器初始化时会把使用规则告诉 AI 助手：先看状态再动
 | `list_subscriptions` | 查看 | 订阅（地址隐藏）和手动节点 |
 | `list_connections` | 查看 | 现在开着的和最近的连接（`filter`、`limit`） |
 | `get_traffic` | 查看 | 按节点、按程序和设备、按天的流量 |
-| `get_logs` | 查看 | Kaze 和内核的日志（`lines`） |
+| `get_logs` | 查看 | Proxi 和内核的日志（`lines`） |
 | `diagnose_url` | 查看 | 诊断网址（`url`）：命中的规则、出口、结论 |
 | `export_config` | 查看 | 导出（`format`：`describe` / `backup` / `core`），订阅地址和节点链接隐藏 |
 | `preview_import` | 查看 | 预览导入（`content` 或 `url`），不改动 |
@@ -118,13 +118,13 @@ MCP 服务器初始化时会把使用规则告诉 AI 助手：先看状态再动
 
 订阅地址里常带着令牌，经接口列出和导出时只留主机名（`https://example.com/__hidden__`）；私人的规则集地址也一样（规则库和 GitHub 这类公开网站上的照原样）。手动节点的链接里有密码，导出时只留名字（`hidden://香港 01`）。把这样的配置描述或备份再导入时，隐藏了的订阅、规则集和节点按名字用现有的，改过的其他设置（筛选、前缀、去向……）照样生效；现有设置里没有同名的就跳过。
 
-## Kaze 配置描述（JSON）
+## Proxi 配置描述（JSON）
 
 导入时认得的一种格式，也是 AI 助手生成配置最方便的写法。字段都可以省略，写了哪些就导入哪些（改名前导出的文件开头是 `"proxyswitch": 1`，照样能导入）：
 
 ```json
 {
-  "kaze": 1,
+  "proxi": 1,
   "mode": "rule",
   "subscriptions": [
     {"name": "机场", "url": "https://example.com/sub", "exclude": "过期|剩余", "prefix": "", "dialer": null}
@@ -174,38 +174,38 @@ MCP 服务器初始化时会把使用规则告诉 AI 助手：先看状态再动
 
 ## 其他能导入的格式
 
-- **Clash / mihomo 的 YAML**：`proxies` 里的节点存成一条本机订阅；`proxy-providers` 加成订阅（筛选和名字前缀也带上）；`proxy-groups` 变成策略组，成员里的节点名变成按名字筛选，别的组变成包含的组；`rules` 连同引用的 `rule-providers`（网络上的和 inline 的）存成一个规则集，按文件里的策略和 `MATCH` 走；`.mrs` 规则集单独加进规则集列表；`dns`、`hosts`、`ipv6`、`mode` 也导入。端口、TUN、监听这些由 Kaze 管理的设置不导入，`GEOSITE`、`SUB-RULE` 这类规则会提示。
+- **Clash / mihomo 的 YAML**：`proxies` 里的节点存成一条本机订阅；`proxy-providers` 加成订阅（筛选和名字前缀也带上）；`proxy-groups` 变成策略组，成员里的节点名变成按名字筛选，别的组变成包含的组；`rules` 连同引用的 `rule-providers`（网络上的和 inline 的）存成一个规则集，按文件里的策略和 `MATCH` 走；`.mrs` 规则集单独加进规则集列表；`dns`、`hosts`、`ipv6`、`mode` 也导入。端口、TUN、监听这些由 Proxi 管理的设置不导入，`GEOSITE`、`SUB-RULE` 这类规则会提示。
 - **Surge / 小火箭的 .conf**：`[Proxy]` 里的 ss、vmess、trojan、http、socks5、hysteria2、snell、tuic 节点转换后存成本机订阅；`[Proxy Group]` 变成策略组（`policy-regex-filter` 当筛选）；`[Rule]` 存成规则集（`DOMAIN-SET`、`RULE-SET` 下载后在原来的位置并入，`AND` / `OR` / `NOT` 组合规则支持）；`[Host]`、`[General]` 的 DNS 和 IPv6 也导入。`[URL Rewrite]`、`[MITM]`、`[Script]` 不导入。
 - **Quantumult X 的配置**：`[server_remote]` 加成订阅，`[server_local]` 里的节点转换，`[policy]` 变成策略组（`static` 手动选择、`url-latency-benchmark` 自动选择、`available` 故障转移、`round-robin` / `dest-hash` 负载均衡），`[filter_remote]` 加成规则集（`force-policy` 是统一去向），`[filter_local]` 存成规则集，`[dns]` 的服务器和按域名指定的 DNS 也导入。
 - **节点链接**：`ss://`、`ssr://`、`vmess://`、`vless://`、`trojan://`、`hysteria2://`、`tuic://`、`anytls://` 等，一行一条或整段 base64，加成手动节点。
 - **规则列表**：纯规则列表加成规则集。
 - **网址**：填网址时先下载再认格式。内容是节点列表或只有节点的 Clash 配置时直接加成订阅（以后自动更新）；是完整的 Clash / Surge 配置时，订阅和规则也直接用这个网址，跟着它更新。
-- **Kaze 备份**：设置 →「高级」→「导出」→「完整备份」，导入时选「替换」原样恢复。经命令行导出的备份里订阅地址和节点链接是隐藏的：在这台 Mac 上还能恢复（隐藏的按名字用现有的），换一台 Mac 就不行了。
+- **Proxi 备份**：设置 →「高级」→「导出」→「完整备份」，导入时选「替换」原样恢复。经命令行导出的备份里订阅地址和节点链接是隐藏的：在这台 Mac 上还能恢复（隐藏的按名字用现有的），换一台 Mac 就不行了。
 
 设置里的导入在「高级」页（节点页、配置页也有入口），也可以把文件直接拖进设置窗口。导入前一定会先给你看要改动什么。
 
 ## URL 命令与快捷指令
 
 ```bash
-open "kaze://toggle"                          # 开关代理；on、off 同理
-open "kaze://use?name=公司"                     # 开启某个配置
-open "kaze://node?name=香港"                    # 切换节点；auto 是自动选择
-open "kaze://mode?value=global"               # 切换模式
-open "kaze://group?name=流媒体&member=日本"       # 切换策略组
-open "kaze://run?tool=check_services"          # 执行一个工具（参数写在后面：&node=日本）
-open "kaze://import?url=https://example.com/config.yaml"   # 打开导入预览
-open "kaze://share/on"
-open "kaze://tun/on"                          # 增强模式；gateway 是网关模式，不带 /on、/off 就是切换
-open "kaze://diagnose?url=https://youtube.com"
-open "kaze://settings?page=automation"
+open "proxi://toggle"                          # 开关代理；on、off 同理
+open "proxi://use?name=公司"                     # 开启某个配置
+open "proxi://node?name=香港"                    # 切换节点；auto 是自动选择
+open "proxi://mode?value=global"               # 切换模式
+open "proxi://group?name=流媒体&member=日本"       # 切换策略组
+open "proxi://run?tool=check_services"          # 执行一个工具（参数写在后面：&node=日本）
+open "proxi://import?url=https://example.com/config.yaml"   # 打开导入预览
+open "proxi://share/on"
+open "proxi://tun/on"                          # 增强模式；gateway 是网关模式，不带 /on、/off 就是切换
+open "proxi://diagnose?url=https://youtube.com"
+open "proxi://settings?page=automation"
 ```
 
 URL 命令和命令行一样受权限限制，但不能直接改配置（网页也能触发 URL 命令）：`run` 只能用查看和日常操作类的工具，导入会先打开预览让你确认。改名前的 `proxyswitch://` 开头的写法照样认。
 
-快捷指令里用「打开 URL」执行这些命令，或者用「运行 Shell 脚本」调用 `kaze` 命令（先安装命令行工具）。
+快捷指令里用「打开 URL」执行这些命令，或者用「运行 Shell 脚本」调用 `proxi` 命令（先安装命令行工具）。
 
 ## 按网络自动切换
 
 「自动化」页里加规则：连上某个 Wi‑Fi（或者路由器是某个 MAC / IP）时开启某个配置、关闭代理、切到规则分流或全局代理；「其他网络」在上面都不符合时生效。同一个网络只切一次，之后手动改了不会被改回去，换了网络才会再按规则切。
 
-读 Wi‑Fi 名字要定位权限（macOS 14 起系统这样规定，Kaze 不读取、不保存位置）；不给的话可以按路由器的 MAC 地址认。
+读 Wi‑Fi 名字要定位权限（macOS 14 起系统这样规定，Proxi 不读取、不保存位置）；不给的话可以按路由器的 MAC 地址认。

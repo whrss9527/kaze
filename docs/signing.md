@@ -82,5 +82,5 @@ Actions → release → Run workflow，填新的版本标签（比如 `v0.7.0`�
 ```bash
 CODESIGN_IDENTITY="Developer ID Application: 你的名字 (团队 ID)" VERSION=0.7.0 THIN_ARCHIVES=1 Scripts/build-app.sh
 NOTARY_APPLE_ID=… NOTARY_PASSWORD=… NOTARY_TEAM_ID=… \
-  Scripts/notarize.sh dist/Kaze-macos.zip dist/Kaze-macos-arm64.zip dist/Kaze-macos-x86_64.zip
+  Scripts/notarize.sh dist/Proxi-macos.zip dist/Proxi-macos-arm64.zip dist/Proxi-macos-x86_64.zip
 ```

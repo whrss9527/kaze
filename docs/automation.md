@@ -30,6 +30,9 @@ proxyswitch test 香港                    # 测名字里有「香港」的节�
 proxyswitch services                    # 检测 ChatGPT、Netflix 等服务经现在的节点能不能用
 proxyswitch services 日本 01             # 经某个节点检测（不影响正在用的节点）
 proxyswitch diagnose https://www.youtube.com
+proxyswitch tun on                      # 增强模式：所有程序都经过内置代理（要先装特权助手）
+proxyswitch gateway on                  # 网关模式：设备的路由器和 DNS 填这台 Mac
+sudo proxyswitch helper install         # 安装特权助手；uninstall 卸载，status 看状态（不用 sudo）
 proxyswitch rule add openai.com 美国      # 加规则：openai.com 走「美国」这个策略组
 proxyswitch rule add /Applications/Telegram.app proxy --type app
 proxyswitch rule add 192.168.1.20 direct --type device
@@ -78,7 +81,7 @@ MCP 服务器初始化时会把使用规则告诉 AI 助手：先看状态再动
 
 | 工具 | 权限 | 作用 |
 | --- | --- | --- |
-| `get_status` | 查看 | 代理状态、配置、节点、模式、局域网共享、出口 IP |
+| `get_status` | 查看 | 代理状态、配置、节点、模式、局域网共享、增强模式和网关模式、出口 IP |
 | `list_profiles` | 查看 | 代理配置 |
 | `list_nodes` | 查看 | 节点和延迟（`filter`、`limit`） |
 | `list_groups` | 查看 | 策略组、现在用的成员和候选 |
@@ -100,6 +103,8 @@ MCP 服务器初始化时会把使用规则告诉 AI 助手：先看状态再动
 | `update_subscriptions` / `update_rule_sets` | 日常 | 重新下载 |
 | `close_connections` | 日常 | 断开一条（`id`）或全部 |
 | `set_share` | 日常 | 开关局域网共享（`enabled`） |
+| `set_tun` | 日常 | 开关增强模式（`enabled`）；特权助手要由用户在设置里装 |
+| `set_gateway` | 日常 | 开关网关模式（`enabled`） |
 | `add_rule` / `remove_rule` | 完全 | 自定义规则（`value`、`policy`、`type`） |
 | `set_final` | 完全 | 其余流量（`policy`，`follow` 跟随规则文件） |
 | `add_subscription` / `remove_subscription` | 完全 | 订阅 |
@@ -190,6 +195,7 @@ open "proxyswitch://group?name=流媒体&member=日本"       # 切换策略组
 open "proxyswitch://run?tool=check_services"          # 执行一个工具（参数写在后面：&node=日本）
 open "proxyswitch://import?url=https://example.com/config.yaml"   # 打开导入预览
 open "proxyswitch://share/on"
+open "proxyswitch://tun/on"                          # 增强模式；gateway 是网关模式，不带 /on、/off 就是切换
 open "proxyswitch://diagnose?url=https://youtube.com"
 open "proxyswitch://settings?page=automation"
 ```

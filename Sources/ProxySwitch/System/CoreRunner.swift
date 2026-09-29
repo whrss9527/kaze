@@ -13,6 +13,12 @@ enum CoreBinary {
         return FileManager.default.isExecutableFile(atPath: url.path) ? url : nil
     }
 
+    /// app 里打包的那份内核（不看环境变量）：装特权助手时复制它。
+    static var bundledPath: String? {
+        let url = Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS/\(name)")
+        return FileManager.default.isExecutableFile(atPath: url.path) ? url.path : nil
+    }
+
     /// GeoIP 数据库（GEOIP,CN 规则要用）。
     static var geoIPURL: URL? {
         Bundle.main.url(forResource: "country", withExtension: "mmdb")

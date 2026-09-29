@@ -51,6 +51,15 @@ final class Engine: ObservableObject {
         case failed(String)
     }
 
+    /// 增强模式 / 网关模式（虚拟网卡）的状态。
+    enum TunStatus: Equatable {
+        case off
+        case starting
+        /// 虚拟网卡开着；forwarding 表示网关模式要的 IP 转发也开了。
+        case on(forwarding: Bool)
+        case failed(String)
+    }
+
     static let selectorGroup = CoreConfigBuilder.selectorGroup
     static let autoGroup = CoreConfigBuilder.autoGroup
     /// 「最近的连接」最多留这么多条。
@@ -60,6 +69,9 @@ final class Engine: ObservableObject {
     @Published private(set) var shareStatus: ShareStatus = .off
     /// 局域网共享的参数，AppState 按本机的代理状态算出来；nil 表示没开。
     private(set) var shareInputs: ShareInputs?
+    @Published private(set) var tunStatus: TunStatus = .off
+    /// 虚拟网卡的参数，AppState 按设置、特权助手和本机的代理状态算出来；nil 表示不开。
+    private(set) var tunInputs: TunInputs?
     @Published private(set) var nodes: [Node] = []
     /// 「节点」组当前选中的：某个节点、自动选择或 DIRECT。
     @Published private(set) var currentSelection: String?
@@ -113,6 +125,16 @@ final class Engine: ObservableObject {
     var persistTraffic: ((TrafficStats) -> Void)?
 
     private let runner = CoreRunner()
+    /// 开虚拟网卡时内核要以 root 运行，经特权助手启动。
+    private let helperRunner = HelperCoreRunner()
+    /// 现在这个内核是经特权助手运行的。
+    private var runningViaHelper = false
+    /// 经特权助手开虚拟网卡失败时的参数：参数不变就先不开，免得反复重试；代理照常用本机的内核。
+    private var tunFailedFor: TunInputs?
+    /// 助手那边的 IP 转发开着（网关模式）。
+    private var forwardingOn = false
+    /// 经助手运行时要复制过去的文件（相对内核目录）。
+    private var helperFiles: [String] = []
     private var api: CoreAPI?
     private let secret = CoreConfigBuilder.makeSecret()
     private var lastConfigText: String?
@@ -163,8 +185,17 @@ final class Engine: ObservableObject {
     var engineConfig: EngineConfig { readConfig().engine }
     var coreAvailable: Bool { CoreBinary.executableURL != nil }
 
-    /// 有订阅，或者开了局域网共享，内核才需要运行。
-    var wantsCore: Bool { engineConfig.wantsCore || shareInputs != nil }
+    /// 有订阅，或者开了局域网共享、网关模式，内核才需要运行。
+    var wantsCore: Bool { engineConfig.wantsCore || shareInputs != nil || effectiveTun?.gateway == true }
+
+    /// 这次真正要用的虚拟网卡参数：开过但失败了、参数也没变时是 nil。
+    private var effectiveTun: TunInputs? {
+        guard let tunInputs, tunInputs != tunFailedFor else { return nil }
+        return tunInputs
+    }
+
+    /// 内核进程（本机的或者助手那边的）在跑。
+    private var coreProcessRunning: Bool { runningViaHelper ? helperRunner.isRunning : runner.isRunning }
 
     var isRunning: Bool {
         if case .running = status { return true }
@@ -183,7 +214,7 @@ final class Engine: ObservableObject {
         return nodes.first { $0.name == name }
     }
 
-    var logTail: String { runner.logTail }
+    var logTail: String { runningViaHelper ? helperRunner.logTail : runner.logTail }
 
     /// 最近经共享入口的连接（PS5 等设备）。
     var shareConnections: [ConnectionRecord] { history.filter(\.isShare) }
@@ -201,6 +232,7 @@ final class Engine: ObservableObject {
 
     func start() {
         runner.onExit = { [weak self] code in self?.coreExited(code) }
+        helperRunner.onExit = { [weak self] code in self?.coreExited(code) }
         refreshTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
             Task { @MainActor in await self?.refresh() }
         }
@@ -211,13 +243,19 @@ final class Engine: ObservableObject {
         scheduleReconcile()
     }
 
-    /// 退出时停掉内核。
+    /// 退出时停掉内核（经助手运行的也停掉，助手会恢复 IP 转发）。
     func shutdown() {
         stopPolling()
         saveTraffic(force: true)
-        runner.stop()
+        if runningViaHelper {
+            helperRunner.stop()
+        } else {
+            runner.stop()
+        }
+        runningViaHelper = false
         api = nil
         shareStatus = .off
+        tunStatus = .off
     }
 
     /// 配置变了：该跑就跑（配置内容变了就重新加载），不该跑就停。多次调用合并成一次。
@@ -245,26 +283,36 @@ final class Engine: ObservableObject {
 
     private func performReconcile() async {
         let engine = engineConfig
+        let tun = effectiveTun
         guard wantsCore else {
-            if api != nil || runner.isRunning {
+            if api != nil || coreProcessRunning {
                 stopCore()
             } else if status != .off {
                 status = .off
             }
+            updateTunStatus()
             return
         }
         do {
             let text = try await generateConfig(engine)
-            if runner.isRunning, let api {
-                if text != lastConfigText {
+            if coreProcessRunning, let api {
+                if (tun != nil) != runningViaHelper {
+                    // 开关虚拟网卡：内核换个方式运行（经助手以 root 运行，或者回到本机进程）。
+                    stopCore()
+                    try await startCore(with: text)
+                } else if text != lastConfigText {
                     if portsChanged(from: lastConfigText, to: text) {
                         stopCore()
                         try await startCore(with: text)
                     } else {
                         try write(text)
-                        try await api.reload(configPath: configURL.path)
+                        if runningViaHelper {
+                            try await syncHelperFiles()
+                        }
+                        try await api.reload(configPath: runningViaHelper ? HelperPaths.coreConfig : configURL.path)
                         lastConfigText = text
                         Log.info("内核配置已重新加载")
+                        await syncForwarding()
                         await refresh()
                         await verifyShare()
                     }
@@ -275,9 +323,19 @@ final class Engine: ObservableObject {
                 try await startCore(with: text)
             }
             lastError = nil
+            updateTunStatus()
             // 还没下载的规则集这次先跳过了：内核起来以后在后台补下载（能经节点访问 GitHub），下好了再热加载。
             scheduleBackfill()
         } catch {
+            if let tun, tunFailedFor != tun {
+                // 虚拟网卡没开起来：记下来，先用本机的内核，代理照常能用。
+                tunFailedFor = tun
+                tunStatus = .failed(error.localizedDescription)
+                Log.error("增强模式没有开起来：\(error.localizedDescription)；先不用虚拟网卡")
+                onStatusChanged?()
+                scheduleReconcile()
+                return
+            }
             status = .failed(error.localizedDescription)
             lastError = error.localizedDescription
             if shareInputs != nil {
@@ -293,7 +351,7 @@ final class Engine: ObservableObject {
         guard engineConfig.wantsCore else {
             throw CoreRunnerError.notReady(engineConfig.enabled ? "还没有添加订阅" : "内置代理已停用")
         }
-        if isRunning, runner.isRunning, loadedMixedPort == engineConfig.mixedPort { return }
+        if isRunning, coreProcessRunning, loadedMixedPort == engineConfig.mixedPort { return }
         reconcileTask?.cancel()
         await reconcile()
         guard isRunning else {
@@ -318,18 +376,32 @@ final class Engine: ObservableObject {
     }
 
     private func startCore(with text: String) async throws {
-        guard let executable = CoreBinary.executableURL else { throw CoreRunnerError.missingBinary }
         status = .starting
         onStatusChanged?()
         CoreRunner.killStrays()
         try prepareDirectory()
         try write(text)
-        try runner.start(executable: executable, directory: Self.directory, config: configURL)
+        if effectiveTun != nil {
+            // 虚拟网卡要 root：请特权助手把文件复制到它的目录，以 root 运行它那份内核。
+            tunStatus = .starting
+            let helper = helperRunner
+            let source = Self.directory.path
+            let files = helperFiles
+            try await Task.detached(priority: .userInitiated) {
+                try helper.start(source: source, files: files)
+            }.value
+            runningViaHelper = true
+            forwardingOn = false
+        } else {
+            guard let executable = CoreBinary.executableURL else { throw CoreRunnerError.missingBinary }
+            try runner.start(executable: executable, directory: Self.directory, config: configURL)
+            runningViaHelper = false
+        }
         let api = CoreAPI(port: engineConfig.apiPort, secret: secret)
         self.api = api
         var version: String?
         for _ in 0..<50 {
-            if !runner.isRunning { break }
+            if !coreProcessRunning { break }
             if let found = try? await api.version() {
                 version = found
                 break
@@ -337,15 +409,17 @@ final class Engine: ObservableObject {
             try? await Task.sleep(for: .milliseconds(200))
         }
         guard let version else {
-            let tail = runner.logTail.split(separator: "\n").suffix(3).joined(separator: " ")
-            runner.stop()
+            let tail = logTail.split(separator: "\n").suffix(3).joined(separator: " ")
+            stopProcess()
             self.api = nil
             throw CoreRunnerError.notReady(tail.isEmpty ? "没有响应" : tail)
         }
         lastConfigText = text
         restartAttempts = 0
         status = .running(version)
-        Log.info("内核已启动，版本 \(version)，" + (engineConfig.wantsCore ? "代理端口 \(engineConfig.mixedPort)" : "只用于局域网共享"))
+        let purpose = engineConfig.wantsCore ? "代理端口 \(engineConfig.mixedPort)" : (effectiveTun?.gateway == true ? "只用于网关模式" : "只用于局域网共享")
+        Log.info("内核已启动，版本 \(version)，" + purpose + (runningViaHelper ? "，经特权助手开着虚拟网卡" : ""))
+        await syncForwarding()
         if let selected = engineConfig.selectedNode {
             try? await api.select(group: Self.selectorGroup, node: selected)
         }
@@ -357,7 +431,7 @@ final class Engine: ObservableObject {
 
     func stopCore() {
         stopPolling()
-        runner.stop()
+        stopProcess()
         api = nil
         lastConfigText = nil
         status = .off
@@ -376,7 +450,19 @@ final class Engine: ObservableObject {
         speedHistory = []
         lastSpeedSample = nil
         manualNodeCount = nil
+        updateTunStatus()
         onStatusChanged?()
+    }
+
+    /// 停掉内核进程（本机的或者助手那边的）。
+    private func stopProcess() {
+        if runningViaHelper {
+            helperRunner.stop()
+        } else {
+            runner.stop()
+        }
+        runningViaHelper = false
+        forwardingOn = false
     }
 
     private func coreExited(_ code: Int32) {
@@ -397,7 +483,7 @@ final class Engine: ObservableObject {
                 await self?.reconcile()
             }
         } else {
-            status = .failed("内核退出了（状态 \(code)）：\(runner.logTail.split(separator: "\n").suffix(2).joined(separator: " "))")
+            status = .failed("内核退出了（状态 \(code)）：\(logTail.split(separator: "\n").suffix(2).joined(separator: " "))")
             if shareInputs != nil, case .failed(let message) = status {
                 shareStatus = .failed(message)
             }
@@ -468,22 +554,33 @@ final class Engine: ObservableObject {
         try writeManualNodes(engine)
         let composed = composeRules(engine)
         let config = readConfig()
-        let input = CoreConfigBuilder.Input(engine: engine, secret: secret, directory: Self.directory, testURL: config.testURL, rules: composed.rules, share: shareInputs, ruleProviders: composed.providers, profiles: config.profiles, probePort: probePort)
+        let tun = effectiveTun
+        let input = CoreConfigBuilder.Input(engine: engine, secret: secret, directory: Self.directory, testURL: config.testURL, rules: composed.rules, share: shareInputs, ruleProviders: composed.providers, profiles: config.profiles, probePort: probePort, tun: tun)
+        // 经特权助手运行时，内核在 root 的目录里：路径换成那边的，文件由助手按名单复制过去。
+        var runInput = input
+        if tun != nil {
+            // GeoIP 数据库也要复制过去，先确保本机目录里有。
+            try? prepareDirectory()
+            let home = URL(fileURLWithPath: HelperPaths.coreDirectory)
+            runInput.directory = home
+            runInput.ruleProviders = composed.providers.map { Self.relocated($0, to: home) }
+            helperFiles = Self.helperFiles(engine, providers: composed.providers)
+        }
         let built = CoreConfigBuilder.build(input)
         var problem = built.patchProblem
-        var text = built.text
+        var text = tun == nil ? built.text : CoreConfigBuilder.build(runInput).text
         if problem == nil, !engine.patch.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             // 打过补丁的配置先让内核自己检查一遍，通不过就用没打补丁的，免得内核起不来。
-            // 检查时内核要读 GeoIP 数据库，先把目录准备好（不然它会去下载）。
+            // 检查时内核要读 GeoIP 数据库，先把目录准备好（不然它会去下载）；检查的总是本机目录的那份（内核只认自己目录下的路径）。
             try? prepareDirectory()
-            if let checked = checkedPatch, checked.text == text {
+            if let checked = checkedPatch, checked.text == built.text {
                 problem = checked.problem
             } else {
-                problem = await Self.testConfig(text)
-                checkedPatch = (text, problem)
+                problem = await Self.testConfig(built.text)
+                checkedPatch = (built.text, problem)
             }
             if problem != nil {
-                text = CoreConfigBuilder.yaml(input)
+                text = CoreConfigBuilder.yaml(runInput)
             }
         }
         if problem != patchProblem {
@@ -515,6 +612,112 @@ final class Engine: ObservableObject {
                 return error.localizedDescription
             }
         }.value
+    }
+
+    // MARK: - 增强模式和网关模式
+
+    /// 虚拟网卡的参数变了（开关增强模式或网关模式、特权助手装好了、本机的代理状态变了）：重新生成配置，需要时换运行方式。
+    func setTun(_ inputs: TunInputs?) {
+        guard inputs != tunInputs else { return }
+        tunInputs = inputs
+        // 参数变了就再试一次（上次失败的记录只对同样的参数有效）。
+        if inputs != tunFailedFor {
+            tunFailedFor = nil
+        }
+        updateTunStatus()
+        scheduleReconcile()
+    }
+
+    /// 让助手按名单复制最新的文件（配置改了，接着让内核重新加载）。
+    private func syncHelperFiles() async throws {
+        let helper = helperRunner
+        let source = Self.directory.path
+        let files = helperFiles
+        try await Task.detached(priority: .userInitiated) {
+            try helper.sync(source: source, files: files)
+        }.value
+    }
+
+    /// 网关模式要的 IP 转发：跟着设置开关（助手停掉内核时会自己恢复）。
+    private func syncForwarding() async {
+        guard runningViaHelper else {
+            forwardingOn = false
+            return
+        }
+        let wanted = effectiveTun?.gateway == true
+        guard wanted != forwardingOn else { return }
+        let helper = helperRunner
+        do {
+            try await Task.detached(priority: .userInitiated) {
+                try helper.setForwarding(wanted)
+            }.value
+            forwardingOn = wanted
+            Log.info(wanted ? "网关模式：已打开 IP 转发" : "网关模式：已关闭 IP 转发")
+        } catch {
+            Log.error("网关模式：\(error.localizedDescription)")
+            tunStatus = .failed("打不开 IP 转发：\(error.localizedDescription)")
+        }
+    }
+
+    private func updateTunStatus() {
+        let next: TunStatus
+        if tunInputs == nil {
+            next = .off
+        } else if effectiveTun == nil, case .failed = tunStatus {
+            next = tunStatus
+        } else if runningViaHelper, isRunning {
+            if effectiveTun?.gateway == true && !forwardingOn, case .failed = tunStatus {
+                next = tunStatus
+            } else {
+                next = .on(forwarding: forwardingOn)
+            }
+        } else {
+            next = .starting
+        }
+        if next != tunStatus {
+            tunStatus = next
+        }
+    }
+
+    /// 规则集文件在 root 那边的路径。
+    nonisolated static func relocated(_ provider: RuleProviderSpec, to home: URL) -> RuleProviderSpec {
+        var copy = provider
+        if let relative = relativePath(provider.path) {
+            copy.path = home.appendingPathComponent(relative).path
+        }
+        return copy
+    }
+
+    /// 内核目录里的文件相对这个目录的路径；不在里面返回 nil。
+    nonisolated static func relativePath(_ path: String) -> String? {
+        let base = directory.path.hasSuffix("/") ? directory.path : directory.path + "/"
+        guard path.hasPrefix(base) else { return nil }
+        return String(path.dropFirst(base.count))
+    }
+
+    /// 经助手运行时要复制过去的文件：配置、GeoIP 数据库、手动节点、本机文件的订阅和规则集文件。
+    /// 网络上的订阅由 root 的内核自己下载，不用复制。
+    nonisolated static func helperFiles(_ engine: EngineConfig, providers: [RuleProviderSpec]) -> [String] {
+        var files = ["config.yaml"]
+        if FileManager.default.fileExists(atPath: directory.appendingPathComponent("Country.mmdb").path) {
+            files.append("Country.mmdb")
+        }
+        var paths: [String] = []
+        if engine.wantsCore {
+            if !engine.activeManualNodes.isEmpty {
+                paths.append(CoreConfigBuilder.manualNodesPath(directory: directory).path)
+            }
+            for subscription in engine.activeSubscriptions where subscription.filePath != nil {
+                paths.append(CoreConfigBuilder.providerPath(for: subscription, directory: directory).path)
+            }
+        }
+        paths += providers.map(\.path)
+        for path in paths {
+            if let relative = relativePath(path), !files.contains(relative) {
+                files.append(relative)
+            }
+        }
+        return files
     }
 
     // MARK: - 局域网共享
@@ -553,7 +756,7 @@ final class Engine: ObservableObject {
             shareStatus = .listening(share.port)
         } else {
             var detail = "可能被别的程序占用了"
-            if let line = runner.logTail.split(separator: "\n").last(where: { $0.contains(CoreConfigBuilder.shareListener) && $0.contains("err") }) {
+            if let line = logTail.split(separator: "\n").last(where: { $0.contains(CoreConfigBuilder.shareListener) && $0.contains("err") }) {
                 var text = String(line)
                 if let range = text.range(of: "msg=") {
                     text = String(text[range.upperBound...]).trimmingCharacters(in: CharacterSet(charactersIn: "\""))

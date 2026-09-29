@@ -229,6 +229,60 @@ jobs:
           for i in $(seq 1 20); do grep -q '"mode" : "global"' "$support/config.json" && break; sleep 0.5; done
           grep -q '"mode" : "global"' "$support/config.json" || { echo "URL 命令切换模式没有生效"; exit 1; }
           "$cli" mode rule
+          # 特权助手、网关模式：runner 上 sudo 不用密码，直接装。虚拟网卡只接管 1.1.1.1 和 1.0.0.1（用配置补丁限定路由），
+          # 免得 runner 自己和 GitHub 的连接被截下来；本机没开代理，所以只为网关开虚拟网卡，本机经它的流量直连。
+          sudo "$cli" helper install --uid "$(id -u)"
+          for i in $(seq 1 20); do "$cli" helper status && break; sleep 0.5; done
+          "$cli" helper status || { echo "特权助手没有运行"; sudo cat /Library/Logs/ProxySwitch-helper.log || true; exit 1; }
+          fwd_before=$(sysctl -n net.inet.ip.forwarding)
+          printf '%s' '{"proxyswitch":1,"patch":"log-level: info\ntun:\n  route-address: [\"1.1.1.1/32\", \"1.0.0.1/32\"]\n"}' > "$RUNNER_TEMP/tun-patch.json"
+          "$cli" import "$RUNNER_TEMP/tun-patch.json"
+          "$cli" gateway on
+          for i in $(seq 1 60); do ifconfig | grep -q "inet 198\.18\." && break; sleep 0.5; done
+          helper_log="/Library/Application Support/ProxySwitch/core/core.log"
+          if ! ifconfig | grep -q "inet 198\.18\."; then
+            echo "虚拟网卡没有起来"; "$cli" status --json || true; cat "$helper_log" || true; tail -30 "$support/proxyswitch.log"; sudo tail -30 /Library/Logs/ProxySwitch-helper.log || true
+            exit 1
+          fi
+          for i in $(seq 1 20); do [ "$(sysctl -n net.inet.ip.forwarding)" = "1" ] && break; sleep 0.5; done
+          [ "$(sysctl -n net.inet.ip.forwarding)" = "1" ] || { echo "网关模式没有打开 IP 转发"; tail -20 "$support/proxyswitch.log"; exit 1; }
+          grep -q "经特权助手开着虚拟网卡" "$support/proxyswitch.log" || { echo "内核没有经特权助手启动"; exit 1; }
+          grep -q '^tun:' "$support/core/config.yaml" || { echo "内核配置里没有虚拟网卡"; exit 1; }
+          grep -q 'listen: "0.0.0.0:53"' "$support/core/config.yaml" || { echo "网关模式的 DNS 没有监听"; exit 1; }
+          grep -q '"/Library/Application Support/ProxySwitch/core/providers/' "$support/core/config.yaml" || { echo "经助手运行时路径没有换成 root 的目录"; exit 1; }
+          pgrep -f "com.whrss9527.proxyswitch.mihomo" >/dev/null || { echo "助手没有运行内核"; exit 1; }
+          [ "$(stat -f %u "$helper_log")" = "0" ] || { echo "内核不是以 root 运行的"; exit 1; }
+          # 不经代理直接访问：流量被虚拟网卡截下来交给内核（内核的日志里有这条连接）。
+          code=$(curl -s -m 15 -o /dev/null -w '%{http_code}' https://1.1.1.1/cdn-cgi/trace || true)
+          echo "开着虚拟网卡直接访问 1.1.1.1：$code"
+          for i in $(seq 1 20); do grep -q '1\.1\.1\.1:443' "$helper_log" && break; sleep 0.5; done
+          grep -q '1\.1\.1\.1:443' "$helper_log" || { echo "直接访问的流量没有经过内核"; tail -30 "$helper_log"; exit 1; }
+          # 发往 1.1.1.1 的 DNS 查询被截下来由内核回答（虚拟 IP 模式下是 198.18 开头的地址），网关设备用的 53 端口也在回答。
+          hijacked=$(dig +short +time=3 +tries=2 example.com @1.1.1.1 | head -1)
+          echo "经虚拟网卡查 example.com：$hijacked"
+          case "$hijacked" in 198.18.*) ;; *) echo "DNS 没有被内核接管"; tail -30 "$helper_log"; exit 1 ;; esac
+          served=$(dig +short +time=3 +tries=2 example.org @127.0.0.1 | head -1)
+          echo "网关的 DNS 回答 example.org：$served"
+          case "$served" in 198.18.*) ;; *) echo "网关模式的 DNS 没有回答"; exit 1 ;; esac
+          "$cli" status --json | tee "$RUNNER_TEMP/tun-status.json"
+          grep -q '"helper" : "ready"\|"helper":"ready"' "$RUNNER_TEMP/tun-status.json" || { echo "状态里的特权助手不对"; exit 1; }
+          open "proxyswitch://settings?page=advanced"; sleep 3
+          screencapture -x screenshots/advanced-tun.png || true
+          # 关掉网关模式：虚拟网卡拆掉、IP 转发恢复，内核回到本机进程，照常上网。
+          "$cli" gateway off
+          for i in $(seq 1 60); do ifconfig | grep -q "inet 198\.18\." || break; sleep 0.5; done
+          ifconfig | grep -q "inet 198\.18\." && { echo "关掉网关模式后虚拟网卡还在"; exit 1; }
+          for i in $(seq 1 20); do [ "$(sysctl -n net.inet.ip.forwarding)" = "$fwd_before" ] && break; sleep 0.5; done
+          [ "$(sysctl -n net.inet.ip.forwarding)" = "$fwd_before" ] || { echo "IP 转发没有恢复"; exit 1; }
+          for i in $(seq 1 30); do pgrep -f "com.whrss9527.proxyswitch.mihomo" >/dev/null || break; sleep 0.5; done
+          pgrep -f "com.whrss9527.proxyswitch.mihomo" >/dev/null && { echo "关掉后助手的内核还在运行"; exit 1; }
+          for i in $(seq 1 30); do pgrep -x mihomo >/dev/null && break; sleep 0.5; done
+          pgrep -x mihomo >/dev/null || { echo "关掉网关模式后内核没有回到本机进程"; tail -20 "$support/proxyswitch.log"; exit 1; }
+          echo "关掉后访问外网：$(curl -s -m 15 -o /dev/null -w '%{http_code}' https://cp.cloudflare.com/generate_204 || true)"
+          "$cli" undo
+          sudo "$cli" helper uninstall
+          [ ! -e /Library/LaunchDaemons/com.whrss9527.proxyswitch.helper.plist ] || { echo "特权助手没有卸载干净"; exit 1; }
+          [ ! -e /Library/PrivilegedHelperTools/com.whrss9527.proxyswitch.helper ] || { echo "特权助手没有卸载干净"; exit 1; }
           pkill -x ProxySwitch || true
           sleep 3
           pgrep -x mihomo && { echo "程序退出后内核还在运行"; exit 1; }
@@ -483,8 +537,8 @@ jobs:
             tail -60 "$RUNNER_TEMP/selftest.log"
             echo "=====END 签名流程自测====="
           fi
-          # 节点页、自动化页和高级页：同样裁出窗口一带缩小，放在后面，日志只看末尾几千行时也在。
-          for name in nodes automation advanced; do
+          # 自动化页、高级页（没装和装了特权助手的）：同样裁出窗口一带缩小，放在后面，日志只看末尾几千行时也在。
+          for name in automation advanced advanced-tun; do
             [ -f "$name.png" ] || continue
             width=$(sips -g pixelWidth "$name.png" | awk '/pixelWidth/{print $2}')
             height=$(sips -g pixelHeight "$name.png" | awk '/pixelHeight/{print $2}')

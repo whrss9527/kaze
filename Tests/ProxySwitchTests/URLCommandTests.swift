@@ -17,6 +17,19 @@ final class URLCommandTests: XCTestCase {
         XCTAssertEqual(URLCommand.parse(URL(string: "proxyswitch://settings?page=advanced")!), .settings(.advanced))
     }
 
+    func testTunAndGatewayCommands() {
+        XCTAssertEqual(URLCommand.parse(URL(string: "proxyswitch://tun")!), .tun(nil))
+        XCTAssertEqual(URLCommand.parse(URL(string: "proxyswitch://tun/on")!), .tun(true))
+        XCTAssertEqual(URLCommand.parse(URL(string: "proxyswitch://tun?value=off")!), .tun(false))
+        XCTAssertEqual(URLCommand.parse(URL(string: "proxyswitch://enhanced/on")!), .tun(true))
+        XCTAssertEqual(URLCommand.parse(URL(string: "proxyswitch://gateway")!), .gateway(nil))
+        XCTAssertEqual(URLCommand.parse(URL(string: "proxyswitch://gateway/off")!), .gateway(false))
+        XCTAssertEqual(URLCommand.parse(URL(string: "proxyswitch://gateway?state=on")!), .gateway(true))
+        // 共享的写法不变。
+        XCTAssertEqual(URLCommand.parse(URL(string: "proxyswitch://share?state=off")!), .share(false))
+        XCTAssertEqual(URLCommand.parse(URL(string: "proxyswitch://share/on")!), .share(true))
+    }
+
     func testTrafficSources() {
         var accumulator = TrafficAccumulator()
         func connection(_ id: String, process: String?, source: String, inbound: String?, up: Int64, down: Int64, outbound: String) -> CoreConnection {

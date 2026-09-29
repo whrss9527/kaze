@@ -96,7 +96,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     }
 }
 
-/// proxyswitch:// 命令：on、off、toggle、use?name=配置名、settings（可带 ?page=about 等）、panel、update、share（可带 /on、/off，不带就是切换）、
+/// proxyswitch:// 命令：on、off、toggle、use?name=配置名、settings（可带 ?page=about 等）、panel、update、share、tun、gateway（可带 /on、/off，不带就是切换）、
 /// node?name=节点名、mode?value=rule|global、group?name=组名&member=成员、import?url=配置地址（先预览再确认）、
 /// run?tool=工具名&参数=值（只能用查看和日常操作类的工具，改配置要走导入）。
 /// 可以在终端里 open "proxyswitch://toggle"，也能接快捷指令。
@@ -111,6 +111,10 @@ enum URLCommand: Equatable {
     case update
     /// 局域网共享：开、关，nil 是切换。
     case share(Bool?)
+    /// 增强模式（虚拟网卡）：开、关，nil 是切换。
+    case tun(Bool?)
+    /// 网关模式：开、关，nil 是切换。
+    case gateway(Bool?)
     /// 网址诊断：url 可以为空（只打开页面），device 表示从局域网设备的视角。
     case diagnose(url: String?, device: Bool)
     /// 切换节点；auto 是自动选择。
@@ -138,12 +142,11 @@ enum URLCommand: Equatable {
         case "panel", "menu": return .panel
         case "update", "upgrade": return .update
         case "share", "lan":
-            let argument = (query.first { $0.name == "state" }?.value ?? url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))).lowercased()
-            switch argument {
-            case "on", "enable", "1", "true": return .share(true)
-            case "off", "disable", "0", "false": return .share(false)
-            default: return .share(nil)
-            }
+            return .share(switchValue(url, query))
+        case "tun", "enhanced":
+            return .tun(switchValue(url, query))
+        case "gateway":
+            return .gateway(switchValue(url, query))
         case "diagnose", "check":
             let target = query.first { $0.name == "url" }?.value
             let device = (query.first { $0.name == "from" }?.value ?? "").lowercased() == "device"
@@ -173,6 +176,16 @@ enum URLCommand: Equatable {
                 params[item.name] = item.value ?? ""
             }
             return .tool(name: name, params: params)
+        default: return nil
+        }
+    }
+
+    /// 开关类命令的参数：/on、/off、?state=on、?value=off，不写就是切换。
+    private static func switchValue(_ url: URL, _ query: [URLQueryItem]) -> Bool? {
+        let argument = (value(query, "state") ?? value(query, "value") ?? pathValue(url)).lowercased()
+        switch argument {
+        case "on", "enable", "1", "true": return true
+        case "off", "disable", "0", "false": return false
         default: return nil
         }
     }

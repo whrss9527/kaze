@@ -157,7 +157,7 @@ struct AutomationPage: View {
 
     private var urlSection: some View {
         Section("URL 命令与快捷指令") {
-            ForEach(["proxyswitch://toggle", "proxyswitch://node?name=香港", "proxyswitch://mode?value=global", "proxyswitch://group?name=流媒体&member=日本", "proxyswitch://run?tool=check_services", "proxyswitch://import?url=https://example.com/config.yaml"], id: \.self) { command in
+            ForEach(["proxyswitch://toggle", "proxyswitch://node?name=香港", "proxyswitch://mode?value=global", "proxyswitch://tun/on", "proxyswitch://group?name=流媒体&member=日本", "proxyswitch://run?tool=check_services", "proxyswitch://import?url=https://example.com/config.yaml"], id: \.self) { command in
                 copyRow("open \"\(command)\"")
             }
             Text("快捷指令里用「打开 URL」执行这些命令，或者用「运行 Shell 脚本」调用 proxyswitch 命令。URL 命令不能直接改配置：导入会先打开预览让你确认。")

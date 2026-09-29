@@ -40,12 +40,13 @@ enum CommandLineInstaller {
         }
     }
 
-    private static func runAsAdmin(_ command: String) async throws {
+    /// 请求管理员权限运行一条 shell 命令（系统会弹出输入密码的窗口）。
+    static func runAsAdmin(_ command: String, failure: String = "没有装上") async throws {
         let script = "do shell script \(Shell.appleScriptString(command)) with administrator privileges"
-        let result = try await Shell.run("/usr/bin/osascript", ["-e", script], timeout: 120)
+        let result = try await Shell.run("/usr/bin/osascript", ["-e", script], timeout: 180)
         guard result.succeeded else {
             let output = result.trimmedOutput
-            throw ControlError.failed(output.contains("-128") ? "取消了" : "没有装上：\(output)")
+            throw ControlError.failed(output.contains("-128") ? "取消了" : "\(failure)：\(output)")
         }
     }
 

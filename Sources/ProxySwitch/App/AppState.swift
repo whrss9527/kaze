@@ -51,6 +51,8 @@ final class AppState: ObservableObject {
     let control = ControlService()
     /// 按网络自动切换。
     let network = NetworkAutomation()
+    /// 特权助手（增强模式、网关模式要用）。
+    let helper = HelperManager()
     /// 更新后正在重新启动：退出时不要按「退出时关闭代理」清理。
     var relaunching = false
 
@@ -137,12 +139,39 @@ final class AppState: ObservableObject {
             .store(in: &cancellables)
         ensureEngineProfile()
         sleepGuard.start()
+        helper.wanted = { [weak self] in
+            guard let tun = self?.persisted.tun else { return false }
+            return tun.enabled || tun.gateway
+        }
+        helper.start()
         shareStateChanged()
         engine.start()
-        // 本机的代理状态、共享设置、配置任何一个变了，都重新算一遍共享的上游，内核跟着热加载。
+        // 本机的代理状态、共享设置、配置任何一个变了，都重新算一遍共享和网关的上游，内核跟着热加载。
         Publishers.CombineLatest3($snapshot, $persisted, $config)
             .dropFirst()
             .sink { [weak self] _ in Task { @MainActor in self?.shareStateChanged() } }
+            .store(in: &cancellables)
+        // 特权助手装好或者停了、这台 Mac 换了局域网地址：重新算虚拟网卡的参数。
+        helper.$state
+            .removeDuplicates()
+            .dropFirst()
+            .sink { [weak self] _ in Task { @MainActor in self?.shareStateChanged() } }
+            .store(in: &cancellables)
+        $lanAddresses
+            .removeDuplicates()
+            .dropFirst()
+            .sink { [weak self] _ in Task { @MainActor in self?.shareStateChanged() } }
+            .store(in: &cancellables)
+        engine.$tunStatus
+            .removeDuplicates()
+            .dropFirst()
+            .sink { [weak self] status in
+                Task { @MainActor in
+                    if case .failed(let message) = status {
+                        self?.notify(title: "增强模式没有开起来", body: message, problem: true)
+                    }
+                }
+            }
             .store(in: &cancellables)
         engine.$shareStatus
             .removeDuplicates()
@@ -274,7 +303,71 @@ final class AppState: ObservableObject {
 
     private func shareStateChanged() {
         engine.setShare(shareInputs)
-        sleepGuard.update(wanted: share.enabled && share.keepAwake, allowOnBattery: share.keepAwakeOnBattery)
+        engine.setTun(tunInputs)
+        // 局域网设备靠这台 Mac 上网时（共享或者网关）不让它睡着。
+        sleepGuard.update(wanted: (share.enabled || persisted.tun.gateway) && share.keepAwake, allowOnBattery: share.keepAwakeOnBattery)
+    }
+
+    // MARK: - 增强模式和网关模式
+
+    /// 增强模式和网关模式的设置（本机的，不同步）。
+    var tun: TunConfig { persisted.tun }
+
+    /// 交给内核的虚拟网卡参数：特权助手能用，而且开了网关模式、或者开了增强模式又正在用内置代理时才有。
+    var tunInputs: TunInputs? {
+        let tun = persisted.tun
+        guard tun.enabled || tun.gateway, helper.isReady else { return nil }
+        let upstream = shareUpstream
+        let captureLocal = tun.enabled && upstream == .engine
+        guard captureLocal || tun.gateway else { return nil }
+        return TunInputs(stack: tun.stack, dnsMode: tun.dnsMode, captureLocal: captureLocal, gateway: tun.gateway, upstream: upstream, localAddresses: lanAddresses.map(\.ip))
+    }
+
+    func setTun(_ tun: TunConfig) {
+        guard tun != persisted.tun else { return }
+        let before = persisted.tun
+        persisted.tun = tun
+        Store.save(persisted)
+        if tun.enabled != before.enabled {
+            Log.info(tun.enabled ? "增强模式：开启" : "增强模式：关闭")
+        }
+        if tun.gateway != before.gateway {
+            Log.info(tun.gateway ? "网关模式：开启" : "网关模式：关闭")
+        }
+        shareStateChanged()
+        if tun.enabled || tun.gateway {
+            Task { await helper.refresh() }
+        }
+    }
+
+    func setTunEnabled(_ enabled: Bool) {
+        var updated = tun
+        updated.enabled = enabled
+        setTun(updated)
+    }
+
+    func setGatewayEnabled(_ enabled: Bool) {
+        var updated = tun
+        updated.gateway = enabled
+        setTun(updated)
+    }
+
+    /// 增强模式现在的情况，给界面和接口用的一句话。
+    var tunSummary: String {
+        let tun = persisted.tun
+        guard tun.enabled || tun.gateway else { return "没开" }
+        guard helper.isReady else { return helper.summary }
+        switch engine.tunStatus {
+        case .on(let forwarding):
+            if tun.gateway && !forwarding { return "虚拟网卡开着，IP 转发还没打开" }
+            if tunInputs?.captureLocal == false && tun.enabled { return "本机没在用内置代理，只为网关模式开着虚拟网卡" }
+            return tun.gateway ? (tun.enabled ? "增强模式和网关模式都开着" : "网关模式开着") : "增强模式开着"
+        case .starting: return "正在开启…"
+        case .failed(let message): return message
+        case .off:
+            if tun.enabled && !tun.gateway && shareUpstream != .engine { return "本机开着内置代理时才生效" }
+            return "没开"
+        }
     }
 
     // MARK: - 开关

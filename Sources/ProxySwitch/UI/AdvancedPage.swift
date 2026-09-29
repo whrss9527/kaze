@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// 高级页：导入导出、DNS、Hosts、IPv6、内核配置补丁和实时日志。平时用不到，出问题或者有特殊需要时再来。
+/// 高级页：导入导出、增强模式、DNS、Hosts、IPv6、内核配置补丁和实时日志。平时用不到，出问题或者有特殊需要时再来。
 struct AdvancedPage: View {
     @ObservedObject var state: AppState
     @ObservedObject var engine: Engine
@@ -13,9 +13,10 @@ struct AdvancedPage: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            PageHeader(title: "高级", subtitle: "导入导出配置、DNS、Hosts、IPv6、内核配置补丁和实时日志；不常用，有需要时再改")
+            PageHeader(title: "高级", subtitle: "导入导出配置、增强模式、DNS、Hosts、IPv6、内核配置补丁和实时日志；不常用，有需要时再改")
             Form {
                 importSection
+                TunSection(state: state, engine: engine, helper: state.helper)
                 DNSSection(engine: engine, current: state.config.engine.dns)
                 HostsSection(engine: engine, hosts: state.config.engine.hosts)
                 Section("IPv6") {

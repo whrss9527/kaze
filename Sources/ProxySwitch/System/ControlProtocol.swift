@@ -108,6 +108,12 @@ enum ControlCatalog {
         ControlTool(name: "set_share", title: "局域网共享", description: "开关局域网共享（让 PS5、手机等设备把这台 Mac 当代理）。", permission: .operate, parameters: [
             ControlParameter(name: "enabled", kind: .boolean, description: "开还是关", required: true),
         ]),
+        ControlTool(name: "set_tun", title: "增强模式", description: "开关增强模式（虚拟网卡）：本机开着内置代理时，不认系统代理的程序（终端、游戏、部分应用）的流量也经过内核，DNS 也交给内核。要先在设置的「高级」页装特权助手（要管理员密码，只能由用户自己装）。", permission: .operate, parameters: [
+            ControlParameter(name: "enabled", kind: .boolean, description: "开还是关", required: true),
+        ]),
+        ControlTool(name: "set_gateway", title: "网关模式", description: "开关网关模式：局域网设备把「路由器」和 DNS 设成这台 Mac，就能用上和本机一样的网络，不用在设备上填代理。要先装特权助手。", permission: .operate, parameters: [
+            ControlParameter(name: "enabled", kind: .boolean, description: "开还是关", required: true),
+        ]),
         // 改配置
         ControlTool(name: "add_rule", title: "加规则", description: "加一条自定义规则（最先匹配）。同样的规则已经有了就改它的去向。", permission: .full, parameters: [
             ControlParameter(name: "value", kind: .string, description: "匹配的内容：域名、IP、应用路径、设备 IP、端口……", required: true),

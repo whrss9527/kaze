@@ -6,8 +6,8 @@ enum CommandLineTool {
     static let commands: Set<String> = [
         "status", "on", "off", "toggle", "profiles", "nodes", "node", "groups", "group", "mode", "test", "services",
         "rules", "rule", "final", "subs", "sub", "add-nodes", "rulesets", "ruleset", "group-add", "group-remove",
-        "import", "export", "connections", "traffic", "logs", "diagnose", "share", "close", "undo", "history",
-        "call", "tools", "mcp", "help", "version",
+        "import", "export", "connections", "traffic", "logs", "diagnose", "share", "tun", "gateway", "close", "undo", "history",
+        "call", "tools", "mcp", "helper", "help", "version",
     ]
 
     /// 带了认识的子命令时由命令行处理。
@@ -50,6 +50,9 @@ enum CommandLineTool {
             case "mcp":
                 runMCP()
                 return 0
+            case "helper":
+                // 装、卸特权助手要 root，不经正在运行的程序。
+                return HelperCommand.run(rest, appVersion: UpdateChecker.currentVersion, executable: Bundle.main.executablePath ?? CommandLine.arguments[0], bundledCore: CoreBinary.bundledPath)
             default:
                 guard let (method, params) = try request(for: command, rest, type: type, replace: replace, preview: preview) else {
                     printError("用法不对。\n\n" + help)
@@ -199,10 +202,10 @@ enum CommandLineTool {
             guard need(1) else { return nil }
             params["url"] = rest[0]
             return ("diagnose_url", params)
-        case "share":
+        case "share", "tun", "gateway":
             guard let value = rest.first?.lowercased(), ["on", "off"].contains(value) else { return nil }
             params["enabled"] = value == "on"
-            return ("set_share", params)
+            return (["share": "set_share", "tun": "set_tun", "gateway": "set_gateway"][command] ?? "set_share", params)
         case "close":
             if let id = rest.first { params["id"] = id }
             return ("close_connections", params)
@@ -388,6 +391,8 @@ enum CommandLineTool {
       services [节点名]         检测 ChatGPT、Netflix 等服务能不能用
       diagnose <网址>           诊断网址为什么打不开
       share <on|off>            局域网共享
+      tun <on|off>              增强模式（所有程序都经过内置代理，要先装特权助手）
+      gateway <on|off>          网关模式（设备把路由器和 DNS 设成这台 Mac）
       close [连接 id]           断开连接（不写就断开全部）
 
     改配置（每次改动都可以 undo 撤销）
@@ -406,6 +411,7 @@ enum CommandLineTool {
       tools                     全部工具（AI 助手用的也是这些）
       call <工具> ['{"参数":"值"}']
       mcp                       作为 MCP 服务器运行（给 AI 助手用）
+      helper <install|uninstall|status>  特权助手（安装、卸载要 sudo）
       version
 
     ProxySwitch 没在运行时会自动在后台打开。权限在设置的「自动化」页调整。

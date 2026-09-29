@@ -25,6 +25,8 @@ enum CoreConfigBuilder {
         var profiles: [Profile] = []
         /// 服务检测用的本机入口端口；nil 表示不开。
         var probePort: Int? = nil
+        /// 增强模式 / 网关模式（虚拟网卡）；nil 表示不开。只有经特权助手以 root 运行的内核才能开。
+        var tun: TunInputs? = nil
     }
 
     static let selectorGroup = RuleConverter.proxyGroup
@@ -36,6 +38,10 @@ enum CoreConfigBuilder {
     static let upstreamProxy = "上游代理"
     /// 服务检测：一个隐藏的手动选择组和只走它的本机入口，测某个节点时只切这个组，不影响正在用的节点。
     static let probeGroup = "ps-probe"
+    /// 网关模式下局域网设备的流量专用的规则组（本机不用内置代理时，设备跟着本机的上游走）。
+    static let gatewayRules = "lan-gateway"
+    /// 内核给虚拟网卡收到的连接起的入口名。
+    static let tunInbound = "DEFAULT-TUN"
 
     /// 生成配置，再合并高级设置里的配置补丁。补丁有问题时用没打补丁的配置，问题放在 patchProblem 里。
     static func build(_ input: Input) -> (text: String, patchProblem: String?, patchNotes: [String]) {
@@ -87,8 +93,14 @@ enum CoreConfigBuilder {
         lines.append("      ports: [80, 8080-8880]")
         lines.append("    TLS:")
         lines.append("      ports: [443, 8443]")
+        if let tun = input.tun {
+            // 虚拟网卡收到的 UDP 里有 QUIC（HTTP/3），同样取回域名。
+            lines.append("    QUIC:")
+            lines.append("      ports: [443, 8443]")
+            lines += tunLines(tun)
+        }
         lines += hostsLines(engine)
-        lines += dnsLines(engine)
+        lines += dnsLines(engine, tun: input.tun)
         var listeners: [String] = []
         var proxies: [String] = []
         if let share = input.share {
@@ -214,15 +226,29 @@ enum CoreConfigBuilder {
         if !(rules.last?.hasPrefix("MATCH,") ?? false) {
             rules.append("MATCH,\(selectorGroup)")
         }
+        var subRules: [(name: String, rules: [String])] = []
+        if let share = input.share {
+            subRules.append((shareListener, shareRules(upstream: share.upstream, mainRules: rules, deviceRules: deviceRuleLines(engine))))
+        }
+        var leading: [String] = []
+        if let tun = input.tun {
+            let gateway = tunRules(tun, mainRules: rules, deviceRules: deviceRuleLines(engine))
+            leading = gateway.leading
+            if let deviceRules = gateway.deviceRules {
+                subRules.append((gatewayRules, deviceRules))
+            }
+        }
         lines.append("rules:")
-        for rule in rules {
+        for rule in leading + rules {
             lines.append("  - \(quote(rule))")
         }
-        if let share = input.share {
+        if !subRules.isEmpty {
             lines.append("sub-rules:")
-            lines.append("  \(quote(shareListener)):")
-            for rule in shareRules(upstream: share.upstream, mainRules: rules, deviceRules: deviceRuleLines(engine)) {
-                lines.append("    - \(quote(rule))")
+            for group in subRules {
+                lines.append("  \(quote(group.name)):")
+                for rule in group.rules {
+                    lines.append("    - \(quote(rule))")
+                }
             }
         }
         return lines.joined(separator: "\n") + "\n"
@@ -310,11 +336,28 @@ enum CoreConfigBuilder {
     }
 
     /// 内核的 DNS：没开或者设置有问题时不写（内核用系统的 DNS），免得起不来。
-    static func dnsLines(_ engine: EngineConfig) -> [String] {
-        let dns = engine.dns
+    /// 开着虚拟网卡时一定要有：本机和网关设备的 DNS 查询都被截下来交给内核回答；这时没设置过就用默认的服务器。
+    static func dnsLines(_ engine: EngineConfig, tun: TunInputs? = nil) -> [String] {
+        var dns = engine.dns
+        if tun != nil && (!dns.enabled || dns.validate() != nil) {
+            dns = DNSSettings()
+            dns.enabled = true
+        }
         guard dns.enabled, dns.validate() == nil else { return [] }
         var lines = ["dns:"]
         lines.append("  enable: true")
+        if let tun {
+            if tun.gateway {
+                // 网关设备把 DNS 设成这台 Mac 时由内核回答。
+                lines.append("  listen: \"0.0.0.0:53\"")
+            }
+            lines.append("  enhanced-mode: \(tun.dnsMode.rawValue)")
+            // 虚拟网卡的地址也从这个地址段里取，所以真实 IP 模式下也写上。
+            lines.append("  fake-ip-range: \(quote(TunDefaults.fakeIPRange))")
+            if tun.dnsMode == .fakeIP {
+                lines.append("  fake-ip-filter: [\(TunDefaults.fakeIPFilter.map(quote).joined(separator: ", "))]")
+            }
+        }
         lines.append("  ipv6: \(engine.ipv6)")
         lines.append("  use-hosts: true")
         lines.append("  default-nameserver: [\(dns.bootstrap.map(quote).joined(separator: ", "))]")
@@ -336,6 +379,35 @@ enum CoreConfigBuilder {
             }
         }
         return lines
+    }
+
+    // MARK: - 虚拟网卡
+
+    /// 虚拟网卡：接管路由，内核自己连出去时绑定真实网卡（不会绕回来），DNS 查询一律截下来交给内核。
+    static func tunLines(_ tun: TunInputs) -> [String] {
+        [
+            "tun:",
+            "  enable: true",
+            "  stack: \(tun.stack.rawValue)",
+            "  auto-route: true",
+            "  auto-detect-interface: true",
+            "  dns-hijack: [\"any:53\", \"tcp://any:53\"]",
+        ]
+    }
+
+    /// 虚拟网卡带来的规则：放在最前面的几条，和网关设备专用的规则组（nil 表示设备和本机一样走主规则）。
+    /// 本机的流量不接管时（只为网关开虚拟网卡），本机经虚拟网卡发出的流量直连，和没开时一样；
+    /// 本机又没用内置代理时，网关设备和局域网共享一样跟着本机的上游走。
+    static func tunRules(_ tun: TunInputs, mainRules: [String], deviceRules: [String]) -> (leading: [String], deviceRules: [String]?) {
+        guard !tun.captureLocal else { return ([], nil) }
+        var leading = ["AND,((IN-TYPE,TUN),(SRC-IP-CIDR,\(TunDefaults.interfaceNetwork))),DIRECT"]
+        for address in tun.localAddresses {
+            guard let prefix = IPPrefix.normalize(address) else { continue }
+            leading.append("AND,((IN-TYPE,TUN),(SRC-IP-CIDR,\(prefix))),DIRECT")
+        }
+        guard tun.gateway, tun.upstream != .engine else { return (leading, nil) }
+        leading.append("SUB-RULE,(IN-TYPE,TUN),\(gatewayRules)")
+        return (leading, shareRules(upstream: tun.upstream, mainRules: mainRules, deviceRules: deviceRules))
     }
 
     // MARK: - 前置代理

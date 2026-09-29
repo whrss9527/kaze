@@ -18,6 +18,8 @@ Windows 版在 [proxyswitch](https://github.com/whrss9527/proxyswitch)，两边�
 - **连接与流量**：「连接」页列出经内核的每一条连接：哪个程序（或哪台设备）访问了什么、命中了哪条规则、走了哪个策略组和节点、用了多少流量，右键就能让这个域名、这个应用或这台设备固定走某个去向，或者断开它；最近两分钟的网速曲线；按节点、按程序和设备、按天累计流量，显示节点出口和本机直连的出口 IP 与归属。
 - **服务检测**：看经某个节点 ChatGPT、Claude、Gemini、Netflix、YouTube Premium、Google、GitHub、Telegram 能不能用、服务认为你在哪个地区；选别的节点检测时不切换正在用的节点。
 - **高级设置**：内核自己的 DNS（DoH / DoT / DoQ，海外 DNS 经节点查询，按域名指定 DNS）、Hosts、IPv6、内核配置补丁（写一段 mihomo 的 YAML 合并进去，保存前让内核检查）、内核实时日志。
+- **增强模式**：系统代理只管认它的程序，终端里的命令、游戏和一些应用照样直连；打开增强模式后内核开一块虚拟网卡接管这台 Mac 的全部流量，DNS 也交给内核，按同样的规则和节点走。第一次用时装一个特权助手（输一次管理员密码）。
+- **网关模式**：电视、游戏机这类不能填代理、或者填了也有应用不走的设备，把「路由器」和 DNS 设成这台 Mac 就能用上和本机一样的网络，游戏的 UDP 流量也经过内核。
 - **局域网共享**：打开后 PS5、Switch、手机等同一局域网里的设备把这台 Mac 当代理服务器（`Mac 的 IP:7892`），就能享受和本机一样的网络：本机走节点它们就走同样的节点和规则，本机用公司代理它们就转发给公司代理，本机没开代理就经这台 Mac 直连，切换配置时几秒内跟着变。默认只允许局域网网段里的设备，也可以只允许指定的 IP。
 - **网址诊断**：某个网站打不开时，填上网址，从这台 Mac 或 PS5 等设备的视角把链路走一遍——本机 / 共享状态、DNS、直连、经代理（从内核日志里抓命中的规则和走的节点）、节点延迟——给一句结论和修复按钮（开启节点代理、让这个域名走节点、自动选择节点）。`open "proxyswitch://diagnose?url=https://youtube.com"` 也能直接发起。
 - **菜单栏网速**：图标旁边两行小字显示实时上行、下行速度，可以统计系统整体流量或只算内置代理，网速放在图标左边或右边都行。
@@ -29,7 +31,7 @@ Windows 版在 [proxyswitch](https://github.com/whrss9527/proxyswitch)，两边�
 - **自动检测**：找出本机正在运行的代理软件监听的端口，确认能用后一键添加。
 - **全局快捷键**：默认 ⌃⌥P 开关代理，可以在设置里录制新的。
 - **登录时启动**：系统设置的「登录项」里可以看到和关闭。
-- **命令**：`open proxyswitch://toggle`、`proxyswitch://on`、`proxyswitch://off`、`proxyswitch://use?name=配置名`、`proxyswitch://node?name=节点`、`proxyswitch://mode?value=global`、`proxyswitch://share`（`share/on`、`share/off`）、`proxyswitch://import?url=…`、`proxyswitch://settings`、`proxyswitch://update`，可以接快捷指令和脚本；装上命令行工具后还有 `proxyswitch status`、`proxyswitch node 香港` 这些命令。
+- **命令**：`open proxyswitch://toggle`、`proxyswitch://on`、`proxyswitch://off`、`proxyswitch://use?name=配置名`、`proxyswitch://node?name=节点`、`proxyswitch://mode?value=global`、`proxyswitch://share`（`share/on`、`share/off`）、`proxyswitch://tun`、`proxyswitch://gateway`、`proxyswitch://import?url=…`、`proxyswitch://settings`、`proxyswitch://update`，可以接快捷指令和脚本；装上命令行工具后还有 `proxyswitch status`、`proxyswitch node 香港` 这些命令。
 - **iCloud 同步**：打开后代理配置和设置通过 iCloud 云盘（`iCloud 云盘/ProxySwitch/config.json`）在多台 Mac 之间同步，几秒内生效；另一台 Mac 开启时可以选用 iCloud 的、用本机的或合并，两边同时改以改动时间晚的为准。
 - **检查更新与一键更新**：启动后和每 6 小时检查一次 GitHub 上的新版本（可以关掉），有新版本时通知（通知上直接有「立即更新」按钮），面板里出现更新条。点一下「更新」就会下载本机芯片的精简包、比对 SHA-256、替换 `ProxySwitch.app` 并自动重新启动，不用去下载页。内置代理在运行时经它下载，失败再试系统代理和直连。直接在下载文件夹里打开的程序会被装进「应用程序」，旧的那份移到废纸篓。开发者签名的版本只安装同一个开发者签名的新版本。
 
@@ -42,13 +44,24 @@ Windows 版在 [proxyswitch](https://github.com/whrss9527/proxyswitch)，两边�
 5. 「自定义规则」也在分流规则页：让某个域名（含子域名）或 IP / 网段固定走节点、直连、拦截或某个策略组，排在所有规则集前面，全局模式下也生效，改了立刻生效。左边的类型菜单里还有应用（选一个 .app，连同它的辅助进程）、局域网设备（按来源 IP，比如让 PS5 走某个组）、完整域名、关键词、通配、正则、IP 归属地、端口、进程名、协议和 AND / OR / NOT 组合规则。「连接」页和「局域网共享」页的连接上右键就能加。
 6. 「连接」页：经内核的连接实时列出（每两秒刷新），本机的连接显示发起的程序名，PS5 等设备的显示它的 IP；「最近的连接」把短连接也记下来。按节点（以及直连、上游代理）累计流量，存在本机、内核重启后接着算，可以清零。「出口 IP」经节点查一次网站看到的地址和归属（切换节点后自动重查），也能查本机直连的公网地址。
 7. 内核是 [mihomo](https://github.com/MetaCubeX/mihomo)（Clash Meta，GPL-3.0），以独立程序的形式打包在 `ProxySwitch.app/Contents/MacOS/mihomo`，默认只监听本机端口（开了局域网共享才多一个给局域网设备的入口），配置在 `~/Library/Application Support/ProxySwitch/core/`，规则集文件在它的 `rules/` 里。GeoIP 数据来自 [MetaCubeX/meta-rules-dat](https://github.com/MetaCubeX/meta-rules-dat)。
-8. 不支持 TUN 模式：只有走系统代理（或环境变量）的程序会经过它。
+8. 默认只有认系统代理（或环境变量）的程序会经过它；要让所有程序都经过，打开下面的增强模式。
 
 ## 导入、高级设置和自动化
 
 - **导入**：设置 →「高级」→「导入配置」（节点页、配置页也有入口，或者把文件拖进设置窗口）。Clash 配置里的节点存成一条本机订阅、策略组和规则一起导入；来自网址的配置直接加成订阅和规则集，以后跟着自动更新。导入前会列出要改动的内容和注意事项，选「合并」或「替换」，导入记在操作记录里可以撤销。各种格式具体怎么转换见 [docs/automation.md](docs/automation.md#其他能导入的格式)。
 - **高级**：DNS 默认用系统的；打开「用内核自己的 DNS」后，直连的网站和 IP 类规则用加密 DNS 解析，解析结果不在国内时改用经节点查询的海外 DNS，公司内网这类域名可以指定 DNS。Hosts 把域名固定解析到某个地址。内核配置补丁是一段 mihomo 的 YAML：`rules` 排在最前面，`proxies`、`proxy-groups`、`listeners` 追加（同名替换），其余逐层合并；保存前让内核检查，以后内核不认了会自动退回没打补丁的配置。
 - **自动化**：本机控制接口的权限（关闭、只能查看、日常操作、完全控制）、命令行工具的安装、给 AI 助手的 MCP 配置、URL 命令、按网络自动切换的规则和操作记录都在「自动化」页。
+
+## 增强模式和网关模式
+
+1. 设置 →「高级」→「增强模式」，打开「所有程序的流量都经过内置代理」。第一次会请你安装特权助手：点「安装…」，输一次管理员密码。之后开关都不用再输密码。
+2. 增强模式开一块虚拟网卡（地址 `198.18.0.1`），接管路由，本机所有程序的流量和 DNS 查询都交给内核，按同样的分流规则和节点走；内核自己连出去时绑定真实的网卡，不会绕回来。只在本机开着「节点代理」时生效，关掉代理或者换成别的配置就自动停，切回来又自动开。
+3. DNS 默认是「虚拟 IP」：先回一个 `198.18` 开头的地址，程序连接时内核再按域名分流，不受本地 DNS 污染，也省去一次真正的解析；局域网名字、对时、游戏主机的 NAT 检测这类要真实地址的域名不给虚拟 IP。个别程序不适应时换成「真实 IP」（靠域名嗅探分流）。协议栈默认「混合」，一般不用改。
+4. 网关模式在「局域网共享」页：打开「让设备把这台 Mac 当路由器」，在设备的网络设置里把 IP 改成手动（同一网段里一个空闲的地址，子网掩码和原来一样），「路由器」和 DNS 都填页面上显示的 Mac 的地址。设备的流量跟着本机走（和局域网共享一样）：本机开着节点代理就用同样的节点和规则，本机用别的代理就转发给它，没开代理就直接上网；设备规则同样生效。网关模式开着时 Mac 不会睡着（和共享同一个设置）。
+5. 只开网关、没开增强模式时，本机自己不认系统代理的流量照旧直连，只有设备的流量经过内核。
+6. 特权助手是一个以 root 运行的系统服务（`/Library/LaunchDaemons/com.whrss9527.proxyswitch.helper.plist`），只接受安装它的那个用户的请求，只运行它自己那份内核（`/Library/PrivilegedHelperTools/` 里，root 所有）；内核的目录（`/Library/Application Support/ProxySwitch/core/`）也只有 root 能写，配置和规则文件由它从你的目录复制过去，只复制属于你的普通文件。ProxySwitch 退出或崩溃时，助手马上停掉内核、恢复 IP 转发。「高级」页可以重新安装（换成新版本的内核）或卸载。
+7. 系统设置 →「通用」→「登录项」的「允许在后台」里会多一项 ProxySwitch，关掉它助手就不运行了。开着 macOS 防火墙时，网关设备的 DNS 查询要能连到这台 Mac（安装时已经把助手的内核加进防火墙的允许列表）。
+8. 命令行：`sudo proxyswitch helper install` / `uninstall` 安装、卸载助手，`proxyswitch tun on`、`proxyswitch gateway on` 开关；URL 命令 `proxyswitch://tun/on`、`proxyswitch://gateway/off`。
 
 ## 局域网共享（PS5 / Switch）
 
@@ -57,7 +70,7 @@ Windows 版在 [proxyswitch](https://github.com/whrss9527/proxyswitch)，两边�
 3. 之后设备的流量跟着本机走：本机开着「节点代理」，设备就用同样的节点和分流规则（全局 / 规则跟着切）；本机用公司代理或者别的代理软件，就转发给它；本机没开代理，就经这台 Mac 直连。面板里切换配置，设备几秒内跟着变。PAC 脚本没法转发，这时设备直连并在页面上提示。
 4. 共享由内置的内核完成：它在 `0.0.0.0:7892` 多开一个入口，用 mihomo 的 `lan-allowed-ips` 只放行局域网网段（10.x、172.16–31.x、192.168.x）；页面上可以改成只允许指定的 IP 或网段。公共 Wi‑Fi 上建议关掉。没有订阅也能开共享，只为共享运行时本机的 7890 端口不占用。
 5. 页面上能看到正在使用的设备（来源 IP、连接数、流量、最近访问的站点和走的出口）和「最近的连接」（域名 → 节点 / 直连，命中的规则），还可以从本机经共享端口自测。建议在路由器里给 Mac 固定 IP，不然 IP 变了设备就连不上。开着 macOS 防火墙时第一次会询问是否允许 mihomo 接受传入连接，要允许。
-6. 两个限制要知道：PS5 的代理设置只对系统流量（联网测试、PSN、商店）和浏览器生效，YouTube、Netflix 这类应用可能用自己的网络栈、不走代理——打开应用时「最近的连接」里没有出现它的域名就是这种情况，用 PS5 的浏览器打开同一个网站可以对照；游戏联机的 UDP 流量也不经 HTTP 代理。设备自己解析 DNS 被污染、拿着假 IP 来连的情况内核会处理：开着域名嗅探，从 TLS 握手里取回域名再分流。
+6. 两个限制要知道：PS5 的代理设置只对系统流量（联网测试、PSN、商店）和浏览器生效，YouTube、Netflix 这类应用可能用自己的网络栈、不走代理——打开应用时「最近的连接」里没有出现它的域名就是这种情况，用 PS5 的浏览器打开同一个网站可以对照；游戏联机的 UDP 流量也不经 HTTP 代理。这两种情况改用上面的网关模式。设备自己解析 DNS 被污染、拿着假 IP 来连的情况内核会处理：开着域名嗅探，从 TLS 握手里取回域名再分流。
 7. 共享是本机的设置（放在 `state.json`），不跟着 iCloud 同步；右键菜单和 `open proxyswitch://share` 也能开关。
 
 ## 安装
@@ -76,10 +89,11 @@ Windows 版在 [proxyswitch](https://github.com/whrss9527/proxyswitch)，两边�
 - 按网络自动切换要读 Wi‑Fi 名字，macOS 14 起需要定位权限（ProxySwitch 不读取、不保存位置），不给也可以按路由器认。
 - 扫描屏幕上的二维码需要「屏幕录制」权限，第一次会弹出系统询问。
 - 安装命令行工具要写 `/usr/local/bin`，会请求一次管理员密码。
+- 增强模式和网关模式要装特权助手（虚拟网卡和 IP 转发只有 root 能开），安装和卸载各请求一次管理员密码。
 
 ## 文件位置
 
-配置、状态和日志都在 `~/Library/Application Support/ProxySwitch/`：`config.json`、`state.json`、`proxyswitch.log`，操作记录在 `journal.json`，导入的节点和规则文件在 `imports/`，本机控制接口的套接字是 `control.sock`。诊断页里可以直接打开这个目录。
+配置、状态和日志都在 `~/Library/Application Support/ProxySwitch/`：`config.json`、`state.json`、`proxyswitch.log`，操作记录在 `journal.json`，导入的节点和规则文件在 `imports/`，本机控制接口的套接字是 `control.sock`。诊断页里可以直接打开这个目录。特权助手的文件在 `/Library/PrivilegedHelperTools/`、`/Library/LaunchDaemons/` 和 `/Library/Application Support/ProxySwitch/`（经它运行的内核的配置和日志），它自己的日志是 `/Library/Logs/ProxySwitch-helper.log`。
 
 ## 开发
 

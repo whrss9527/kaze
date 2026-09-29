@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// 局域网共享页：开关和状态、PS5 上要填的地址、现在转发到哪、谁能用、端口、正在使用的设备。
+/// 局域网共享页：开关和状态、PS5 上要填的地址、现在转发到哪、谁能用、端口、网关模式、正在使用的设备。
 struct SharePage: View {
     @ObservedObject var state: AppState
     @ObservedObject var engine: Engine
@@ -20,6 +20,7 @@ struct SharePage: View {
                 sleepSection
                 addressSection
                 accessSection
+                GatewaySection(state: state, engine: engine, helper: state.helper)
                 clientsSection
                 recentSection
             }

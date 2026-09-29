@@ -177,11 +177,13 @@ struct PersistedState: Codable, Equatable {
     var share = ShareConfig()
     /// 内置代理按出口累计的流量，本机的统计。
     var traffic = TrafficStats()
+    /// 增强模式和网关模式：要装特权助手，也是本机的。
+    var tun = TunConfig()
 
     init() {}
 
     private enum CodingKeys: String, CodingKey {
-        case lastProfileID, enabledByUs, original, syncEnabled, share, traffic
+        case lastProfileID, enabledByUs, original, syncEnabled, share, traffic, tun
     }
 
     init(from decoder: Decoder) throws {
@@ -192,5 +194,6 @@ struct PersistedState: Codable, Equatable {
         syncEnabled = try container.decodeIfPresent(Bool.self, forKey: .syncEnabled) ?? false
         share = try container.decodeIfPresent(ShareConfig.self, forKey: .share) ?? ShareConfig()
         traffic = try container.decodeIfPresent(TrafficStats.self, forKey: .traffic) ?? TrafficStats()
+        tun = (try? container.decodeIfPresent(TunConfig.self, forKey: .tun)) ?? TunConfig()
     }
 }

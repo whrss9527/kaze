@@ -130,12 +130,12 @@ struct ShareClient: Identifiable, Equatable {
 
     var id: String { ip }
 
-    /// 从连接列表里挑出某个入口的连接，按来源 IP 归并；先连上来的设备排前面。
+    /// 从连接列表里挑出某个入口的连接（网关模式下经虚拟网卡来的设备也算），按来源 IP 归并；先连上来的设备排前面。
     static func group(_ connections: [CoreConnection], listener: String) -> [ShareClient] {
         var byIP: [String: ShareClient] = [:]
         var order: [String] = []
         let sorted = connections.sorted { ($0.start ?? "") < ($1.start ?? "") }
-        for connection in sorted where connection.metadata.inboundName == listener {
+        for connection in sorted where connection.metadata.inboundName == listener || isGatewayDevice(inbound: connection.metadata.inboundName, source: connection.metadata.sourceIP) {
             guard let ip = connection.metadata.sourceIP, !ip.isEmpty else { continue }
             let host = connection.metadata.displayHost
             if var client = byIP[ip] {
@@ -151,6 +151,12 @@ struct ShareClient: Identifiable, Equatable {
             }
         }
         return order.compactMap { byIP[$0] }
+    }
+
+    /// 网关模式下经虚拟网卡来的局域网设备：入口是虚拟网卡，来源又不是本机（本机经虚拟网卡发出的来源是 198.18 开头的地址）。
+    static func isGatewayDevice(inbound: String?, source: String?) -> Bool {
+        guard inbound == CoreConfigBuilder.tunInbound, let source, !source.isEmpty else { return false }
+        return !source.hasPrefix("198.18.") && !source.hasPrefix("127.") && source != "::1"
     }
 }
 
@@ -195,8 +201,8 @@ struct ConnectionRecord: Identifiable, Equatable {
     /// host:port。
     var target: String { port.isEmpty ? host : "\(host):\(port)" }
 
-    /// 是不是经共享入口来的（PS5 等设备）。
-    var isShare: Bool { inbound == CoreConfigBuilder.shareListener }
+    /// 是不是局域网设备来的（PS5 等）：经共享入口，或者网关模式下经虚拟网卡。
+    var isShare: Bool { inbound == CoreConfigBuilder.shareListener || ShareClient.isGatewayDevice(inbound: inbound, source: client) }
 
     /// 流量统计里的来源：程序名；共享的设备写「设备 IP」；认不出程序的本机连接算「本机其他」。
     var trafficSource: String {

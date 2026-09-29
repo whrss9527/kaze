@@ -150,6 +150,10 @@ final class StatusItemController: NSObject {
             Task { await state.updater.checkAndInstall() }
         case .share(let enabled):
             state.setShareEnabled(enabled ?? !state.share.enabled)
+        case .tun(let enabled):
+            setTun(enabled ?? !state.tun.enabled)
+        case .gateway(let enabled):
+            setGateway(enabled ?? !state.tun.gateway)
         case .diagnose(let url, let device):
             SettingsWindowController.shared.navigation.diagnoseRequest = DiagnoseRequest(url: url ?? "", device: device)
             SettingsWindowController.shared.show(page: .diagnose)
@@ -240,6 +244,15 @@ final class StatusItemController: NSObject {
         if state.share.enabled, let address = state.lanAddress {
             menu.addItem(header("设备上填 \(address.ip):\(state.share.port)"))
         }
+        let tunItem = item("增强模式（所有程序都经过代理）", action: #selector(menuToggleTun), key: "")
+        tunItem.state = state.tun.enabled ? .on : .off
+        menu.addItem(tunItem)
+        let gatewayItem = item("网关模式（设备的路由器填这台 Mac）", action: #selector(menuToggleGateway), key: "")
+        gatewayItem.state = state.tun.gateway ? .on : .off
+        menu.addItem(gatewayItem)
+        if state.tun.gateway, let address = state.lanAddress {
+            menu.addItem(header("设备的路由器和 DNS 填 \(address.ip)"))
+        }
         menu.addItem(.separator())
         let updater = state.updater
         if let release = updater.release, updater.isInstalling {
@@ -275,6 +288,23 @@ final class StatusItemController: NSObject {
     @objc private func menuTurnOff() { state.turnOff() }
     @objc private func menuSaveExternal() { state.saveExternalAsProfile() }
     @objc private func menuToggleShare() { state.setShareEnabled(!state.share.enabled) }
+    @objc private func menuToggleTun() { setTun(!state.tun.enabled) }
+    @objc private func menuToggleGateway() { setGateway(!state.tun.gateway) }
+
+    /// 打开增强模式：还没装特权助手时带到高级页去装。
+    private func setTun(_ enabled: Bool) {
+        state.setTunEnabled(enabled)
+        if enabled && !state.helper.isReady {
+            SettingsWindowController.shared.show(page: .advanced)
+        }
+    }
+
+    private func setGateway(_ enabled: Bool) {
+        state.setGatewayEnabled(enabled)
+        if enabled && !state.helper.isReady {
+            SettingsWindowController.shared.show(page: .share)
+        }
+    }
     @objc private func menuSettings() { SettingsWindowController.shared.show(page: nil) }
     @objc private func menuQuit() { NSApp.terminate(nil) }
 

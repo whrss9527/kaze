@@ -468,6 +468,19 @@ final class ControlService: ObservableObject {
             guard let enabled = params.bool("enabled") else { throw ControlError.invalid("enabled 要写 true 或 false") }
             state.setShareEnabled(enabled)
             return ["text": enabled ? "局域网共享已开启，设备填 \(state.lanAddress?.ip ?? "这台 Mac 的 IP"):\(state.share.port)" : "局域网共享已关闭"]
+        case "set_tun":
+            guard let enabled = params.bool("enabled") else { throw ControlError.invalid("enabled 要写 true 或 false") }
+            state.setTunEnabled(enabled)
+            guard enabled else { return ["text": "增强模式已关闭"] }
+            guard state.helper.isReady else { return ["text": "增强模式已打开，但特权助手还不能用（\(state.helper.summary)），请用户在设置的「高级」页安装"] }
+            return ["text": state.shareUpstream == .engine ? "增强模式已开启，所有程序的流量都经过内置代理" : "增强模式已打开，本机开着内置代理时生效"]
+        case "set_gateway":
+            guard let enabled = params.bool("enabled") else { throw ControlError.invalid("enabled 要写 true 或 false") }
+            state.setGatewayEnabled(enabled)
+            guard enabled else { return ["text": "网关模式已关闭"] }
+            guard state.helper.isReady else { return ["text": "网关模式已打开，但特权助手还不能用（\(state.helper.summary)），请用户在设置的「高级」页安装"] }
+            let address = state.lanAddress?.ip ?? "这台 Mac 的 IP"
+            return ["text": "网关模式已开启：设备的「路由器」和 DNS 都填 \(address)"]
 
         case "add_rule":
             let value = try params.require("value")
@@ -609,6 +622,21 @@ final class ControlService: ObservableObject {
         if case .listening = engine.shareStatus { share["listening"] = true }
         if let address = state.lanAddress { share["address"] = address.ip }
         result["share"] = share
+        var tun: [String: Any] = ["enabled": state.tun.enabled, "gateway": state.tun.gateway, "summary": state.tunSummary]
+        switch state.helper.state {
+        case .unknown: tun["helper"] = "unknown"
+        case .notInstalled: tun["helper"] = "not-installed"
+        case .notRunning: tun["helper"] = "not-running"
+        case .outdated: tun["helper"] = "outdated"
+        case .ready: tun["helper"] = "ready"
+        }
+        switch engine.tunStatus {
+        case .off: tun["status"] = "off"
+        case .starting: tun["status"] = "starting"
+        case .on(let forwarding): tun["status"] = "on"; tun["forwarding"] = forwarding
+        case .failed(let message): tun["status"] = "failed"; tun["error"] = message
+        }
+        result["tun"] = tun
         if let exit = engine.exitInfo {
             result["exit"] = ["ip": exit.ip, "country": exit.countryCode, "place": exit.place, "isp": exit.organization]
         }

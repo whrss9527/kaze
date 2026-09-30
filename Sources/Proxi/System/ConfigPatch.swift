@@ -23,7 +23,7 @@ enum ConfigPatch {
         let patchNode = try YAMLParser.parse(patch)
         guard case .mapping = patchNode else {
             if patchNode.isNull { return Result(text: base, notes: []) }
-            throw YAMLError(line: 0, message: "补丁要是「键: 值」形式的 YAML")
+            throw YAMLError(line: 0, message: L("补丁要是「键: 值」形式的 YAML"))
         }
         let baseNode = try YAMLParser.parse(base)
         let (merged, notes) = merge(base: baseNode, patch: patchNode)
@@ -37,7 +37,7 @@ enum ConfigPatch {
         var notes: [String] = []
         for pair in patchPairs {
             if protectedKeys.contains(pair.key) {
-                notes.append("补丁里的 \(pair.key) 没有使用：它由 Proxi 管理")
+                notes.append(L("补丁里的 %@ 没有使用：它由 Proxi 管理", pair.key))
                 continue
             }
             let existing = result[pair.key]

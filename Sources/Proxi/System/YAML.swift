@@ -95,7 +95,7 @@ struct YAMLError: LocalizedError, Equatable {
     var line: Int
     var message: String
 
-    var errorDescription: String? { line > 0 ? "第 \(line) 行：\(message)" : message }
+    var errorDescription: String? { line > 0 ? L("第 %@ 行：%@", line, message) : message }
 }
 
 // MARK: - 解析
@@ -156,7 +156,7 @@ enum YAMLParser {
             guard let first = try peek() else { return .null }
             let node = try parseNode(indent: first.indent)
             if let extra = try peek() {
-                throw YAMLError(line: extra.number, message: "缩进不对，或者多了内容")
+                throw YAMLError(line: extra.number, message: L("缩进不对，或者多了内容"))
             }
             return node
         }
@@ -175,7 +175,7 @@ enum YAMLParser {
                     } else if character == "\t" {
                         let rest = line.drop(while: { $0 == " " || $0 == "\t" })
                         if rest.isEmpty || rest.hasPrefix("#") { break }
-                        throw YAMLError(line: index + 1, message: "缩进里不能用 Tab，请换成空格")
+                        throw YAMLError(line: index + 1, message: L("缩进里不能用 Tab，请换成空格"))
                     } else {
                         break
                     }
@@ -315,7 +315,7 @@ enum YAMLParser {
             while let line = try peek(), line.indent == indent {
                 if Parser.isSequenceItem(line.content) { break }
                 guard let split = Parser.splitKey(line.content) else {
-                    throw YAMLError(line: line.number, message: "这里应该是「键: 值」")
+                    throw YAMLError(line: line.number, message: L("这里应该是「键: 值」"))
                 }
                 let key = split.key
                 consume()
@@ -352,7 +352,7 @@ enum YAMLParser {
                             merged += items
                         }
                     default:
-                        throw YAMLError(line: line.number, message: "<< 后面要是映射或别名")
+                        throw YAMLError(line: line.number, message: L("<< 后面要是映射或别名"))
                     }
                     continue
                 }
@@ -489,7 +489,7 @@ enum YAMLParser {
                 // 流式写法可以跨行：一直读到括号配对为止。
                 while !Parser.balanced(value) {
                     guard index < raw.count else {
-                        throw YAMLError(line: line.number, message: "括号没有闭合")
+                        throw YAMLError(line: line.number, message: L("括号没有闭合"))
                     }
                     let next = Parser.stripComment(raw[index].trimmingCharacters(in: .whitespaces))
                     index += 1
@@ -568,7 +568,7 @@ enum YAMLParser {
                         guard position + length <= characters.count,
                               let code = UInt32(String(characters[position..<(position + length)]), radix: 16),
                               let scalar = Unicode.Scalar(code) else {
-                            throw YAMLError(line: 0, message: "转义写错了")
+                            throw YAMLError(line: 0, message: L("转义写错了"))
                         }
                         text.unicodeScalars.append(scalar)
                         position += length
@@ -580,7 +580,7 @@ enum YAMLParser {
                 text.append(character)
                 position += 1
             }
-            throw YAMLError(line: 0, message: "引号没有闭合")
+            throw YAMLError(line: 0, message: L("引号没有闭合"))
         }
     }
 
@@ -618,7 +618,7 @@ enum YAMLParser {
                 let node = try parseValue()
                 skipSpaces()
                 if !atEnd {
-                    throw error("值的后面多了内容：\(String(characters[position...]))")
+                    throw error(L("值的后面多了内容：%@", String(characters[position...])))
                 }
                 return node
             }
@@ -649,7 +649,7 @@ enum YAMLParser {
             case "*":
                 position += 1
                 let name = readName()
-                guard let node = anchors[name] else { throw error("找不到锚点 &\(name)") }
+                guard let node = anchors[name] else { throw error(L("找不到锚点 &%@", name)) }
                 return node
             case "&":
                 position += 1
@@ -696,18 +696,18 @@ enum YAMLParser {
             var items: [YAMLNode] = []
             while true {
                 skipSpaces()
-                guard !atEnd else { throw error("[ 没有闭合") }
+                guard !atEnd else { throw error(L("[ 没有闭合")) }
                 if characters[position] == "]" {
                     position += 1
                     return .sequence(items)
                 }
                 items.append(try parseValue())
                 skipSpaces()
-                guard !atEnd else { throw error("[ 没有闭合") }
+                guard !atEnd else { throw error(L("[ 没有闭合")) }
                 if characters[position] == "," {
                     position += 1
                 } else if characters[position] != "]" {
-                    throw error("列表里的项目要用逗号分开")
+                    throw error(L("列表里的项目要用逗号分开"))
                 }
             }
         }
@@ -717,7 +717,7 @@ enum YAMLParser {
             var pairs: [YAMLPair] = []
             while true {
                 skipSpaces()
-                guard !atEnd else { throw error("{ 没有闭合") }
+                guard !atEnd else { throw error(L("{ 没有闭合")) }
                 if characters[position] == "}" {
                     position += 1
                     return .mapping(pairs)
@@ -757,11 +757,11 @@ enum YAMLParser {
                     pairs.append(YAMLPair(key: key, value: value))
                 }
                 skipSpaces()
-                guard !atEnd else { throw error("{ 没有闭合") }
+                guard !atEnd else { throw error(L("{ 没有闭合")) }
                 if characters[position] == "," {
                     position += 1
                 } else if characters[position] != "}" {
-                    throw error("映射里的项目要用逗号分开")
+                    throw error(L("映射里的项目要用逗号分开"))
                 }
             }
         }

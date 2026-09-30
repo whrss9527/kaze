@@ -75,7 +75,7 @@ enum KeyNames {
     ]
 
     static func name(forKeyCode keyCode: UInt32) -> String {
-        names[keyCode] ?? "键 \(keyCode)"
+        names[keyCode] ?? L("键 %@", keyCode)
     }
 
     /// AppKit 的修饰键转成 Carbon 的位。

@@ -35,14 +35,14 @@ final class HelperManager: ObservableObject {
     /// 给用户看的一句话。
     var summary: String {
         switch state {
-        case .unknown: return "正在检查特权助手…"
-        case .notInstalled: return "还没有安装特权助手"
+        case .unknown: return L("正在检查特权助手…")
+        case .notInstalled: return L("还没有安装特权助手")
         case .notRunning(let message): return message
-        case .outdated(let status): return "特权助手是 \(status.appVersion.isEmpty ? "旧版本" : status.appVersion) 装的，需要重新安装"
+        case .outdated(let status): return L("特权助手是 %@ 装的，需要重新安装", status.appVersion.isEmpty ? L("旧版本") : status.appVersion)
         case .ready(let status):
-            var text = "特权助手在运行，内核 \(status.coreVersion)"
+            var text = L("特权助手在运行，内核 %@", status.coreVersion)
             if !status.appVersion.isEmpty && status.appVersion != UpdateChecker.currentVersion {
-                text += "（\(status.appVersion) 装的，重新安装可以用上新的内核）"
+                text += L("（%@ 装的，重新安装可以用上新的内核）", status.appVersion)
             }
             return text
         }
@@ -89,7 +89,7 @@ final class HelperManager: ObservableObject {
         lastError = nil
         let command = "\(Shell.shellQuote(CommandLineInstaller.executablePath)) helper install --uid \(getuid())"
         do {
-            try await CommandLineInstaller.runAsAdmin(command, failure: "特权助手没有装上")
+            try await CommandLineInstaller.runAsAdmin(command, failure: L("特权助手没有装上"))
         } catch {
             lastError = (error as? ControlError)?.message ?? error.localizedDescription
             await refresh()
@@ -118,7 +118,7 @@ final class HelperManager: ObservableObject {
         lastError = nil
         let command = "\(Shell.shellQuote(CommandLineInstaller.executablePath)) helper uninstall"
         do {
-            try await CommandLineInstaller.runAsAdmin(command, failure: "特权助手没有卸载")
+            try await CommandLineInstaller.runAsAdmin(command, failure: L("特权助手没有卸载"))
         } catch {
             lastError = (error as? ControlError)?.message ?? error.localizedDescription
             return false

@@ -100,14 +100,14 @@ final class StatusItemController: NSObject {
     private var tooltip: String {
         switch state.status {
         case .on(let profile):
-            return state.health == .down ? "Proxi\n已开启：\(profile.name)\n代理服务器连不上" : "Proxi\n已开启：\(profile.name)\n\(profile.summary)"
+            return state.health == .down ? L("Proxi\n已开启：%@\n代理服务器连不上", profile.name) : L("Proxi\n已开启：%@\n%@", profile.name, profile.summary)
         case .external(let description):
-            return "Proxi\n系统代理由其他程序设置\n\(description)"
+            return L("Proxi\n系统代理由其他程序设置\n%@", description)
         case .off(let next):
             if let next {
-                return "Proxi\n已关闭，下次开启：\(next.name)"
+                return L("Proxi\n已关闭，下次开启：%@", next.name)
             }
-            return "Proxi\n还没有代理配置"
+            return L("Proxi\n还没有代理配置")
         }
     }
 
@@ -139,7 +139,7 @@ final class StatusItemController: NSObject {
             state.toggle()
         case .use(let name):
             if !state.use(named: name) {
-                state.notify(title: "没有找到配置", body: "没有叫「\(name)」的配置", problem: true)
+                state.notify(title: L("没有找到配置"), body: L("没有叫「%@」的配置", name), problem: true)
             }
         case .settings(let page):
             SettingsWindowController.shared.show(page: page)
@@ -169,11 +169,11 @@ final class StatusItemController: NSObject {
             SettingsWindowController.shared.show(page: .advanced)
         case .tool(let name, let params):
             guard let tool = ControlCatalog.tool(named: name) else {
-                state.notify(title: "没有这个命令", body: name, problem: true)
+                state.notify(title: L("没有这个命令"), body: name, problem: true)
                 return
             }
             guard tool.permission != .full else {
-                state.notify(title: "URL 命令不能改配置", body: "「\(tool.title)」要改配置，请在设置里操作，或者用命令行、AI 助手", problem: true)
+                state.notify(title: L("URL 命令不能改配置"), body: L("「%@」要改配置，请在设置里操作，或者用命令行、AI 助手", tool.title), problem: true)
                 return
             }
             runTool(name, params)
@@ -189,7 +189,7 @@ final class StatusItemController: NSObject {
                     Log.info("URL 命令 \(name)：\(text)")
                 }
             } catch {
-                state.notify(title: "命令没有执行", body: error.localizedDescription, problem: true)
+                state.notify(title: L("命令没有执行"), body: error.localizedDescription, problem: true)
             }
             updateIcon()
         }
@@ -202,16 +202,16 @@ final class StatusItemController: NSObject {
         menu.autoenablesItems = false
         switch state.status {
         case .on(let profile):
-            menu.addItem(header("代理已开启：\(profile.name)"))
-            menu.addItem(item("关闭代理", action: #selector(menuTurnOff), key: ""))
+            menu.addItem(header(L("代理已开启：%@", profile.name)))
+            menu.addItem(item(L("关闭代理"), action: #selector(menuTurnOff), key: ""))
         case .external(let description):
-            menu.addItem(header("系统代理由其他程序设置：\(description)"))
-            menu.addItem(item("关闭系统代理", action: #selector(menuTurnOff), key: ""))
-            menu.addItem(item("保存为配置", action: #selector(menuSaveExternal), key: ""))
+            menu.addItem(header(L("系统代理由其他程序设置：%@", description)))
+            menu.addItem(item(L("关闭系统代理"), action: #selector(menuTurnOff), key: ""))
+            menu.addItem(item(L("保存为配置"), action: #selector(menuSaveExternal), key: ""))
         case .off(let next):
-            menu.addItem(header("代理已关闭"))
+            menu.addItem(header(L("代理已关闭")))
             if next != nil {
-                menu.addItem(item("开启代理", action: #selector(menuTurnOn), key: ""))
+                menu.addItem(item(L("开启代理"), action: #selector(menuTurnOn), key: ""))
             }
         }
         if !state.config.profiles.isEmpty {
@@ -228,42 +228,42 @@ final class StatusItemController: NSObject {
         }
         if state.config.engine.wantsCore {
             menu.addItem(.separator())
-            let nodesItem = NSMenuItem(title: "节点", action: nil, keyEquivalent: "")
+            let nodesItem = NSMenuItem(title: L("节点"), action: nil, keyEquivalent: "")
             nodesItem.submenu = nodesMenu()
             menu.addItem(nodesItem)
             if !state.engine.groupStates.isEmpty {
-                let groupsItem = NSMenuItem(title: "策略组", action: nil, keyEquivalent: "")
+                let groupsItem = NSMenuItem(title: L("策略组"), action: nil, keyEquivalent: "")
                 groupsItem.submenu = groupsMenu()
                 menu.addItem(groupsItem)
             }
         }
         menu.addItem(.separator())
-        let shareItem = item("局域网共享（PS5 等设备）", action: #selector(menuToggleShare), key: "")
+        let shareItem = item(L("局域网共享（PS5 等设备）"), action: #selector(menuToggleShare), key: "")
         shareItem.state = state.share.enabled ? .on : .off
         menu.addItem(shareItem)
         if state.share.enabled, let address = state.lanAddress {
-            menu.addItem(header("设备上填 \(address.ip):\(state.share.port)"))
+            menu.addItem(header(L("设备上填 %@:%@", address.ip, state.share.port)))
         }
-        let tunItem = item("增强模式（所有程序都经过代理）", action: #selector(menuToggleTun), key: "")
+        let tunItem = item(L("增强模式（所有程序都经过代理）"), action: #selector(menuToggleTun), key: "")
         tunItem.state = state.tun.enabled ? .on : .off
         menu.addItem(tunItem)
-        let gatewayItem = item("网关模式（设备的路由器填这台 Mac）", action: #selector(menuToggleGateway), key: "")
+        let gatewayItem = item(L("网关模式（设备的路由器填这台 Mac）"), action: #selector(menuToggleGateway), key: "")
         gatewayItem.state = state.tun.gateway ? .on : .off
         menu.addItem(gatewayItem)
         if state.tun.gateway, let address = state.lanAddress {
-            menu.addItem(header("设备的路由器和 DNS 填 \(address.ip)"))
+            menu.addItem(header(L("设备的路由器和 DNS 填 %@", address.ip)))
         }
         menu.addItem(.separator())
         let updater = state.updater
         if let release = updater.release, updater.isInstalling {
-            menu.addItem(header("正在更新到 \(release.version)…"))
+            menu.addItem(header(L("正在更新到 %@…", release.version)))
         } else if let release = updater.release {
-            menu.addItem(item("更新到 \(release.version)…", action: #selector(menuInstallUpdate), key: ""))
+            menu.addItem(item(L("更新到 %@…", release.version), action: #selector(menuInstallUpdate), key: ""))
         } else {
-            menu.addItem(item("检查更新…", action: #selector(menuCheckUpdates), key: ""))
+            menu.addItem(item(L("检查更新…"), action: #selector(menuCheckUpdates), key: ""))
         }
-        menu.addItem(item("设置…", action: #selector(menuSettings), key: ","))
-        menu.addItem(item("退出 Proxi", action: #selector(menuQuit), key: "q"))
+        menu.addItem(item(L("设置…"), action: #selector(menuSettings), key: ","))
+        menu.addItem(item(L("退出 Proxi"), action: #selector(menuQuit), key: "q"))
         statusItem.menu = menu
         statusItem.button?.performClick(nil)
         statusItem.menu = nil
@@ -332,10 +332,10 @@ final class StatusItemController: NSObject {
         menu.addItem(.separator())
         let engine = state.engine
         guard engine.isRunning else {
-            menu.addItem(header(engine.status == .starting ? "内核正在启动…" : "内核未运行"))
+            menu.addItem(header(engine.status == .starting ? L("内核正在启动…") : L("内核未运行")))
             return menu
         }
-        let auto = NSMenuItem(title: "自动选择" + (engine.autoNode.map { "（\($0)）" } ?? ""), action: #selector(menuSelectNode(_:)), keyEquivalent: "")
+        let auto = NSMenuItem(title: L("自动选择") + (engine.autoNode.map { L("（%@）", $0) } ?? ""), action: #selector(menuSelectNode(_:)), keyEquivalent: "")
         auto.target = self
         auto.representedObject = ""
         auto.state = engine.currentSelection == Engine.autoGroup ? .on : .off
@@ -343,7 +343,7 @@ final class StatusItemController: NSObject {
         let favorites = Set(state.config.engine.favoriteNodes)
         for node in engine.sortedNodes {
             let name = favorites.contains(node.name) ? "★ " + node.name : node.name
-            let title = node.delayText.isEmpty ? name : "\(name)　\(node.delayText)"
+            let title = node.delayText.isEmpty ? name : L("%@　%@", name, node.delayText)
             let menuItem = NSMenuItem(title: title, action: #selector(menuSelectNode(_:)), keyEquivalent: "")
             menuItem.target = self
             menuItem.representedObject = node.name
@@ -359,14 +359,14 @@ final class StatusItemController: NSObject {
         menu.autoenablesItems = false
         let engine = state.engine
         for group in engine.groupStates {
-            let groupItem = NSMenuItem(title: "\(group.name)　\(group.now ?? "")", action: nil, keyEquivalent: "")
+            let groupItem = NSMenuItem(title: L("%@　%@", CoreConfigBuilder.displayName(group.name), CoreConfigBuilder.displayName(group.now ?? "")), action: nil, keyEquivalent: "")
             let submenu = NSMenu()
             submenu.autoenablesItems = false
-            submenu.addItem(header("\(group.kind.title)：\(group.kind.detail)"))
+            submenu.addItem(header(L("%@：%@", group.kind.title, group.kind.detail)))
             for member in group.members {
-                var title = member == "DIRECT" ? "直连" : member
+                var title = member == "DIRECT" ? L("直连") : CoreConfigBuilder.displayName(member)
                 if let node = engine.nodes.first(where: { $0.name == member }), !node.delayText.isEmpty {
-                    title += "　\(node.delayText)"
+                    title += L("　%@", node.delayText)
                 }
                 let menuItem = NSMenuItem(title: title, action: #selector(menuSelectGroupMember(_:)), keyEquivalent: "")
                 menuItem.target = self

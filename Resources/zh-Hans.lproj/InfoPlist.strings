@@ -1,0 +1,3 @@
+/* 简体中文界面里 Info.plist 的文字。 */
+"NSLocationUsageDescription" = "按网络自动切换需要读取现在连接的 Wi‑Fi 名字，macOS 把它算作定位信息。Proxi 不会读取或保存你的位置。";
+"NSLocationWhenInUseUsageDescription" = "按网络自动切换需要读取现在连接的 Wi‑Fi 名字，macOS 把它算作定位信息。Proxi 不会读取或保存你的位置。";

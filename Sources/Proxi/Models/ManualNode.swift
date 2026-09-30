@@ -30,7 +30,7 @@ struct ManualNode: Codable, Identifiable, Equatable, Hashable {
     /// 显示用的名字：链接里带的名字，没有就用「协议 服务器」。
     var name: String {
         if let name = NodeLink.name(of: link), !name.isEmpty { return name }
-        let scheme = NodeLink.scheme(of: link)?.uppercased() ?? "节点"
+        let scheme = NodeLink.scheme(of: link)?.uppercased() ?? L("节点")
         return [scheme, NodeLink.server(of: link) ?? ""].filter { !$0.isEmpty }.joined(separator: " ")
     }
 

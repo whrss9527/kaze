@@ -35,40 +35,40 @@ enum CustomRuleKind: String, Codable, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .auto: return "域名或 IP"
-        case .domain: return "完整域名"
-        case .suffix: return "域名后缀"
-        case .keyword: return "域名关键词"
-        case .wildcard: return "域名通配"
-        case .regex: return "域名正则"
-        case .ip: return "IP / 网段"
-        case .geoip: return "IP 归属地"
-        case .device: return "局域网设备"
-        case .port: return "端口"
-        case .app: return "应用"
-        case .process: return "进程名"
-        case .network: return "协议"
-        case .logic: return "组合规则"
+        case .auto: return L("域名或 IP")
+        case .domain: return L("完整域名")
+        case .suffix: return L("域名后缀")
+        case .keyword: return L("域名关键词")
+        case .wildcard: return L("域名通配")
+        case .regex: return L("域名正则")
+        case .ip: return L("IP / 网段")
+        case .geoip: return L("IP 归属地")
+        case .device: return L("局域网设备")
+        case .port: return L("端口")
+        case .app: return L("应用")
+        case .process: return L("进程名")
+        case .network: return L("协议")
+        case .logic: return L("组合规则")
         }
     }
 
     /// 输入框里的提示。
     var placeholder: String {
         switch self {
-        case .auto: return "域名（含子域名）或 IP / 网段，比如 youtube.com、8.8.8.8、10.0.0.0/8"
-        case .domain: return "完整域名，不含子域名，比如 www.example.com"
-        case .suffix: return "域名后缀，比如 google.com（含所有子域名）"
-        case .keyword: return "域名里的关键词，比如 google"
-        case .wildcard: return "通配，比如 *.example.com、img?.example.com"
-        case .regex: return "正则，比如 ^ad[0-9]+\\.example\\.com$（不能有逗号）"
-        case .ip: return "目标 IP 或网段，比如 1.1.1.1、91.108.0.0/16"
-        case .geoip: return "国家代码，比如 CN、JP、US；LAN 表示局域网"
-        case .device: return "设备的 IP 或网段，比如 192.168.1.20"
-        case .port: return "端口，比如 22、8000-9000、80/443"
-        case .app: return "应用的路径，比如 /Applications/Telegram.app"
-        case .process: return "进程名，比如 git、node、curl"
-        case .network: return "TCP 或 UDP"
-        case .logic: return "比如 AND,((DOMAIN-SUFFIX,example.com),(NETWORK,UDP))"
+        case .auto: return L("域名（含子域名）或 IP / 网段，比如 youtube.com、8.8.8.8、10.0.0.0/8")
+        case .domain: return L("完整域名，不含子域名，比如 www.example.com")
+        case .suffix: return L("域名后缀，比如 google.com（含所有子域名）")
+        case .keyword: return L("域名里的关键词，比如 google")
+        case .wildcard: return L("通配，比如 *.example.com、img?.example.com")
+        case .regex: return L("正则，比如 ^ad[0-9]+\\.example\\.com$（不能有逗号）")
+        case .ip: return L("目标 IP 或网段，比如 1.1.1.1、91.108.0.0/16")
+        case .geoip: return L("国家代码，比如 CN、JP、US；LAN 表示局域网")
+        case .device: return L("设备的 IP 或网段，比如 192.168.1.20")
+        case .port: return L("端口，比如 22、8000-9000、80/443")
+        case .app: return L("应用的路径，比如 /Applications/Telegram.app")
+        case .process: return L("进程名，比如 git、node、curl")
+        case .network: return L("TCP 或 UDP")
+        case .logic: return L("比如 AND,((DOMAIN-SUFFIX,example.com),(NETWORK,UDP))")
         }
     }
 
@@ -76,19 +76,19 @@ enum CustomRuleKind: String, Codable, CaseIterable, Identifiable {
     var badge: String {
         switch self {
         case .auto: return ""
-        case .domain: return "域名"
-        case .suffix: return "后缀"
-        case .keyword: return "关键词"
-        case .wildcard: return "通配"
-        case .regex: return "正则"
+        case .domain: return L("域名")
+        case .suffix: return L("后缀")
+        case .keyword: return L("关键词")
+        case .wildcard: return L("通配")
+        case .regex: return L("正则")
         case .ip: return "IP"
-        case .geoip: return "归属地"
-        case .device: return "设备"
-        case .port: return "端口"
-        case .app: return "应用"
-        case .process: return "进程"
-        case .network: return "协议"
-        case .logic: return "组合"
+        case .geoip: return L("归属地")
+        case .device: return L("设备")
+        case .port: return L("端口")
+        case .app: return L("应用")
+        case .process: return L("进程")
+        case .network: return L("协议")
+        case .logic: return L("组合")
         }
     }
 
@@ -166,7 +166,7 @@ struct CustomRule: Codable, Identifiable, Equatable, Hashable {
         case .geoip:
             return trimmed.uppercased()
         case .port:
-            return trimmed.replacingOccurrences(of: " ", with: "").replacingOccurrences(of: "，", with: "/").replacingOccurrences(of: ",", with: "/")
+            return trimmed.replacingOccurrences(of: " ", with: "").replacingOccurrences(of: "，", with: "/").replacingOccurrences(of: ",", with: "/")  // l10n-ignore：全角逗号
         case .app:
             var path = (trimmed as NSString).expandingTildeInPath
             while path.count > 1 && path.hasSuffix("/") {
@@ -209,51 +209,51 @@ struct CustomRule: Codable, Identifiable, Equatable, Hashable {
     /// 按种类校验输入，返回问题；没问题返回 nil。
     static func validate(_ text: String, kind: CustomRuleKind) -> String? {
         let value = normalize(text, kind: kind)
-        if value.isEmpty { return kind == .auto ? "请填写域名或 IP" : "请填写\(kind.title)" }
+        if value.isEmpty { return kind == .auto ? L("请填写域名或 IP") : L("请填写%@", kind.title) }
         // 规则行用逗号分隔字段，组合规则以外的内容里不能有逗号。
-        if kind != .logic, value.contains(",") { return "不能有逗号" }
-        if value.contains(where: \.isNewline) { return "不能换行" }
+        if kind != .logic, value.contains(",") { return L("不能有逗号") }
+        if value.contains(where: \.isNewline) { return L("不能换行") }
         switch kind {
         case .auto:
             if IPPrefix.normalize(value) != nil || RuleConverter.looksLikeDomain(value) { return nil }
-            return "认不出「\(value)」：填域名（比如 youtube.com）或 IP / 网段（比如 8.8.8.8、10.0.0.0/8）"
+            return L("认不出「%@」：填域名（比如 youtube.com）或 IP / 网段（比如 8.8.8.8、10.0.0.0/8）", value)
         case .domain, .suffix:
-            return RuleConverter.looksLikeDomain(value) ? nil : "认不出「\(value)」：填域名，比如 example.com"
+            return RuleConverter.looksLikeDomain(value) ? nil : L("认不出「%@」：填域名，比如 example.com", value)
         case .keyword:
-            return value.contains(where: \.isWhitespace) ? "关键词里不能有空格" : nil
+            return value.contains(where: \.isWhitespace) ? L("关键词里不能有空格") : nil
         case .wildcard:
             let allowed = value.allSatisfy { $0.isLetter || $0.isNumber || "-_.*?".contains($0) }
-            return allowed && value.contains(".") ? nil : "通配只能有字母、数字、点、横线和 * ?，比如 *.example.com"
+            return allowed && value.contains(".") ? nil : L("通配只能有字母、数字、点、横线和 * ?，比如 *.example.com")
         case .regex:
             do {
                 _ = try NSRegularExpression(pattern: value)
                 return nil
             } catch {
-                return "不是正确的正则表达式"
+                return L("不是正确的正则表达式")
             }
         case .ip, .device:
-            return IPPrefix.normalize(value) != nil ? nil : "认不出「\(value)」：填 IP 或网段，比如 192.168.1.20、10.0.0.0/8"
+            return IPPrefix.normalize(value) != nil ? nil : L("认不出「%@」：填 IP 或网段，比如 192.168.1.20、10.0.0.0/8", value)
         case .geoip:
             let ok = value == "LAN" || (value.count == 2 && value.allSatisfy { $0.isASCII && $0.isLetter })
-            return ok ? nil : "填两个字母的国家代码，比如 CN、JP、US"
+            return ok ? nil : L("填两个字母的国家代码，比如 CN、JP、US")
         case .port:
-            return validPorts(value) ? nil : "端口填 1~65535 的数字，范围用 -，多个用 /，比如 80/443、8000-9000"
+            return validPorts(value) ? nil : L("端口填 1~65535 的数字，范围用 -，多个用 /，比如 80/443、8000-9000")
         case .app:
-            return value.hasPrefix("/") ? nil : "选一个应用，或者填它的完整路径，比如 /Applications/Telegram.app"
+            return value.hasPrefix("/") ? nil : L("选一个应用，或者填它的完整路径，比如 /Applications/Telegram.app")
         case .process:
-            return value.contains("/") ? "进程名不含路径，比如 git；要按路径匹配请选「应用」" : nil
+            return value.contains("/") ? L("进程名不含路径，比如 git；要按路径匹配请选「应用」") : nil
         case .network:
-            return ["TCP", "UDP"].contains(value) ? nil : "填 TCP 或 UDP"
+            return ["TCP", "UDP"].contains(value) ? nil : L("填 TCP 或 UDP")
         case .logic:
             let upper = value.uppercased()
-            guard ["AND,", "OR,", "NOT,"].contains(where: { upper.hasPrefix($0) }) else { return "组合规则以 AND、OR 或 NOT 开头" }
+            guard ["AND,", "OR,", "NOT,"].contains(where: { upper.hasPrefix($0) }) else { return L("组合规则以 AND、OR 或 NOT 开头") }
             var depth = 0
             for character in value {
                 if character == "(" { depth += 1 }
                 if character == ")" { depth -= 1 }
-                if depth < 0 { return "括号不配对" }
+                if depth < 0 { return L("括号不配对") }
             }
-            return depth == 0 && value.contains("((") ? nil : "括号不配对，格式像 AND,((DOMAIN,a.com),(NETWORK,UDP))"
+            return depth == 0 && value.contains("((") ? nil : L("括号不配对，格式像 AND,((DOMAIN,a.com),(NETWORK,UDP))")
         }
     }
 

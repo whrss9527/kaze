@@ -15,7 +15,7 @@ struct ConnectionsPage: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            PageHeader(title: "连接", subtitle: "谁在访问什么、走了哪个节点、命中了哪条规则；出口 IP 和按节点累计的流量")
+            PageHeader(title: L("连接"), subtitle: L("谁在访问什么、走了哪个节点、命中了哪条规则；出口 IP 和按节点累计的流量"))
             Form {
                 speedSection
                 exitSection
@@ -40,14 +40,14 @@ struct ConnectionsPage: View {
     // MARK: - 出口
 
     private var exitSection: some View {
-        Section("出口 IP") {
-            exitRow(title: "经节点", info: engine.exitInfo, problem: engine.exitProblem, checking: engine.checkingExit, available: engine.isRunning && state.config.engine.wantsCore, unavailableText: "内核启动后查") {
+        Section(L("出口 IP")) {
+            exitRow(title: L("经节点"), info: engine.exitInfo, problem: engine.exitProblem, checking: engine.checkingExit, available: engine.isRunning && state.config.engine.wantsCore, unavailableText: L("内核启动后查")) {
                 Task { await engine.checkExit(force: true) }
             }
-            exitRow(title: "直连", info: engine.directExit, problem: engine.directExitProblem, checking: engine.checkingDirectExit, available: true, unavailableText: "") {
+            exitRow(title: L("直连"), info: engine.directExit, problem: engine.directExitProblem, checking: engine.checkingDirectExit, available: true, unavailableText: "") {
                 Task { await engine.checkDirectExit() }
             }
-            Text("经节点的出口就是网站看到的你的地址，切换节点后自动重查；直连的是这台 Mac 自己的公网地址。通过 ip.sb、ipinfo.io 这些公开接口查询。")
+            Text(L("经节点的出口就是网站看到的你的地址，切换节点后自动重查；直连的是这台 Mac 自己的公网地址。通过 ip.sb、ipinfo.io 这些公开接口查询。"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -56,7 +56,7 @@ struct ConnectionsPage: View {
     private func exitRow(title: String, info: ExitInfo?, problem: String?, checking: Bool, available: Bool, unavailableText: String, refresh: @escaping () -> Void) -> some View {
         HStack(spacing: 10) {
             Text(title)
-                .frame(width: 48, alignment: .leading)
+                .frame(width: AppLanguage.width(48, english: 72), alignment: .leading)
             if let info {
                 Text(info.flag.isEmpty ? "🌐" : info.flag)
                     .font(.system(size: 18))
@@ -74,7 +74,7 @@ struct ConnectionsPage: View {
                     .font(.caption)
                     .foregroundStyle(.orange)
             } else {
-                Text(available ? (checking ? "正在查…" : "还没查") : unavailableText)
+                Text(available ? (checking ? L("正在查…") : L("还没查")) : unavailableText)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -83,7 +83,7 @@ struct ConnectionsPage: View {
                 ProgressView()
                     .controlSize(.small)
             } else {
-                Button("刷新") { refresh() }
+                Button(L("刷新")) { refresh() }
                     .controlSize(.small)
                     .disabled(!available)
             }
@@ -93,9 +93,9 @@ struct ConnectionsPage: View {
     // MARK: - 网速
 
     private var speedSection: some View {
-        Section("网速") {
+        Section(L("网速")) {
             if engine.speedHistory.count < 2 {
-                Text(engine.isRunning ? "正在采集，几秒后出现最近两分钟经内核的网速。" : "内核运行时这里显示最近两分钟经内核的网速。")
+                Text(engine.isRunning ? L("正在采集，几秒后出现最近两分钟经内核的网速。") : L("内核运行时这里显示最近两分钟经内核的网速。"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
@@ -109,7 +109,7 @@ struct ConnectionsPage: View {
                             .foregroundStyle(Color.accentColor)
                         Spacer()
                         let peak = engine.speedHistory.map { max($0.upload, $0.download) }.max() ?? 0
-                        Text("两分钟内最快 \(Engine.bytesText(peak))/s")
+                        Text(L("两分钟内最快 %@/s", Engine.bytesText(peak)))
                             .foregroundStyle(.secondary)
                     }
                     .font(.caption)
@@ -124,10 +124,10 @@ struct ConnectionsPage: View {
     private var serviceKey: String { serviceNode }
 
     private var servicesSection: some View {
-        Section("服务检测") {
+        Section(L("服务检测")) {
             HStack {
-                Picker("经", selection: $serviceNode) {
-                    Text("现在的节点" + (engine.effectiveNode.map { "（\($0)）" } ?? "")).tag("")
+                Picker(L("经"), selection: $serviceNode) {
+                    Text(L("现在的节点") + (engine.effectiveNode.map { L("（%@）", $0) } ?? "")).tag("")
                     ForEach(engine.sortedNodes.prefix(200)) { node in
                         Text(node.name).tag(node.name)
                     }
@@ -138,7 +138,7 @@ struct ConnectionsPage: View {
                     ProgressView()
                         .controlSize(.small)
                 }
-                Button(engine.checkingServices != nil ? "正在检测…" : "检测") {
+                Button(engine.checkingServices != nil ? L("正在检测…") : L("检测")) {
                     let node = serviceNode.isEmpty ? nil : serviceNode
                     Task { await engine.checkServices(node: node) }
                 }
@@ -163,12 +163,12 @@ struct ConnectionsPage: View {
                     }
                 }
                 if let date = results.first?.checkedAt {
-                    Text("\(Engine.relative(date))检测")
+                    Text(L("%@检测", Engine.relative(date)))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
-            Text("看经某个节点 ChatGPT、Claude、Netflix、YouTube Premium 这些服务能不能用、服务认为你在哪。选别的节点检测时不会切换你正在用的节点。检测方法是公开的经验做法，服务一改就可能不准，仅供参考。")
+            Text(L("看经某个节点 ChatGPT、Claude、Netflix、YouTube Premium 这些服务能不能用、服务认为你在哪。选别的节点检测时不会切换你正在用的节点。检测方法是公开的经验做法，服务一改就可能不准，仅供参考。"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -207,28 +207,28 @@ struct ConnectionsPage: View {
     }
 
     private var trafficSection: some View {
-        Section("流量统计") {
-            LabeledContent("内核这次运行") {
-                Text("↑ \(Engine.bytesText(engine.sessionTraffic.upload))　↓ \(Engine.bytesText(engine.sessionTraffic.download))")
+        Section(L("流量统计")) {
+            LabeledContent(L("内核这次运行")) {
+                Text(L("↑ %@　↓ %@", Engine.bytesText(engine.sessionTraffic.upload), Engine.bytesText(engine.sessionTraffic.download)))
                     .monospacedDigit()
             }
             Picker("", selection: $trafficView) {
-                Text("按节点").tag("outbound")
-                Text("按程序和设备").tag("source")
-                Text("按天").tag("day")
+                Text(L("按节点")).tag("outbound")
+                Text(L("按程序和设备")).tag("source")
+                Text(L("按天")).tag("day")
             }
             .pickerStyle(.segmented)
             .labelsHidden()
             let ranked = trafficEntries
             if ranked.allSatisfy({ $0.traffic.isZero }) {
-                Text("有流量经过内核后，这里按节点（以及直连、上游代理）、按发起连接的程序和设备、按天累计。")
+                Text(L("有流量经过内核后，这里按节点（以及直连、上游代理）、按发起连接的程序和设备、按天累计。"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
                 let top = ranked.map(\.traffic.total).max() ?? 1
                 ForEach(ranked.prefix(14), id: \.name) { item in
                     HStack(spacing: 10) {
-                        Text(item.name)
+                        Text(item.displayName)
                             .font(.system(size: 12))
                             .lineLimit(1)
                             .truncationMode(.middle)
@@ -240,7 +240,7 @@ struct ConnectionsPage: View {
                                 .frame(maxHeight: .infinity, alignment: .center)
                         }
                         .frame(height: 12)
-                        Text("↑ \(Engine.bytesText(item.traffic.upload))　↓ \(Engine.bytesText(item.traffic.download))")
+                        Text(L("↑ %@　↓ %@", Engine.bytesText(item.traffic.upload), Engine.bytesText(item.traffic.download)))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .monospacedDigit()
@@ -249,11 +249,11 @@ struct ConnectionsPage: View {
                 }
             }
             HStack(alignment: .top) {
-                Text("从 \(Self.dateFormatter.string(from: engine.traffic.since)) 起累计，内核重启后接着算；每两秒采样一次，连接关掉前最后一点流量算不进来，看趋势够用。按天的统计保留一个月。")
+                Text(L("从 %@ 起累计，内核重启后接着算；每两秒采样一次，连接关掉前最后一点流量算不进来，看趋势够用。按天的统计保留一个月。", Self.dateFormatter.string(from: engine.traffic.since)))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
-                Button("清零") { engine.resetTraffic() }
+                Button(L("清零")) { engine.resetTraffic() }
                     .controlSize(.small)
                     .disabled(engine.traffic.outbounds.isEmpty)
             }
@@ -262,7 +262,7 @@ struct ConnectionsPage: View {
 
     private static let dateFormatter: DateFormatter = {
         let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.locale = AppLanguage.locale
         formatter.dateStyle = .medium
         formatter.timeStyle = .short
         return formatter
@@ -284,11 +284,11 @@ struct ConnectionsPage: View {
     }
 
     private var activeSection: some View {
-        Section("正在进行的连接（\(engine.connections.count)）") {
+        Section(L("正在进行的连接（%@）", engine.connections.count)) {
             HStack {
-                TextField("", text: $filter, prompt: Text("按域名、程序、设备、规则或节点筛选"))
+                TextField("", text: $filter, prompt: Text(L("按域名、程序、设备、规则或节点筛选")))
                     .labelsHidden()
-                Button(closingAll ? "正在断开…" : "全部断开") {
+                Button(closingAll ? L("正在断开…") : L("全部断开")) {
                     closingAll = true
                     Task { @MainActor in
                         await engine.closeAllConnections()
@@ -299,11 +299,11 @@ struct ConnectionsPage: View {
                 .disabled(closingAll || engine.connections.isEmpty)
             }
             if !engine.isRunning {
-                Text("内核没有运行。开启节点代理或局域网共享后，经内核的连接会列在这里。")
+                Text(L("内核没有运行。开启节点代理或局域网共享后，经内核的连接会列在这里。"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else if activeRecords.isEmpty {
-                Text(filter.isEmpty ? "现在没有开着的连接。" : "没有匹配的连接。")
+                Text(filter.isEmpty ? L("现在没有开着的连接。") : L("没有匹配的连接。"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
@@ -317,12 +317,12 @@ struct ConnectionsPage: View {
                     })
                 }
                 if activeRecords.count > 80 {
-                    Text("还有 \(activeRecords.count - 80) 条没有列出，用筛选缩小范围。")
+                    Text(L("还有 %@ 条没有列出，用筛选缩小范围。", activeRecords.count - 80))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
-            Text("来源是发起连接的程序，PS5 等设备显示它的 IP。右键一条连接可以让这个域名固定走某个去向，或者断开它。")
+            Text(L("来源是发起连接的程序，PS5 等设备显示它的 IP。右键一条连接可以让这个域名固定走某个去向，或者断开它。"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -343,9 +343,9 @@ struct ConnectionsPage: View {
 
     private var recentSection: some View {
         let records = filtered(engine.history)
-        return Section("最近的连接") {
+        return Section(L("最近的连接")) {
             if records.isEmpty {
-                Text(engine.history.isEmpty ? "经内核的连接会按时间记在这里，短连接也有，最多 \(Engine.historyLimit) 条。" : "没有匹配的连接。")
+                Text(engine.history.isEmpty ? L("经内核的连接会按时间记在这里，短连接也有，最多 %@ 条。", Engine.historyLimit) : L("没有匹配的连接。"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
@@ -358,7 +358,7 @@ struct ConnectionsPage: View {
                 }
                 HStack {
                     Spacer()
-                    Button("清空") { engine.clearHistory() }
+                    Button(L("清空")) { engine.clearHistory() }
                         .controlSize(.small)
                 }
             }
@@ -378,7 +378,7 @@ struct ConnectionRow: View {
 
     /// 右键菜单里「让 xx 走…」的 xx：应用名、进程名或者设备。
     private var appTitle: String? {
-        if record.isShare { return record.client.isEmpty ? nil : "设备 \(record.client)" }
+        if record.isShare { return record.client.isEmpty ? nil : L("设备 %@", record.client) }
         if let bundle = CustomRule.appBundlePath(forProcessPath: record.processPath) {
             return (bundle as NSString).lastPathComponent.replacingOccurrences(of: ".app", with: "")
         }
@@ -425,27 +425,27 @@ struct ConnectionRow: View {
         .contextMenu {
             if !record.host.isEmpty {
                 ForEach(targets, id: \.self) { target in
-                    Button("让 \(record.host) \(target.actionTitle)") { onPin(target) }
+                    Button(L("让 %@ %@", record.host, target.actionTitle)) { onPin(target) }
                 }
                 Divider()
             }
             if let onPinApp, let appTitle {
-                Menu("让 \(appTitle) 的所有连接…") {
+                Menu(L("让 %@ 的所有连接…", appTitle)) {
                     ForEach(targets, id: \.self) { target in
                         Button(target.actionTitle) { onPinApp(target) }
                     }
                 }
                 Divider()
             }
-            Button("复制目标") { TerminalCommands.copy(record.target) }
+            Button(L("复制目标")) { TerminalCommands.copy(record.target) }
             if let onClose {
-                Button("断开这条连接", role: .destructive) { onClose() }
+                Button(L("断开这条连接"), role: .destructive) { onClose() }
             }
         }
     }
 
     private var sourceLine: String {
-        var parts = [record.isShare ? "\(record.client)（设备）" : record.source]
+        var parts = [record.isShare ? L("%@（设备）", record.client) : record.source]
         if !record.rule.isEmpty {
             parts.append(record.rule)
         }
@@ -469,10 +469,10 @@ struct SpeedChart: View {
     var body: some View {
         Chart {
             ForEach(samples) { sample in
-                LineMark(x: .value("时间", sample.date), y: .value("字节每秒", Double(sample.download)), series: .value("方向", "下行"))
+                LineMark(x: .value(L("时间"), sample.date), y: .value(L("字节每秒"), Double(sample.download)), series: .value(L("方向"), L("下行")))
                     .foregroundStyle(Color.accentColor)
                     .interpolationMethod(.monotone)
-                LineMark(x: .value("时间", sample.date), y: .value("字节每秒", Double(sample.upload)), series: .value("方向", "上行"))
+                LineMark(x: .value(L("时间"), sample.date), y: .value(L("字节每秒"), Double(sample.upload)), series: .value(L("方向"), L("上行")))
                     .foregroundStyle(Color.orange)
                     .interpolationMethod(.monotone)
             }

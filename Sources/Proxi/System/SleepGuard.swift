@@ -5,8 +5,8 @@ import IOKit.pwr_mgt
 /// 系统的防睡眠断言和电源来源，纯函数和 C 接口的薄封装，哪个线程都能用。
 enum PowerAssertion {
     /// 断言的名字，「活动监视器 → 能耗 → 防止睡眠」和 pmset -g assertions 里能看到。
-    static let name = "Proxi 局域网共享"
-    static let details = "PS5 等设备正经这台 Mac 上网，共享关闭后恢复"
+    static let name = L("Proxi 局域网共享")
+    static let details = L("PS5 等设备正经这台 Mac 上网，共享关闭后恢复")
 
     /// 该不该阻止睡眠：想保持，而且接着电源或者允许电池供电时也保持。
     static func shouldHold(wanted: Bool, onBattery: Bool, allowOnBattery: Bool) -> Bool {

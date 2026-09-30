@@ -25,7 +25,7 @@ enum UnixSocket {
         address.sun_family = sa_family_t(AF_UNIX)
         let capacity = MemoryLayout.size(ofValue: address.sun_path)
         let bytes = Array(path.utf8)
-        guard bytes.count < capacity else { throw ControlError.failed("套接字路径太长：\(path)") }
+        guard bytes.count < capacity else { throw ControlError.failed(L("套接字路径太长：%@", path)) }
         withUnsafeMutablePointer(to: &address.sun_path) { pointer in
             pointer.withMemoryRebound(to: UInt8.self, capacity: capacity) { buffer in
                 for (index, byte) in bytes.enumerated() {
@@ -112,7 +112,7 @@ final class ControlSocketServer: @unchecked Sendable {
         try FileManager.default.createDirectory(atPath: (path as NSString).deletingLastPathComponent, withIntermediateDirectories: true)
         unlink(path)
         let fd = UnixSocket.makeSocket()
-        guard fd >= 0 else { throw ControlError.failed("建不了套接字：\(String(cString: strerror(errno)))") }
+        guard fd >= 0 else { throw ControlError.failed(L("建不了套接字：%@", String(cString: strerror(errno)))) }
         var (address, length) = try UnixSocket.address(path)
         // 先把权限收紧再绑定，文件一出现就只有自己能连。
         let oldMask = umask(0o077)
@@ -123,12 +123,12 @@ final class ControlSocketServer: @unchecked Sendable {
         guard bound == 0 else {
             let message = String(cString: strerror(errno))
             close(fd)
-            throw ControlError.failed("绑定 \(path) 失败：\(message)")
+            throw ControlError.failed(L("绑定 %@ 失败：%@", path, message))
         }
         chmod(path, 0o600)
         guard listen(fd, 16) == 0 else {
             close(fd)
-            throw ControlError.failed("监听失败：\(String(cString: strerror(errno)))")
+            throw ControlError.failed(L("监听失败：%@", String(cString: strerror(errno))))
         }
         _ = fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK)
         let source = DispatchSource.makeReadSource(fileDescriptor: fd, queue: queue)
@@ -196,7 +196,7 @@ enum ControlSocketClient {
     /// 发一条请求，等一行回应。连不上时抛出 notRunning。
     static func send(_ request: Data, path: String = UnixSocket.defaultPath, timeout: TimeInterval = 180) throws -> Data {
         let fd = UnixSocket.makeSocket()
-        guard fd >= 0 else { throw ControlError.failed("建不了套接字") }
+        guard fd >= 0 else { throw ControlError.failed(L("建不了套接字")) }
         defer { close(fd) }
         UnixSocket.disableSigpipe(fd)
         var (address, length) = try UnixSocket.address(path)
@@ -204,15 +204,15 @@ enum ControlSocketClient {
             $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { connect(fd, $0, length) }
         }
         guard connected == 0 else {
-            throw ControlError(code: JSONRPC.notRunning, message: "Proxi 没有在运行，或者「自动化」里关掉了本机控制接口")
+            throw ControlError(code: JSONRPC.notRunning, message: L("Proxi 没有在运行，或者「自动化」里关掉了本机控制接口"))
         }
         UnixSocket.setTimeout(fd, seconds: timeout)
         var line = request
         line.append(0x0A)
-        guard UnixSocket.writeAll(fd, line) else { throw ControlError.failed("发送请求失败") }
+        guard UnixSocket.writeAll(fd, line) else { throw ControlError.failed(L("发送请求失败")) }
         var buffer = Data()
         guard let response = UnixSocket.readLine(fd, buffer: &buffer) else {
-            throw ControlError.failed("Proxi 没有回应（可能超时了）")
+            throw ControlError.failed(L("Proxi 没有回应（可能超时了）"))
         }
         return response
     }
@@ -222,9 +222,9 @@ enum ControlSocketClient {
         var request = JSONRPC.request(id: 1, method: method, params: params)
         request["client"] = client
         let data = try send(JSONRPC.encode(request), path: path, timeout: timeout)
-        guard let response = JSONRPC.decode(data) else { throw ControlError.failed("读不懂 Proxi 的回应") }
+        guard let response = JSONRPC.decode(data) else { throw ControlError.failed(L("读不懂 Proxi 的回应")) }
         if let error = response["error"] as? [String: Any] {
-            throw ControlError(code: (error["code"] as? Int) ?? JSONRPC.internalError, message: (error["message"] as? String) ?? "出错了")
+            throw ControlError(code: (error["code"] as? Int) ?? JSONRPC.internalError, message: (error["message"] as? String) ?? L("出错了"))
         }
         return (response["result"] as? [String: Any]) ?? [:]
     }

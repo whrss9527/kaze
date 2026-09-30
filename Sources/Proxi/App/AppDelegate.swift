@@ -16,6 +16,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Log.flush()
             exit(0)
         }
+        // 设置里改了界面语言、点「立即重新启动」打开的新实例：先等旧的退出，再建菜单栏图标、启动内核。
+        LanguageSetting.waitForPreviousInstance(arguments: ProcessInfo.processInfo.arguments)
+        _ = LanguageSetting.atLaunch
         let app = NSApplication.shared
         let delegate = AppDelegate()
         app.delegate = delegate
@@ -54,6 +57,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         state.start()
         controller.updateIcon()
         Log.info("Proxi 已启动，版本 \(UpdateChecker.currentVersion)")
+        // CI 按这一行确认界面语言（sample 是菜单里「设置…」的译文）。
+        Log.info("界面语言 english=\(AppLanguage.isEnglish) setting=\(LanguageSetting.current.rawValue) sample=\"\(L("设置…"))\"")
         // 还没有任何配置时直接打开设置引导添加。
         if state.config.profiles.isEmpty {
             SettingsWindowController.shared.show(page: .profiles)

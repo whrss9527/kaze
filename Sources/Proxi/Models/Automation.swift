@@ -15,19 +15,19 @@ enum ControlPermission: String, Codable, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .off: return "关闭"
-        case .readOnly: return "只能查看"
-        case .operate: return "日常操作"
-        case .full: return "完全控制"
+        case .off: return L("关闭")
+        case .readOnly: return L("只能查看")
+        case .operate: return L("日常操作")
+        case .full: return L("完全控制")
         }
     }
 
     var detail: String {
         switch self {
-        case .off: return "命令行和 AI 助手都连不上"
-        case .readOnly: return "查看状态、节点、规则和连接，不能改动任何东西"
-        case .operate: return "另外可以开关代理、切换节点和模式、测速、断开连接"
-        case .full: return "另外可以加规则、加订阅、导入配置；每次改动都记在操作记录里，可以撤销"
+        case .off: return L("命令行和 AI 助手都连不上")
+        case .readOnly: return L("查看状态、节点、规则和连接，不能改动任何东西")
+        case .operate: return L("另外可以开关代理、切换节点和模式、测速、断开连接")
+        case .full: return L("另外可以加规则、加订阅、导入配置；每次改动都记在操作记录里，可以撤销")
         }
     }
 
@@ -55,10 +55,10 @@ struct NetworkIdentity: Equatable {
     /// 一句话：Wi‑Fi「Home」· 路由器 192.168.1.1。
     var summary: String {
         var parts: [String] = []
-        if let ssid { parts.append("Wi‑Fi「\(ssid)」") }
-        if let routerIP { parts.append("路由器 \(routerIP)") }
+        if let ssid { parts.append(L("Wi‑Fi「%@」", ssid)) }
+        if let routerIP { parts.append(L("路由器 %@", routerIP)) }
         if let routerMAC { parts.append(routerMAC) }
-        return parts.isEmpty ? "没有连接网络" : parts.joined(separator: " · ")
+        return parts.isEmpty ? L("没有连接网络") : parts.joined(separator: " · ")
     }
 }
 
@@ -94,9 +94,9 @@ struct NetworkRule: Codable, Identifiable, Equatable, Hashable {
 
         var title: String {
             switch self {
-            case .ssid(let name): return "连上 Wi‑Fi「\(name)」"
-            case .router(let address): return "路由器是 \(address)"
-            case .other: return "其他网络"
+            case .ssid(let name): return L("连上 Wi‑Fi「%@」", name)
+            case .router(let address): return L("路由器是 %@", address)
+            case .other: return L("其他网络")
             }
         }
     }
@@ -131,9 +131,9 @@ struct NetworkRule: Codable, Identifiable, Equatable, Hashable {
 
         func title(profiles: [Profile]) -> String {
             switch self {
-            case .profile(let id): return "开启「\(profiles.first { $0.id == id }?.name ?? "已删除的配置")」"
-            case .off: return "关闭代理"
-            case .mode(let mode): return "切到\(mode.title)"
+            case .profile(let id): return L("开启「%@」", profiles.first { $0.id == id }?.name ?? L("已删除的配置"))
+            case .off: return L("关闭代理")
+            case .mode(let mode): return L("切到%@", mode.title)
             }
         }
     }
@@ -158,10 +158,10 @@ struct NetworkRule: Codable, Identifiable, Equatable, Hashable {
         let matchText = try container.decode(String.self, forKey: .match)
         let actionText = try container.decode(String.self, forKey: .action)
         guard let match = Match(rawValue: matchText) else {
-            throw DecodingError.dataCorruptedError(forKey: .match, in: container, debugDescription: "认不出网络条件 \(matchText)")
+            throw DecodingError.dataCorruptedError(forKey: .match, in: container, debugDescription: L("认不出网络条件 %@", matchText))
         }
         guard let action = Action(rawValue: actionText) else {
-            throw DecodingError.dataCorruptedError(forKey: .action, in: container, debugDescription: "认不出动作 \(actionText)")
+            throw DecodingError.dataCorruptedError(forKey: .action, in: container, debugDescription: L("认不出动作 %@", actionText))
         }
         self.match = match
         self.action = action

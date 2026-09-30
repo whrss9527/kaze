@@ -19,13 +19,13 @@ enum ImportFormat: String, Equatable, Codable {
 
     var title: String {
         switch self {
-        case .proxi: return "Proxi 配置"
-        case .backup: return "Proxi 备份"
-        case .clash: return "Clash / mihomo 配置"
-        case .surge: return "Surge / 小火箭配置"
-        case .quantumult: return "Quantumult X 配置"
-        case .links: return "节点链接"
-        case .ruleList: return "规则列表"
+        case .proxi: return L("Proxi 配置")
+        case .backup: return L("Proxi 备份")
+        case .clash: return L("Clash / mihomo 配置")
+        case .surge: return L("Surge / 小火箭配置")
+        case .quantumult: return L("Quantumult X 配置")
+        case .links: return L("节点链接")
+        case .ruleList: return L("规则列表")
         }
     }
 }
@@ -41,8 +41,8 @@ enum ImportMode: String, Codable, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .merge: return "合并到现有设置"
-        case .replace: return "替换同类设置"
+        case .merge: return L("合并到现有设置")
+        case .replace: return L("替换同类设置")
         }
     }
 }
@@ -92,24 +92,24 @@ struct ImportPlan: Equatable {
     /// 预览里的一行行说明。
     var summaryLines: [String] {
         if let backup {
-            return ["完整备份：\(backup.profiles.count) 个代理配置、\(backup.engine.subscriptions.count) 条订阅、\(backup.engine.groups.count) 个策略组、\(backup.engine.ruleSets.count) 个规则集、\(backup.engine.customRules.count) 条自定义规则"]
+            return [L("完整备份：%@ 个代理配置、%@ 条订阅、%@ 个策略组、%@ 个规则集、%@ 条自定义规则", backup.profiles.count, backup.engine.subscriptions.count, backup.engine.groups.count, backup.engine.ruleSets.count, backup.engine.customRules.count)]
         }
         var lines: [String] = []
-        if !subscriptions.isEmpty { lines.append("订阅：" + subscriptions.map(\.name).joined(separator: "、")) }
-        if let nodeFile { lines.append("节点：\(ConfigImporter.countProxies(in: nodeFile.content)) 个，存成一条本机订阅") }
-        if !manualNodes.isEmpty { lines.append("手动节点：\(manualNodes.count) 个") }
-        if !groups.isEmpty { lines.append("策略组：" + groups.map(\.name).joined(separator: "、")) }
-        if !ruleSets.isEmpty { lines.append("规则集：" + ruleSets.map(\.name).joined(separator: "、")) }
-        if let ruleFile { lines.append("分流规则：\(ConfigImporter.countRules(in: ruleFile.content)) 条，按文件里的策略走") }
-        if !customRules.isEmpty { lines.append("自定义规则：\(customRules.count) 条") }
-        if let finalPolicy { lines.append("其余流量：\(finalPolicy.title)") }
-        if let mode { lines.append("模式：\(mode.title)") }
-        if let dns { lines.append(dns.enabled ? "DNS：\(dns.nameservers.joined(separator: "、"))" : "DNS：用系统的") }
-        if !hosts.isEmpty { lines.append("Hosts：\(hosts.count) 条") }
-        if let ipv6 { lines.append("IPv6：\(ipv6 ? "开" : "关")") }
-        if !profiles.isEmpty { lines.append("代理配置：" + profiles.map(\.name).joined(separator: "、")) }
-        if !networkRules.isEmpty { lines.append("按网络自动切换：\(networkRules.count) 条") }
-        if patch != nil { lines.append("内核配置补丁") }
+        if !subscriptions.isEmpty { lines.append(L("订阅：") + subscriptions.map(\.name).joined(separator: L("、"))) }
+        if let nodeFile { lines.append(L("节点：%@ 个，存成一条本机订阅", ConfigImporter.countProxies(in: nodeFile.content))) }
+        if !manualNodes.isEmpty { lines.append(L("手动节点：%@ 个", manualNodes.count)) }
+        if !groups.isEmpty { lines.append(L("策略组：") + groups.map(\.name).joined(separator: L("、"))) }
+        if !ruleSets.isEmpty { lines.append(L("规则集：") + ruleSets.map(\.name).joined(separator: L("、"))) }
+        if let ruleFile { lines.append(L("分流规则：%@ 条，按文件里的策略走", ConfigImporter.countRules(in: ruleFile.content))) }
+        if !customRules.isEmpty { lines.append(L("自定义规则：%@ 条", customRules.count)) }
+        if let finalPolicy { lines.append(L("其余流量：%@", finalPolicy.title)) }
+        if let mode { lines.append(L("模式：%@", mode.title)) }
+        if let dns { lines.append(dns.enabled ? L("DNS：%@", dns.nameservers.joined(separator: L("、"))) : L("DNS：用系统的")) }
+        if !hosts.isEmpty { lines.append(L("Hosts：%@ 条", hosts.count)) }
+        if let ipv6 { lines.append(L("IPv6：%@", ipv6 ? L("开") : L("关"))) }
+        if !profiles.isEmpty { lines.append(L("代理配置：") + profiles.map(\.name).joined(separator: L("、"))) }
+        if !networkRules.isEmpty { lines.append(L("按网络自动切换：%@ 条", networkRules.count)) }
+        if patch != nil { lines.append(L("内核配置补丁")) }
         return lines
     }
 }
@@ -128,8 +128,8 @@ enum ImportError: LocalizedError, Equatable {
 
     var errorDescription: String? {
         switch self {
-        case .unrecognized: return "认不出这是什么配置：支持 Proxi 的 JSON、Clash / mihomo 的 YAML、Surge / 小火箭 / Quantumult X 的配置、节点链接和规则列表"
-        case .empty: return "里面没有能导入的内容"
+        case .unrecognized: return L("认不出这是什么配置：支持 Proxi 的 JSON、Clash / mihomo 的 YAML、Surge / 小火箭 / Quantumult X 的配置、节点链接和规则列表")
+        case .empty: return L("里面没有能导入的内容")
         case .invalid(let text): return text
         }
     }
@@ -207,7 +207,7 @@ enum ConfigImporter {
             if let sourceURL {
                 plan.ruleSets = [RuleSet(name: RuleSet.defaultName(for: sourceURL), url: sourceURL, policy: .proxy)]
             } else {
-                plan.ruleFile = ImportFile(name: fileName(sourceName, suffix: "规则", extension: "list"), content: text)
+                plan.ruleFile = ImportFile(name: fileName(sourceName, suffix: L("规则"), extension: "list"), content: text)
             }
         }
         if plan.isEmpty { throw ImportError.empty }
@@ -222,34 +222,34 @@ enum ConfigImporter {
     /// Proxi 的配置描述（JSON）。字段都可以省略，写了哪些就导入哪些；格式见 docs/automation.md。
     static func planProxi(_ text: String, sourceName: String, existing: AppConfig) throws -> ImportPlan {
         guard let data = text.data(using: .utf8), let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            throw ImportError.invalid("不是正确的 JSON")
+            throw ImportError.invalid(L("不是正确的 JSON"))
         }
         var plan = ImportPlan(format: .proxi, sourceName: sourceName)
         let knownKeys: Set<String> = Set(markers).union(["mode", "subscriptions", "nodes", "groups", "rules", "ruleSets", "final", "dns", "hosts", "ipv6", "profiles", "networkRules", "patch", "comment", "description"])
         let unknown = json.keys.filter { !knownKeys.contains($0) }.sorted()
         if !unknown.isEmpty {
-            plan.warnings.append("不认识这些字段，已忽略：\(unknown.joined(separator: "、"))")
+            plan.warnings.append(L("不认识这些字段，已忽略：%@", unknown.joined(separator: L("、"))))
         }
         if let mode = json["mode"] as? String {
             if let value = EngineMode(rawValue: mode.lowercased()) {
                 plan.mode = value
             } else {
-                plan.warnings.append("模式只能是 rule 或 global")
+                plan.warnings.append(L("模式只能是 rule 或 global"))
             }
         }
         for item in json["subscriptions"] as? [Any] ?? [] {
             var subscription: Subscription
             if let url = item as? String {
-                subscription = Subscription(name: subscriptionName(for: url, fallback: "订阅"), url: url)
+                subscription = Subscription(name: subscriptionName(for: url, fallback: L("订阅")), url: url)
             } else if let object = item as? [String: Any], let url = object["url"] as? String {
-                subscription = Subscription(name: (object["name"] as? String) ?? subscriptionName(for: url, fallback: "订阅"), url: url)
+                subscription = Subscription(name: (object["name"] as? String) ?? subscriptionName(for: url, fallback: L("订阅")), url: url)
                 subscription.filter = (object["filter"] as? String) ?? ""
                 subscription.exclude = (object["exclude"] as? String) ?? ""
                 subscription.prefix = (object["prefix"] as? String) ?? ""
                 subscription.dialer = object["dialer"] as? String
                 if let enabled = object["enabled"] as? Bool { subscription.enabled = enabled }
             } else {
-                plan.warnings.append("有一条订阅没有写 url")
+                plan.warnings.append(L("有一条订阅没有写 url"))
                 continue
             }
             if isHidden(url: subscription.url) {
@@ -257,13 +257,13 @@ enum ConfigImporter {
                 guard let original = existing.engine.subscriptions.first(where: { candidate in
                     candidate.name == subscription.name && !plan.subscriptions.contains { $0.url == candidate.url }
                 }) else {
-                    plan.warnings.append("订阅「\(subscription.name)」的地址被隐藏了，现有设置里没有同名的订阅，跳过")
+                    plan.warnings.append(L("订阅「%@」的地址被隐藏了，现有设置里没有同名的订阅，跳过", subscription.name))
                     continue
                 }
                 subscription.url = original.url
             }
             if let problem = Subscription.validate(url: subscription.url) ?? Subscription.validateOptions(filter: subscription.filter, exclude: subscription.exclude, prefix: subscription.prefix) {
-                plan.warnings.append("订阅「\(subscription.name)」：\(problem)")
+                plan.warnings.append(L("订阅「%@」：%@", subscription.name, problem))
                 continue
             }
             plan.subscriptions.append(subscription)
@@ -275,13 +275,13 @@ enum ConfigImporter {
                 if let original = existing.engine.manualNodes.first(where: { $0.name == name && !plan.manualNodes.contains($0) }) {
                     plan.manualNodes.append(original)
                 } else {
-                    plan.warnings.append("节点「\(name)」的链接被隐藏了，现有设置里没有同名的手动节点，跳过")
+                    plan.warnings.append(L("节点「%@」的链接被隐藏了，现有设置里没有同名的手动节点，跳过", name))
                 }
                 continue
             }
             let links = NodeLink.extract(link)
             if links.isEmpty {
-                plan.warnings.append("认不出节点链接：\(String(link.prefix(40)))")
+                plan.warnings.append(L("认不出节点链接：%@", String(link.prefix(40))))
             }
             plan.manualNodes += links.map { ManualNode(link: $0) }
         }
@@ -289,7 +289,7 @@ enum ConfigImporter {
         var groupNames = Set(existing.engine.groupNames)
         for item in json["groups"] as? [[String: Any]] ?? [] {
             guard let name = item["name"] as? String else {
-                plan.warnings.append("有一个策略组没有写 name")
+                plan.warnings.append(L("有一个策略组没有写 name"))
                 continue
             }
             groupNames.insert(name.trimmingCharacters(in: .whitespaces))
@@ -298,7 +298,7 @@ enum ConfigImporter {
             group.includeGroups = (item["groups"] as? [String]) ?? []
             if let sources = item["subscriptions"] as? [String] {
                 group.sources = sources.compactMap { name in
-                    if name == "手动节点" || name == "manual" { return ManualNode.sourceID }
+                    if name == "手动节点" || name == L("手动节点") || name == "manual" { return ManualNode.sourceID }  // l10n-ignore：中文和界面语言的写法都认
                     return subscriptionNames.first { $0.name == name || $0.url == name }?.id
                 }
             }
@@ -316,18 +316,18 @@ enum ConfigImporter {
                 if let rule = customRule(fromLine: line, groups: allGroups) {
                     plan.customRules.append(rule)
                 } else {
-                    plan.warnings.append("认不出规则：\(line)")
+                    plan.warnings.append(L("认不出规则：%@", line))
                 }
                 continue
             }
             guard let object = item as? [String: Any], let value = (object["value"] ?? object["pattern"]) as? String else {
-                plan.warnings.append("有一条规则没有写 value")
+                plan.warnings.append(L("有一条规则没有写 value"))
                 continue
             }
             let kind = ruleKind(object["type"] as? String) ?? .auto
             let policy = target((object["policy"] as? String) ?? "proxy", groups: allGroups)
             if let problem = CustomRule.validate(value, kind: kind) {
-                plan.warnings.append("规则「\(value)」：\(problem)")
+                plan.warnings.append(L("规则「%@」：%@", value, problem))
                 continue
             }
             var rule = CustomRule(pattern: value, policy: policy, kind: kind)
@@ -338,7 +338,7 @@ enum ConfigImporter {
             if let object = item as? [String: Any] {
                 if let libraryName = object["library"] as? String {
                     guard let entry = RuleLibrary.entry(named: libraryName) else {
-                        plan.warnings.append("规则库里没有「\(libraryName)」")
+                        plan.warnings.append(L("规则库里没有「%@」", libraryName))
                         continue
                     }
                     let policy = (object["policy"] as? String).map { target($0, groups: allGroups) } ?? entry.policy
@@ -346,7 +346,7 @@ enum ConfigImporter {
                     continue
                 }
                 guard var url = object["url"] as? String else {
-                    plan.warnings.append("有一个规则集没有写 url")
+                    plan.warnings.append(L("有一个规则集没有写 url"))
                     continue
                 }
                 if isHidden(url: url) {
@@ -354,13 +354,13 @@ enum ConfigImporter {
                     guard let original = existing.engine.ruleSets.first(where: { candidate in
                         candidate.name == name && !plan.ruleSets.contains { $0.url == candidate.url }
                     }) else {
-                        plan.warnings.append("规则集「\(name)」的地址被隐藏了，现有设置里没有同名的规则集，跳过")
+                        plan.warnings.append(L("规则集「%@」的地址被隐藏了，现有设置里没有同名的规则集，跳过", name))
                         continue
                     }
                     url = original.url
                 }
                 if let problem = RuleSet.validate(url: url) {
-                    plan.warnings.append("规则集 \(url)：\(problem)")
+                    plan.warnings.append(L("规则集 %@：%@", url, problem))
                     continue
                 }
                 let policy = (object["policy"] as? String).map { target($0, groups: allGroups) }
@@ -368,7 +368,7 @@ enum ConfigImporter {
                 plan.ruleSets.append(RuleSet(name: name, url: url, policy: policy ?? (RuleSet(name: "", url: url, policy: nil).kind == .inline ? nil : .proxy)))
             } else if let url = item as? String {
                 if isHidden(url: url) {
-                    plan.warnings.append("有一个规则集的地址被隐藏了，又没有写名字，跳过")
+                    plan.warnings.append(L("有一个规则集的地址被隐藏了，又没有写名字，跳过"))
                     continue
                 }
                 plan.ruleSets.append(RuleSet(name: RuleSet.defaultName(for: url), url: url, policy: .proxy))
@@ -390,7 +390,7 @@ enum ConfigImporter {
                 }
             }
             if let problem = settings.validate() {
-                plan.warnings.append("DNS：\(problem)，没有导入")
+                plan.warnings.append(L("DNS：%@，没有导入", problem))
             } else {
                 plan.dns = settings
             }
@@ -400,7 +400,7 @@ enum ConfigImporter {
                 guard let values = stringList(hosts[domain]) else { continue }
                 let entry = HostEntry(domain: domain, value: values.joined(separator: ", "))
                 if let problem = entry.validate() {
-                    plan.warnings.append("Hosts：\(problem)")
+                    plan.warnings.append(L("Hosts：%@", problem))
                 } else {
                     plan.hosts.append(entry)
                 }
@@ -422,7 +422,7 @@ enum ConfigImporter {
                 if !parsed.isEmpty { profile.targets = parsed }
             }
             if let problem = profile.validate() {
-                plan.warnings.append("代理配置「\(name)」：\(problem)")
+                plan.warnings.append(L("代理配置「%@」：%@", name, problem))
                 continue
             }
             plan.profiles.append(profile)
@@ -437,7 +437,7 @@ enum ConfigImporter {
             } else if item["other"] as? Bool == true {
                 match = .other
             } else {
-                plan.warnings.append("按网络切换的规则要写 ssid、router 或 other")
+                plan.warnings.append(L("按网络切换的规则要写 ssid、router 或 other"))
                 continue
             }
             let actionText = (item["action"] as? String) ?? ""
@@ -451,7 +451,7 @@ enum ConfigImporter {
                 action = knownProfiles.first { $0.name == name || $0.id.uuidString == name }.map { .profile($0.id) }
             }
             guard let action else {
-                plan.warnings.append("按网络切换：认不出动作「\(actionText)」（off、mode:rule、mode:global、profile:配置名）")
+                plan.warnings.append(L("按网络切换：认不出动作「%@」（off、mode:rule、mode:global、profile:配置名）", actionText))
                 continue
             }
             plan.networkRules.append(NetworkRule(match: match, action: action))
@@ -464,7 +464,7 @@ enum ConfigImporter {
 
     static func planBackup(_ text: String, sourceName: String) throws -> ImportPlan {
         guard let data = text.data(using: .utf8), let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            throw ImportError.invalid("不是正确的 JSON")
+            throw ImportError.invalid(L("不是正确的 JSON"))
         }
         let configObject = (json["config"] as? [String: Any]) ?? json
         let configData = try JSONSerialization.data(withJSONObject: configObject)
@@ -472,7 +472,7 @@ enum ConfigImporter {
         do {
             config = try JSONDecoder().decode(AppConfig.self, from: configData)
         } catch {
-            throw ImportError.invalid("备份读不出来：\(error.localizedDescription)")
+            throw ImportError.invalid(L("备份读不出来：%@", error.localizedDescription))
         }
         var plan = ImportPlan(format: .backup, sourceName: sourceName)
         plan.backup = config
@@ -486,7 +486,7 @@ enum ConfigImporter {
         do {
             root = try YAMLParser.parse(text)
         } catch {
-            throw ImportError.invalid("YAML 有问题：\(error.localizedDescription)")
+            throw ImportError.invalid(L("YAML 有问题：%@", error.localizedDescription))
         }
         var plan = ImportPlan(format: .clash, sourceName: sourceName)
         // 节点：来自网址的配置直接加成订阅（内核能读 Clash 配置里的节点，会自动更新）；粘贴的存成本机文件。
@@ -495,7 +495,7 @@ enum ConfigImporter {
             if let sourceURL {
                 plan.subscriptions.append(Subscription(name: subscriptionName(for: sourceURL, fallback: sourceName), url: sourceURL))
             } else {
-                plan.nodeFile = ImportFile(name: fileName(sourceName, suffix: "节点", extension: "yaml"), content: YAMLWriter.write(.mapping([YAMLPair(key: "proxies", value: .sequence(proxies))])))
+                plan.nodeFile = ImportFile(name: fileName(sourceName, suffix: L("节点"), extension: "yaml"), content: YAMLWriter.write(.mapping([YAMLPair(key: "proxies", value: .sequence(proxies))])))
             }
         }
         // 节点来源（proxy-providers）：网络上的加成订阅。
@@ -503,7 +503,7 @@ enum ConfigImporter {
         for pair in root["proxy-providers"]?.pairs ?? [] {
             let provider = pair.value
             guard provider["type"]?.string?.lowercased() != "file", let url = provider["url"]?.string, Subscription.validate(url: url) == nil else {
-                plan.warnings.append("节点来源「\(pair.key)」不是网络订阅，没有导入")
+                plan.warnings.append(L("节点来源「%@」不是网络订阅，没有导入", pair.key))
                 continue
             }
             var subscription = Subscription(name: pair.key, url: url)
@@ -514,7 +514,7 @@ enum ConfigImporter {
                 subscription.filter = ""
                 subscription.exclude = ""
                 subscription.prefix = ""
-                plan.warnings.append("节点来源「\(pair.key)」的筛选写法不支持，已去掉")
+                plan.warnings.append(L("节点来源「%@」的筛选写法不支持，已去掉", pair.key))
             }
             providerIDs[pair.key] = subscription.id
             plan.subscriptions.append(subscription)
@@ -526,7 +526,7 @@ enum ConfigImporter {
         for raw in rawGroups {
             guard let original = raw["name"]?.string, let name = renames[original] else { continue }
             guard let kind = clashGroupKind(raw["type"]?.string) else {
-                plan.warnings.append("策略组「\(original)」的类型 \(raw["type"]?.string ?? "?") 不支持，没有导入")
+                plan.warnings.append(L("策略组「%@」的类型 %@ 不支持，没有导入", original, raw["type"]?.string ?? "?"))
                 continue
             }
             var group = PolicyGroup(name: name, kind: kind)
@@ -568,7 +568,7 @@ enum ConfigImporter {
             plan.groups[index].includeGroups = plan.groups[index].includeGroups.filter { importedNames.contains($0) && $0 != plan.groups[index].name }
         }
         if let cycle = PolicyGroup.cycle(in: plan.groups) {
-            plan.warnings.append("策略组互相包含（\(cycle.joined(separator: " → "))），去掉了包含关系")
+            plan.warnings.append(L("策略组互相包含（%@），去掉了包含关系", cycle.joined(separator: " → ")))
             for index in plan.groups.indices { plan.groups[index].includeGroups = [] }
         }
         // 规则：写成本机的规则文件（来自网址时直接用网址），按文件里的策略走，FINAL 也跟着文件。
@@ -608,20 +608,20 @@ enum ConfigImporter {
                 lines.append(rewritePolicy(rule, renames: renames))
             }
             if !dropped.isEmpty {
-                plan.warnings.append("\(dropped.count) 条规则没有导入（GEOSITE、SUB-RULE 等，或者引用的规则集不是网络上的）：\(dropped.prefix(3).joined(separator: "；"))\(dropped.count > 3 ? "…" : "")")
+                plan.warnings.append(L("%@ 条规则没有导入（GEOSITE、SUB-RULE 等，或者引用的规则集不是网络上的）：%@%@", dropped.count, dropped.prefix(3).joined(separator: L("；")), dropped.count > 3 ? L("…") : ""))
             }
             if !mrs.isEmpty {
-                plan.warnings.append("\(mrs.count) 个 .mrs 规则集单独加进了规则集列表，排在导入的规则前面")
+                plan.warnings.append(L("%@ 个 .mrs 规则集单独加进了规则集列表，排在导入的规则前面", mrs.count))
                 plan.ruleSets += mrs
             }
             if let sourceURL, lines.count == rules.count {
                 // 规则原样可用：直接用远程配置当规则集，跟着它更新。
-                var set = RuleSet(name: "\(subscriptionName(for: sourceURL, fallback: sourceName)) 的规则", url: sourceURL, policy: nil)
+                var set = RuleSet(name: L("%@ 的规则", subscriptionName(for: sourceURL, fallback: sourceName)), url: sourceURL, policy: nil)
                 set.converted = true
                 plan.ruleSets.append(set)
             } else if !lines.isEmpty {
                 let content = YAMLWriter.write(.mapping([YAMLPair(key: "rules", value: .strings(lines))]))
-                plan.ruleFile = ImportFile(name: fileName(sourceName, suffix: "规则", extension: "yaml"), content: content)
+                plan.ruleFile = ImportFile(name: fileName(sourceName, suffix: L("规则"), extension: "yaml"), content: content)
             }
         }
         if let dns = root["dns"] {
@@ -634,11 +634,11 @@ enum ConfigImporter {
         }
         if let ipv6 = root["ipv6"]?.bool { plan.ipv6 = ipv6 }
         if let mode = root["mode"]?.string?.lowercased() {
-            if let value = EngineMode(rawValue: mode) { plan.mode = value } else if mode == "direct" { plan.warnings.append("直连模式没有导入：想直连就关掉代理") }
+            if let value = EngineMode(rawValue: mode) { plan.mode = value } else if mode == "direct" { plan.warnings.append(L("直连模式没有导入：想直连就关掉代理")) }
         }
         let ignored = ["port", "socks-port", "mixed-port", "redir-port", "tproxy-port", "tun", "external-controller", "listeners", "sniffer", "profile", "sub-rules"].filter { root[$0] != nil }
         if !ignored.isEmpty {
-            plan.warnings.append("这些设置由 Proxi 管理，没有导入：\(ignored.joined(separator: "、"))")
+            plan.warnings.append(L("这些设置由 Proxi 管理，没有导入：%@", ignored.joined(separator: L("、"))))
         }
         return plan
     }
@@ -664,10 +664,10 @@ enum ConfigImporter {
         }
         settings.policies = policies.filter { $0.validate() == nil }
         if dns["enhanced-mode"]?.string == "fake-ip" {
-            warnings.append("fake-ip 模式没有导入：Proxi 走系统代理，用不上")
+            warnings.append(L("fake-ip 模式没有导入：Proxi 走系统代理，用不上"))
         }
         if let problem = settings.validate() {
-            warnings.append("DNS：\(problem)，没有导入")
+            warnings.append(L("DNS：%@，没有导入", problem))
             return nil
         }
         return settings
@@ -745,10 +745,10 @@ enum ConfigImporter {
             }
         }
         if !proxies.isEmpty {
-            plan.nodeFile = ImportFile(name: fileName(sourceName, suffix: "节点", extension: "yaml"), content: YAMLWriter.write(.mapping([YAMLPair(key: "proxies", value: .sequence(proxies))])))
+            plan.nodeFile = ImportFile(name: fileName(sourceName, suffix: L("节点"), extension: "yaml"), content: YAMLWriter.write(.mapping([YAMLPair(key: "proxies", value: .sequence(proxies))])))
         }
         if !skipped.isEmpty {
-            plan.warnings.append("\(skipped.count) 个节点的协议不支持，没有导入：\(skipped.prefix(3).joined(separator: "、"))\(skipped.count > 3 ? "…" : "")")
+            plan.warnings.append(L("%@ 个节点的协议不支持，没有导入：%@%@", skipped.count, skipped.prefix(3).joined(separator: L("、")), skipped.count > 3 ? L("…") : ""))
         }
         let proxyNames = Set(proxies.compactMap { $0["name"]?.string })
         // [Proxy Group]。
@@ -759,7 +759,7 @@ enum ConfigImporter {
             guard let name = renames[original] else { continue }
             let fields = value.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
             guard let type = fields.first, let kind = surgeGroupKind(type) else {
-                plan.warnings.append("策略组「\(original)」的类型不支持，没有导入")
+                plan.warnings.append(L("策略组「%@」的类型不支持，没有导入", original))
                 continue
             }
             var group = PolicyGroup(name: name, kind: kind)
@@ -786,12 +786,12 @@ enum ConfigImporter {
                 }
             }
             if hasPolicyPath {
-                plan.warnings.append("策略组「\(original)」用了 policy-path（外部节点列表），这部分没有导入")
+                plan.warnings.append(L("策略组「%@」用了 policy-path（外部节点列表），这部分没有导入", original))
             }
             if group.filter.isEmpty && !nodes.isEmpty {
                 group.filter = exactNamesFilter(nodes)
                 if !nodes.allSatisfy(proxyNames.contains) && proxyNames.isEmpty == false {
-                    plan.warnings.append("策略组「\(original)」里有的节点不在配置里，按名字筛选")
+                    plan.warnings.append(L("策略组「%@」里有的节点不在配置里，按名字筛选", original))
                 }
             }
             plan.groups.append(group)
@@ -807,10 +807,10 @@ enum ConfigImporter {
         if let rules = sections["rule"], !rules.isEmpty {
             let changed = renames.contains { $0.key != $0.value }
             if let sourceURL, !changed {
-                plan.ruleSets.append(RuleSet(name: "\(subscriptionName(for: sourceURL, fallback: sourceName)) 的规则", url: sourceURL, policy: nil))
+                plan.ruleSets.append(RuleSet(name: L("%@ 的规则", subscriptionName(for: sourceURL, fallback: sourceName)), url: sourceURL, policy: nil))
             } else {
                 let body = rules.map { rewritePolicy($0, renames: renames) }.joined(separator: "\n")
-                plan.ruleFile = ImportFile(name: fileName(sourceName, suffix: "规则", extension: "conf"), content: "[Rule]\n" + body + "\n")
+                plan.ruleFile = ImportFile(name: fileName(sourceName, suffix: L("规则"), extension: "conf"), content: "[Rule]\n" + body + "\n")
             }
         }
         // [Host]。
@@ -820,7 +820,7 @@ enum ConfigImporter {
         }
         let ignored = ["url rewrite", "header rewrite", "mitm", "script", "map local", "body rewrite"].filter { sections[$0] != nil }
         if !ignored.isEmpty {
-            plan.warnings.append("这些段没有导入（Proxi 不做改写和脚本）：\(ignored.map { "[\($0)]" }.joined(separator: "、"))")
+            plan.warnings.append(L("这些段没有导入（Proxi 不做改写和脚本）：%@", ignored.map { "[\($0)]" }.joined(separator: L("、"))))
         }
         return plan
     }
@@ -973,7 +973,7 @@ enum ConfigImporter {
             let fields = line.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
             guard let url = fields.first, Subscription.validate(url: url) == nil else { continue }
             let options = keyValues(Array(fields.dropFirst()))
-            var subscription = Subscription(name: options["tag"] ?? subscriptionName(for: url, fallback: "订阅"), url: url)
+            var subscription = Subscription(name: options["tag"] ?? subscriptionName(for: url, fallback: L("订阅")), url: url)
             if options["enabled"]?.lowercased() == "false" { subscription.enabled = false }
             plan.subscriptions.append(subscription)
         }
@@ -984,10 +984,10 @@ enum ConfigImporter {
             if let node = quantumultProxy(line) { proxies.append(node) } else { skipped += 1 }
         }
         if !proxies.isEmpty {
-            plan.nodeFile = ImportFile(name: fileName(sourceName, suffix: "节点", extension: "yaml"), content: YAMLWriter.write(.mapping([YAMLPair(key: "proxies", value: .sequence(proxies))])))
+            plan.nodeFile = ImportFile(name: fileName(sourceName, suffix: L("节点"), extension: "yaml"), content: YAMLWriter.write(.mapping([YAMLPair(key: "proxies", value: .sequence(proxies))])))
         }
         if skipped > 0 {
-            plan.warnings.append("\(skipped) 个节点的协议不支持，没有导入")
+            plan.warnings.append(L("%@ 个节点的协议不支持，没有导入", skipped))
         }
         // [policy]：策略组。
         let policyLines = (sections["policy"] ?? []).compactMap { line -> (String, String, [String])? in
@@ -1009,7 +1009,7 @@ enum ConfigImporter {
             case "round-robin": kind = .loadBalance
             case "dest-hash": kind = .loadBalance; strategy = .consistentHashing
             default:
-                plan.warnings.append("策略组「\(original)」的类型 \(type) 不支持，没有导入")
+                plan.warnings.append(L("策略组「%@」的类型 %@ 不支持，没有导入", original, type))
                 continue
             }
             var group = PolicyGroup(name: name, kind: kind)
@@ -1061,11 +1061,11 @@ enum ConfigImporter {
         // [filter_local]：本机规则存成文件。
         if let rules = sections["filter_local"], !rules.isEmpty {
             let body = rules.map { rewritePolicy($0, renames: renames) }.joined(separator: "\n")
-            plan.ruleFile = ImportFile(name: fileName(sourceName, suffix: "规则", extension: "conf"), content: "[filter_local]\n" + body + "\n")
+            plan.ruleFile = ImportFile(name: fileName(sourceName, suffix: L("规则"), extension: "conf"), content: "[filter_local]\n" + body + "\n")
         }
         let ignored = ["rewrite_local", "rewrite_remote", "mitm", "task_local", "http_backend"].filter { sections[$0] != nil }
         if !ignored.isEmpty {
-            plan.warnings.append("这些段没有导入（Proxi 不做改写和脚本）：\(ignored.map { "[\($0)]" }.joined(separator: "、"))")
+            plan.warnings.append(L("这些段没有导入（Proxi 不做改写和脚本）：%@", ignored.map { "[\($0)]" }.joined(separator: L("、"))))
         }
         return plan
     }
@@ -1152,7 +1152,7 @@ enum ConfigImporter {
                 // 本机的端口和开关保持不变。
                 config.engine.mixedPort = current.engine.mixedPort
                 config.engine.apiPort = current.engine.apiPort
-                return ImportResult(config: config, files: [], summary: "已从备份恢复全部设置")
+                return ImportResult(config: config, files: [], summary: L("已从备份恢复全部设置"))
             }
             var partial = ImportPlan(format: .backup, sourceName: plan.sourceName)
             partial.subscriptions = backup.engine.subscriptions
@@ -1175,7 +1175,7 @@ enum ConfigImporter {
         if let nodeFile = plan.nodeFile {
             let url = directory.appendingPathComponent(nodeFile.name)
             files.append((url, nodeFile.content))
-            subscriptions.append(Subscription(name: "\(plan.sourceName) 的节点", url: url.absoluteString))
+            subscriptions.append(Subscription(name: L("%@ 的节点", plan.sourceName), url: url.absoluteString))
         }
         // 替换时地址相同的沿用原来的 id：策略组里记的来源、下载好的节点和规则都还能用。
         let previousSubscriptions = engine.subscriptions
@@ -1197,7 +1197,7 @@ enum ConfigImporter {
                 engine.subscriptions.append(subscription)
             }
         }
-        if !subscriptions.isEmpty { added.append("\(subscriptions.count) 条订阅") }
+        if !subscriptions.isEmpty { added.append(L("%@ 条订阅", subscriptions.count)) }
         let previousNodes = engine.manualNodes
         if mode == .replace && !plan.manualNodes.isEmpty {
             engine.manualNodes = []
@@ -1207,7 +1207,7 @@ enum ConfigImporter {
             newNodes.append(previousNodes.first { $0.link == node.link } ?? node)
         }
         engine.manualNodes += newNodes
-        if !newNodes.isEmpty { added.append("\(newNodes.count) 个节点") }
+        if !newNodes.isEmpty { added.append(L("%@ 个节点", newNodes.count)) }
 
         // 策略组。
         if mode == .replace && !plan.groups.isEmpty {
@@ -1231,14 +1231,14 @@ enum ConfigImporter {
                 engine.groups[index].includeGroups = []
             }
         }
-        if !plan.groups.isEmpty { added.append("\(plan.groups.count) 个策略组") }
+        if !plan.groups.isEmpty { added.append(L("%@ 个策略组", plan.groups.count)) }
 
         // 规则集和规则文件。
         var ruleSets = plan.ruleSets
         if let ruleFile = plan.ruleFile {
             let url = directory.appendingPathComponent(ruleFile.name)
             files.append((url, ruleFile.content))
-            var set = RuleSet(name: "\(plan.sourceName) 的规则", url: url.absoluteString, policy: plan.format == .ruleList ? .proxy : nil)
+            var set = RuleSet(name: L("%@ 的规则", plan.sourceName), url: url.absoluteString, policy: plan.format == .ruleList ? .proxy : nil)
             if plan.format != .ruleList {
                 set.converted = true
             }
@@ -1260,7 +1260,7 @@ enum ConfigImporter {
                 engine.ruleSets.append(set)
             }
         }
-        if !ruleSets.isEmpty { added.append("\(ruleSets.count) 个规则集") }
+        if !ruleSets.isEmpty { added.append(L("%@ 个规则集", ruleSets.count)) }
 
         // 自定义规则。
         if mode == .replace && !plan.customRules.isEmpty {
@@ -1274,7 +1274,7 @@ enum ConfigImporter {
                 engine.customRules.append(rule)
             }
         }
-        if !plan.customRules.isEmpty { added.append("\(plan.customRules.count) 条自定义规则") }
+        if !plan.customRules.isEmpty { added.append(L("%@ 条自定义规则", plan.customRules.count)) }
 
         if let final = plan.finalPolicy { engine.finalPolicy = final }
         if [.clash, .surge, .quantumult].contains(plan.format), plan.ruleFile != nil || plan.ruleSets.contains(where: { $0.policy == nil }) {
@@ -1309,12 +1309,12 @@ enum ConfigImporter {
                 config.profiles.append(profile)
             }
         }
-        if !plan.profiles.isEmpty { added.append("\(plan.profiles.count) 个代理配置") }
+        if !plan.profiles.isEmpty { added.append(L("%@ 个代理配置", plan.profiles.count)) }
         if mode == .replace && !plan.networkRules.isEmpty {
             config.automation.networkRules = []
         }
         config.automation.networkRules += plan.networkRules
-        let summary = added.isEmpty ? "已导入" : "已导入" + added.joined(separator: "、")
+        let summary = added.isEmpty ? L("已导入") : L("已导入") + added.joined(separator: L("、"))
         return ImportResult(config: config, files: files, summary: summary)
     }
 
@@ -1357,7 +1357,7 @@ enum ConfigImporter {
             if !group.includeGroups.isEmpty { object["groups"] = group.includeGroups }
             if !group.sources.isEmpty {
                 object["subscriptions"] = group.sources.compactMap { id in
-                    id == ManualNode.sourceID ? "手动节点" : engine.subscriptions.first { $0.id == id }?.name
+                    id == ManualNode.sourceID ? L("手动节点") : engine.subscriptions.first { $0.id == id }?.name
                 }
             }
             if !group.testURL.isEmpty { object["url"] = group.testURL }
@@ -1527,8 +1527,8 @@ enum ConfigImporter {
         if value.lowercased().hasPrefix("group:") { return .group(String(value.dropFirst(6))) }
         if let group = groups.first(where: { $0.caseInsensitiveCompare(value) == .orderedSame }) { return .group(group) }
         switch value.lowercased() {
-        case "direct", "直连", "直接连接": return .direct
-        case "reject", "拦截", "拒绝", "block", "reject-drop", "reject-tinygif": return .reject
+        case "direct", "直连", "直接连接": return .direct  // l10n-ignore：配置里的写法
+        case "reject", "拦截", "拒绝", "block", "reject-drop", "reject-tinygif": return .reject  // l10n-ignore：配置里的写法
         default: return .proxy
         }
     }
@@ -1538,16 +1538,16 @@ enum ConfigImporter {
         guard let text = text?.trimmingCharacters(in: .whitespaces), !text.isEmpty else { return nil }
         if let kind = CustomRuleKind(rawValue: text) { return kind }
         switch text.lowercased() {
-        case "domain-suffix", "后缀", "域名后缀": return .suffix
-        case "domain-keyword", "关键词": return .keyword
-        case "domain-wildcard", "通配": return .wildcard
-        case "domain-regex", "正则": return .regex
+        case "domain-suffix", "后缀", "域名后缀": return .suffix  // l10n-ignore：配置里的写法
+        case "domain-keyword", "关键词": return .keyword  // l10n-ignore：配置里的写法
+        case "domain-wildcard", "通配": return .wildcard  // l10n-ignore：配置里的写法
+        case "domain-regex", "正则": return .regex  // l10n-ignore：配置里的写法
         case "ip-cidr", "ip-cidr6", "cidr": return .ip
-        case "src-ip", "src-ip-cidr", "设备": return .device
-        case "dst-port", "端口": return .port
-        case "process-name", "进程": return .process
-        case "process-path", "应用": return .app
-        case "域名": return .domain
+        case "src-ip", "src-ip-cidr", "设备": return .device  // l10n-ignore：配置里的写法
+        case "dst-port", "端口": return .port  // l10n-ignore：配置里的写法
+        case "process-name", "进程": return .process  // l10n-ignore：配置里的写法
+        case "process-path", "应用": return .app  // l10n-ignore：配置里的写法
+        case "域名": return .domain  // l10n-ignore：配置里的写法
         default: return CustomRuleKind.from(coreType: text)
         }
     }
@@ -1618,14 +1618,14 @@ enum ConfigImporter {
         var result: [String: String] = [:]
         var taken: [PolicyGroup] = []
         for original in names {
-            var base = original.filter { $0 != "," && $0 != "，" && $0 != "\"" && $0 != "`" && $0 != "#" && !$0.isNewline }
+            var base = original.filter { $0 != "," && $0 != "，" && $0 != "\"" && $0 != "`" && $0 != "#" && !$0.isNewline }  // l10n-ignore：全角逗号
                 .trimmingCharacters(in: .whitespaces)
             if base.count > PolicyGroup.maxNameLength { base = String(base.prefix(PolicyGroup.maxNameLength)) }
-            if base.isEmpty { base = "策略组" }
+            if base.isEmpty { base = L("策略组") }
             var candidate = base
             var index = 2
             while PolicyGroup.validate(name: candidate, filter: "", others: taken) != nil {
-                let suffix = index == 2 && PolicyGroup.reservedNames.contains(where: { $0.caseInsensitiveCompare(base) == .orderedSame }) ? "组" : " \(index)"
+                let suffix = index == 2 && PolicyGroup.reservedNames.contains(where: { $0.caseInsensitiveCompare(base) == .orderedSame }) ? L("组") : " \(index)"
                 candidate = String(base.prefix(PolicyGroup.maxNameLength - suffix.count)) + suffix
                 index += 1
                 if index > 50 { break }
@@ -1703,7 +1703,7 @@ enum ConfigImporter {
         let allowed = source.map { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" ? $0 : "-" }
         let base = String(allowed.prefix(40)).trimmingCharacters(in: CharacterSet(charactersIn: "-"))
         let id = UUID().uuidString.prefix(6).lowercased()
-        return "\(base.isEmpty ? "导入" : base)-\(suffix)-\(id).\(ext)"
+        return "\(base.isEmpty ? "导入" : base)-\(suffix)-\(id).\(ext)"  // l10n-ignore：文件名
     }
 
     static func countProxies(in yaml: String) -> Int {

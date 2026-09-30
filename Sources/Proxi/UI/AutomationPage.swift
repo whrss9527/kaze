@@ -15,7 +15,7 @@ struct AutomationPage: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            PageHeader(title: "自动化", subtitle: "让命令行、快捷指令和系统里的 AI 助手按规则操作 Proxi；换了网络自动切换")
+            PageHeader(title: L("自动化"), subtitle: L("让命令行、快捷指令和系统里的 AI 助手按规则操作 Proxi；换了网络自动切换"))
             Form {
                 interfaceSection
                 cliSection
@@ -33,8 +33,8 @@ struct AutomationPage: View {
     // MARK: - 接口
 
     private var interfaceSection: some View {
-        Section("本机控制接口") {
-            Picker("权限", selection: $state.config.automation.permission) {
+        Section(L("本机控制接口")) {
+            Picker(L("权限"), selection: $state.config.automation.permission) {
                 ForEach(ControlPermission.allCases) { permission in
                     Text(permission.title).tag(permission)
                 }
@@ -42,22 +42,22 @@ struct AutomationPage: View {
             Text(state.config.automation.permission.detail)
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            LabeledContent("状态") {
+            LabeledContent(L("状态")) {
                 if let problem = control.problem {
                     Label(problem, systemImage: "xmark.circle")
                         .foregroundStyle(.red)
                 } else if control.listening {
-                    Label("在监听", systemImage: "checkmark.circle")
+                    Label(L("在监听"), systemImage: "checkmark.circle")
                         .foregroundStyle(.green)
                 } else {
-                    Text("已关闭")
+                    Text(L("已关闭"))
                         .foregroundStyle(.secondary)
                 }
             }
             if let last = control.lastCall {
-                LabeledContent("最近一次调用", value: "\(clientTitle(last.client)) · \(last.tool) · \(Engine.relative(last.date))")
+                LabeledContent(L("最近一次调用"), value: "\(clientTitle(last.client)) · \(last.tool) · \(Engine.relative(last.date))")
             }
-            Text("命令行和 AI 助手经本机的套接字（\(UnixSocket.defaultPath)）操作 Proxi，只有这台 Mac 上你自己的账户能连。改配置的操作都记在下面的操作记录里，可以撤销。")
+            Text(L("命令行和 AI 助手经本机的套接字（%@）操作 Proxi，只有这台 Mac 上你自己的账户能连。改配置的操作都记在下面的操作记录里，可以撤销。", UnixSocket.defaultPath))
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -70,16 +70,16 @@ struct AutomationPage: View {
     // MARK: - 命令行
 
     private var cliSection: some View {
-        Section("命令行") {
+        Section(L("命令行")) {
             HStack {
                 if cliNeedsUpdate {
-                    Label("命令行工具指向的程序已经不在了（比如改名前的 ProxySwitch.app），要更新", systemImage: "exclamationmark.triangle")
+                    Label(L("命令行工具指向的程序已经不在了（比如改名前的 ProxySwitch.app），要更新"), systemImage: "exclamationmark.triangle")
                         .foregroundStyle(.orange)
                 } else if cliInstalled {
-                    Label("已安装：\(CommandLineInstaller.path)" + (CommandLineInstaller.legacyInstalled ? "（改名前的 proxyswitch 也能用）" : ""), systemImage: "checkmark.circle")
+                    Label(L("已安装：%@", CommandLineInstaller.path) + (CommandLineInstaller.legacyInstalled ? L("（改名前的 proxyswitch 也能用）") : ""), systemImage: "checkmark.circle")
                         .foregroundStyle(.green)
                 } else {
-                    Text("安装后在终端里直接用 proxi 命令")
+                    Text(L("安装后在终端里直接用 proxi 命令"))
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -87,7 +87,7 @@ struct AutomationPage: View {
                     ProgressView()
                         .controlSize(.small)
                 }
-                Button(cliNeedsUpdate ? "更新" : (cliInstalled ? "卸载" : "安装命令行工具")) { toggleCLI() }
+                Button(cliNeedsUpdate ? L("更新") : (cliInstalled ? L("卸载") : L("安装命令行工具"))) { toggleCLI() }
                     .disabled(installing)
             }
             if let installProblem {
@@ -95,10 +95,10 @@ struct AutomationPage: View {
                     .font(.caption)
                     .foregroundStyle(.red)
             }
-            ForEach(["proxi status", "proxi node 香港", "proxi rule add openai.com 美国", "proxi import ~/Downloads/config.yaml --preview", "proxi services"], id: \.self) { command in
+            ForEach(["proxi status", L("proxi node 香港"), L("proxi rule add openai.com 美国"), "proxi import ~/Downloads/config.yaml --preview", "proxi services"], id: \.self) { command in
                 copyRow(command)
             }
-            Text("会在 /usr/local/bin 放一个小脚本（要输一次管理员密码）。不装也可以直接运行 \(CommandLineInstaller.executablePath) status。proxi help 看全部命令，加 --json 输出 JSON。")
+            Text(L("会在 /usr/local/bin 放一个小脚本（要输一次管理员密码）。不装也可以直接运行 %@ status。proxi help 看全部命令，加 --json 输出 JSON。", CommandLineInstaller.executablePath))
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -131,13 +131,13 @@ struct AutomationPage: View {
     // MARK: - AI 助手
 
     private var mcpSection: some View {
-        Section("AI 助手（MCP）") {
-            Text("支持 MCP 的 AI 客户端（Claude Desktop、Claude Code、Cursor 等）加上下面的配置后，就能直接让 AI 查看状态、切节点、诊断网址、加规则、导入配置，不用自己动手。它能做到哪一步由上面的权限决定。")
+        Section(L("AI 助手（MCP）")) {
+            Text(L("支持 MCP 的 AI 客户端（Claude Desktop、Claude Code、Cursor 等）加上下面的配置后，就能直接让 AI 查看状态、切节点、诊断网址、加规则、导入配置，不用自己动手。它能做到哪一步由上面的权限决定。"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            codeBlock(CommandLineInstaller.mcpConfig, label: "配置文件里的 mcpServers")
+            codeBlock(CommandLineInstaller.mcpConfig, label: L("配置文件里的 mcpServers"))
             copyRow(CommandLineInstaller.mcpCommand)
-            DisclosureGroup("给 AI 助手的规则（\(ControlCatalog.tools.count) 个工具）", isExpanded: $showInstructions) {
+            DisclosureGroup(L("给 AI 助手的规则（%@ 个工具）", ControlCatalog.tools.count), isExpanded: $showInstructions) {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(ControlCatalog.instructions)
                         .font(.system(size: 11))
@@ -165,11 +165,11 @@ struct AutomationPage: View {
     // MARK: - URL 命令
 
     private var urlSection: some View {
-        Section("URL 命令与快捷指令") {
-            ForEach(["proxi://toggle", "proxi://node?name=香港", "proxi://mode?value=global", "proxi://tun/on", "proxi://group?name=流媒体&member=日本", "proxi://run?tool=check_services", "proxi://import?url=https://example.com/config.yaml"], id: \.self) { command in
+        Section(L("URL 命令与快捷指令")) {
+            ForEach(["proxi://toggle", L("proxi://node?name=香港"), "proxi://mode?value=global", "proxi://tun/on", L("proxi://group?name=流媒体&member=日本"), "proxi://run?tool=check_services", "proxi://import?url=https://example.com/config.yaml"], id: \.self) { command in
                 copyRow("open \"\(command)\"")
             }
-            Text("快捷指令里用「打开 URL」执行这些命令，或者用「运行 Shell 脚本」调用 proxi 命令。URL 命令不能直接改配置：导入会先打开预览让你确认。")
+            Text(L("快捷指令里用「打开 URL」执行这些命令，或者用「运行 Shell 脚本」调用 proxi 命令。URL 命令不能直接改配置：导入会先打开预览让你确认。"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -178,9 +178,9 @@ struct AutomationPage: View {
     // MARK: - 操作记录
 
     private var changesSection: some View {
-        Section("操作记录") {
+        Section(L("操作记录")) {
             if control.changes.isEmpty {
-                Text("命令行、AI 助手和导入做过的改动会记在这里，改配置的可以撤销。")
+                Text(L("命令行、AI 助手和导入做过的改动会记在这里，改配置的可以撤销。"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
@@ -191,21 +191,21 @@ struct AutomationPage: View {
                                 .font(.system(size: 12))
                                 .strikethrough(change.undone)
                                 .lineLimit(2)
-                            Text("\(change.clientTitle) · \(Engine.relative(change.date))" + (change.undone ? " · 已撤销" : ""))
+                            Text("\(change.clientTitle) · \(Engine.relative(change.date))" + (change.undone ? L(" · 已撤销") : ""))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
                         if change.canUndo {
-                            Button("撤销") { control.undo(change.id) }
+                            Button(L("撤销")) { control.undo(change.id) }
                                 .controlSize(.small)
-                                .help("回到这次改动之前的配置（之后的改动也会一起撤销）")
+                                .help(L("回到这次改动之前的配置（之后的改动也会一起撤销）"))
                         }
                     }
                 }
                 HStack {
                     Spacer()
-                    Button("清空记录") { control.clearJournal() }
+                    Button(L("清空记录")) { control.clearJournal() }
                         .controlSize(.small)
                 }
             }
@@ -230,7 +230,7 @@ struct AutomationPage: View {
             }
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
-            .help("复制")
+            .help(L("复制"))
         }
     }
 
@@ -240,7 +240,7 @@ struct AutomationPage: View {
                 Text(label)
                     .font(.system(size: 11, weight: .medium))
                 Spacer()
-                Button(copied == text ? "已复制" : "复制") {
+                Button(copied == text ? L("已复制") : L("复制")) {
                     TerminalCommands.copy(text)
                     copied = text
                 }
@@ -266,19 +266,19 @@ struct NetworkRulesSection: View {
     @State private var action = "off"
 
     var body: some View {
-        Section("按网络自动切换") {
-            Toggle("换了网络时按规则自动切换", isOn: $state.config.automation.networkSwitching)
-            LabeledContent("现在的网络") {
+        Section(L("按网络自动切换")) {
+            Toggle(L("换了网络时按规则自动切换"), isOn: $state.config.automation.networkSwitching)
+            LabeledContent(L("现在的网络")) {
                 Text(network.identity.summary)
                     .foregroundStyle(.secondary)
             }
             if !network.canReadWiFiName {
                 HStack {
-                    Label("读不到 Wi‑Fi 名字：macOS 要求定位权限", systemImage: "location.slash")
+                    Label(L("读不到 Wi‑Fi 名字：macOS 要求定位权限"), systemImage: "location.slash")
                         .font(.caption)
                         .foregroundStyle(.orange)
                     Spacer()
-                    Button("允许读取") { network.requestLocation() }
+                    Button(L("允许读取")) { network.requestLocation() }
                         .controlSize(.small)
                 }
             }
@@ -308,17 +308,17 @@ struct NetworkRulesSection: View {
             }
             HStack(spacing: 8) {
                 Picker("", selection: $matchKind) {
-                    Text("现在的网络").tag("current")
-                    Text("Wi‑Fi 名字").tag("ssid")
-                    Text("其他网络").tag("other")
+                    Text(L("现在的网络")).tag("current")
+                    Text(L("Wi‑Fi 名字")).tag("ssid")
+                    Text(L("其他网络")).tag("other")
                 }
                 .labelsHidden()
                 .frame(width: 120)
                 if matchKind == "ssid" {
-                    TextField("", text: $ssid, prompt: Text("Wi‑Fi 名字"))
+                    TextField("", text: $ssid, prompt: Text(L("Wi‑Fi 名字")))
                         .frame(minWidth: 80, maxWidth: 140)
                 } else if matchKind == "current" {
-                    Text(network.currentMatch?.title ?? "没有连接网络")
+                    Text(network.currentMatch?.title ?? L("没有连接网络"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -326,25 +326,25 @@ struct NetworkRulesSection: View {
                 Image(systemName: "arrow.right")
                     .foregroundStyle(.secondary)
                 Picker("", selection: $action) {
-                    Text("关闭代理").tag("off")
-                    Text("规则分流").tag("mode:rule")
-                    Text("全局代理").tag("mode:global")
+                    Text(L("关闭代理")).tag("off")
+                    Text(L("规则分流")).tag("mode:rule")
+                    Text(L("全局代理")).tag("mode:global")
                     ForEach(state.config.profiles) { profile in
-                        Text("开启「\(profile.name)」").tag("profile:" + profile.id.uuidString)
+                        Text(L("开启「%@」", profile.name)).tag("profile:" + profile.id.uuidString)
                     }
                 }
                 .labelsHidden()
                 .frame(minWidth: 110, maxWidth: 160)
                 Spacer(minLength: 0)
-                Button("添加") { add() }
+                Button(L("添加")) { add() }
                     .disabled(match == nil)
             }
             if let last = network.lastSwitch {
-                Text("最近一次：\(last.summary)（\(Engine.relative(last.date))）")
+                Text(L("最近一次：%@（%@）", last.summary, Engine.relative(last.date)))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            Text("比如在公司的 Wi‑Fi 自动开公司代理、回家自动关掉，或者连上手机热点时切到全局代理。同一个网络只切一次，之后你手动改了不会被改回去。认 Wi‑Fi 名字要定位权限；不给的话可以按路由器（MAC 地址）认。")
+            Text(L("比如在公司的 Wi‑Fi 自动开公司代理、回家自动关掉，或者连上手机热点时切到全局代理。同一个网络只切一次，之后你手动改了不会被改回去。认 Wi‑Fi 名字要定位权限；不给的话可以按路由器（MAC 地址）认。"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }

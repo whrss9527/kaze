@@ -12,7 +12,7 @@ enum ProxyKind: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .http: return "HTTP / HTTPS"
         case .socks5: return "SOCKS5"
-        case .pac: return "PAC 脚本"
+        case .pac: return L("PAC 脚本")
         }
     }
 }
@@ -28,8 +28,8 @@ enum ProxyTarget: String, Codable, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .system: return "系统代理"
-        case .environment: return "环境变量"
+        case .system: return L("系统代理")
+        case .environment: return L("环境变量")
         case .git: return "git"
         case .npm: return "npm / pnpm"
         }
@@ -37,10 +37,10 @@ enum ProxyTarget: String, Codable, CaseIterable, Identifiable {
 
     var detail: String {
         switch self {
-        case .system: return "浏览器和大多数软件都走它"
-        case .environment: return "launchd 环境：之后新开的终端和程序生效"
-        case .git: return "git clone、pull 等（全局 http.proxy）"
-        case .npm: return "写入用户目录的 .npmrc"
+        case .system: return L("浏览器和大多数软件都走它")
+        case .environment: return L("launchd 环境：之后新开的终端和程序生效")
+        case .git: return L("git clone、pull 等（全局 http.proxy）")
+        case .npm: return L("写入用户目录的 .npmrc")
         }
     }
 }
@@ -60,7 +60,7 @@ struct Profile: Codable, Identifiable, Equatable, Hashable {
     static let defaultNoProxy = "localhost,127.0.0.1,::1"
 
     var id: UUID = UUID()
-    var name: String = "新配置"
+    var name: String = L("新配置")
     var color: String = ProfilePalette.colors[0]
     var kind: ProxyKind = .http
     var host: String = "127.0.0.1"
@@ -91,7 +91,7 @@ struct Profile: Codable, Identifiable, Equatable, Hashable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
-        name = try container.decodeIfPresent(String.self, forKey: .name) ?? "新配置"
+        name = try container.decodeIfPresent(String.self, forKey: .name) ?? L("新配置")
         color = try container.decodeIfPresent(String.self, forKey: .color) ?? ProfilePalette.colors[0]
         kind = try container.decodeIfPresent(ProxyKind.self, forKey: .kind) ?? .http
         host = try container.decodeIfPresent(String.self, forKey: .host) ?? "127.0.0.1"
@@ -105,7 +105,7 @@ struct Profile: Codable, Identifiable, Equatable, Hashable {
 
     /// 内置代理对应的配置。
     static func engineProfile(port: Int) -> Profile {
-        var profile = Profile(name: "节点代理", color: ProfilePalette.colors[1], kind: .http, host: "127.0.0.1", port: port)
+        var profile = Profile(name: L("节点代理"), color: ProfilePalette.colors[1], kind: .http, host: "127.0.0.1", port: port)
         profile.engine = true
         return profile
     }
@@ -123,9 +123,9 @@ struct Profile: Codable, Identifiable, Equatable, Hashable {
 
     /// 菜单和列表里显示的一句话。
     var summary: String {
-        if engine { return "内置代理 · \(serverAddress)" }
+        if engine { return L("内置代理 · %@", serverAddress) }
         switch kind {
-        case .pac: return pacURL.isEmpty ? "PAC 脚本" : pacURL
+        case .pac: return pacURL.isEmpty ? L("PAC 脚本") : pacURL
         case .socks5: return "socks5://\(serverAddress)"
         case .http: return serverAddress
         }
@@ -140,25 +140,25 @@ struct Profile: Codable, Identifiable, Equatable, Hashable {
     /// 校验，返回问题描述；没有问题返回 nil。
     func validate() -> String? {
         if name.trimmingCharacters(in: .whitespaces).isEmpty {
-            return "请填写配置名称"
+            return L("请填写配置名称")
         }
         switch kind {
         case .pac:
             let text = pacURL.trimmingCharacters(in: .whitespaces)
             guard let url = URL(string: text), let scheme = url.scheme?.lowercased(), ["http", "https", "file"].contains(scheme) else {
-                return "PAC 地址要以 http://、https:// 或 file:// 开头"
+                return L("PAC 地址要以 http://、https:// 或 file:// 开头")
             }
         case .http, .socks5:
             let trimmedHost = host.trimmingCharacters(in: .whitespaces)
             if trimmedHost.isEmpty || trimmedHost.contains(where: { $0.isWhitespace || "/?#@".contains($0) }) {
-                return "请填写正确的主机地址，例如 127.0.0.1"
+                return L("请填写正确的主机地址，例如 127.0.0.1")
             }
             if port < 1 || port > 65535 {
-                return "端口需要是 1~65535 之间的数字"
+                return L("端口需要是 1~65535 之间的数字")
             }
         }
         if targets.isEmpty {
-            return "至少选择一个生效范围"
+            return L("至少选择一个生效范围")
         }
         return nil
     }

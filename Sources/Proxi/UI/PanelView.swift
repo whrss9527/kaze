@@ -100,18 +100,18 @@ struct PanelView: View {
 
     private var title: String {
         switch state.status {
-        case .on(let profile): return "已开启 · \(profile.name)"
-        case .external: return "系统代理由其他程序设置"
-        case .off(let next): return next == nil ? "还没有代理配置" : "代理已关闭"
+        case .on(let profile): return L("已开启 · %@", profile.name)
+        case .external: return L("系统代理由其他程序设置")
+        case .off(let next): return next == nil ? L("还没有代理配置") : L("代理已关闭")
         }
     }
 
     private var subtitle: String {
         switch state.status {
         case .on(let profile):
-            if state.health == .down { return "代理服务器连不上" }
+            if state.health == .down { return L("代理服务器连不上") }
             if profile.engine, let node = engine.effectiveNode {
-                return "节点 \(node)" + (engine.effectiveNodeInfo?.delayText.isEmpty == false ? " · \(engine.effectiveNodeInfo!.delayText)" : "")
+                return L("节点 %@", node) + (engine.effectiveNodeInfo?.delayText.isEmpty == false ? " · \(engine.effectiveNodeInfo!.delayText)" : "")
             }
             if let result = state.testResults[profile.id], result.ok, let latency = result.latencyMs {
                 return "\(profile.summary) · \(latency) ms"
@@ -120,8 +120,8 @@ struct PanelView: View {
         case .external(let description):
             return description
         case .off(let next):
-            if let next { return "下次开启 \(next.name) · \(next.summary)" }
-            return "在设置里添加一个代理配置"
+            if let next { return L("下次开启 %@ · %@", next.name, next.summary) }
+            return L("在设置里添加一个代理配置")
         }
     }
 
@@ -129,11 +129,11 @@ struct PanelView: View {
         HStack(spacing: 8) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundStyle(.orange)
-            Text("别的程序改了系统代理，可以保存成配置以后一键切换")
+            Text(L("别的程序改了系统代理，可以保存成配置以后一键切换"))
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
             Spacer()
-            Button("保存") { state.saveExternalAsProfile() }
+            Button(L("保存")) { state.saveExternalAsProfile() }
                 .controlSize(.small)
         }
         .padding(10)
@@ -162,19 +162,19 @@ struct PanelView: View {
                 .onTapGesture { toggleNodes() }
                 Spacer(minLength: 4)
                 Picker("", selection: Binding(get: { state.config.engine.mode }, set: { engine.setMode($0) })) {
-                    Text("全局").tag(EngineMode.global)
-                    Text("规则").tag(EngineMode.rule)
+                    Text(L("全局")).tag(EngineMode.global)
+                    Text(L("规则")).tag(EngineMode.rule)
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
                 .controlSize(.mini)
-                .frame(width: 84)
-                .help("全局：全部走节点；规则：按分流规则")
+                .frame(width: AppLanguage.width(84, english: 104))
+                .help(L("全局：全部走节点；规则：按分流规则"))
                 Button {
                     toggleNodes()
                 } label: {
                     HStack(spacing: 2) {
-                        Text(showNodes ? "收起" : "节点列表")
+                        Text(showNodes ? L("收起") : L("节点列表"))
                             .font(.system(size: 10))
                         Image(systemName: showNodes ? "chevron.up" : "chevron.down")
                             .font(.system(size: 9, weight: .semibold))
@@ -182,7 +182,7 @@ struct PanelView: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(Color.accentColor)
-                .help(showNodes ? "收起节点列表" : "展开节点列表")
+                .help(showNodes ? L("收起节点列表") : L("展开节点列表"))
             }
             if showNodes {
                 nodeList
@@ -199,14 +199,14 @@ struct PanelView: View {
 
     private var nodeTitle: String {
         switch engine.status {
-        case .off: return state.config.engine.enabled ? "内置代理未运行" : "内置代理已停用"
-        case .starting: return "内核正在启动…"
-        case .failed: return "内核出错"
+        case .off: return state.config.engine.enabled ? L("内置代理未运行") : L("内置代理已停用")
+        case .starting: return L("内核正在启动…")
+        case .failed: return L("内核出错")
         case .running:
             if engine.currentSelection == Engine.autoGroup {
-                return "自动选择 · \(engine.autoNode ?? "…")"
+                return L("自动选择 · %@", engine.autoNode ?? L("…"))
             }
-            return engine.currentSelection ?? "未选择节点"
+            return engine.currentSelection ?? L("未选择节点")
         }
     }
 
@@ -218,9 +218,9 @@ struct PanelView: View {
             if !node.delayText.isEmpty { parts.append(node.delayText) }
         }
         if let exit = engine.exitInfo, engine.isRunning {
-            parts.append("出口 \(exit.short)")
+            parts.append(L("出口 %@", exit.short))
         }
-        parts.append("\(engine.nodes.count) 个节点 · \(state.config.engine.mode == .global ? "全局" : "规则分流")")
+        parts.append(L("%@ 个节点 · %@", engine.nodes.count, state.config.engine.mode == .global ? L("全局") : L("规则分流")))
         return parts.joined(separator: " · ")
     }
 
@@ -235,7 +235,7 @@ struct PanelView: View {
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                         .frame(width: 16)
-                    Text(group.name)
+                    Text(CoreConfigBuilder.displayName(group.name))
                         .font(.system(size: 11, weight: .medium))
                         .lineLimit(1)
                     Spacer(minLength: 4)
@@ -265,13 +265,13 @@ struct PanelView: View {
                         .menuStyle(.borderlessButton)
                         .menuIndicator(.hidden)
                         .fixedSize()
-                        .help("给「\(group.name)」选节点")
+                        .help(L("给「%@」选节点", CoreConfigBuilder.displayName(group.name)))
                     } else {
                         Text(memberTitle(group.now ?? "", withDelay: true))
                             .font(.system(size: 11))
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
-                            .help("\(group.kind.title)：\(group.kind.detail)")
+                            .help(L("%@：%@", group.kind.title, group.kind.detail))
                     }
                 }
                 .padding(.horizontal, 8)
@@ -284,12 +284,12 @@ struct PanelView: View {
 
     /// 成员的显示名：节点带延迟，DIRECT 写成直连。
     private func memberTitle(_ member: String, withDelay: Bool = true) -> String {
-        if member.isEmpty { return "…" }
-        if member == "DIRECT" { return "直连" }
+        if member.isEmpty { return L("…") }
+        if member == "DIRECT" { return L("直连") }
         if withDelay, let node = engine.nodes.first(where: { $0.name == member }), !node.delayText.isEmpty {
             return "\(member) · \(node.delayText)"
         }
-        return member
+        return CoreConfigBuilder.displayName(member)
     }
 
     /// 按设置里的排序（收藏的在最前面），再按搜索筛选。
@@ -302,7 +302,7 @@ struct PanelView: View {
     private var nodeList: some View {
         VStack(spacing: 4) {
             HStack(spacing: 6) {
-                TextField("搜索节点", text: $nodeFilter)
+                TextField(L("搜索节点"), text: $nodeFilter)
                     .textFieldStyle(.roundedBorder)
                     .controlSize(.small)
                     .onChange(of: nodeFilter) { _, _ in actions.layoutChanged() }
@@ -316,12 +316,12 @@ struct PanelView: View {
                     }
                 }
                 .buttonStyle(IconButtonStyle())
-                .help("测试全部节点的延迟")
+                .help(L("测试全部节点的延迟"))
                 .disabled(engine.testing || !engine.isRunning)
             }
             ScrollView {
                 LazyVStack(spacing: 1) {
-                    nodeRow(name: Engine.autoGroup, type: "自动", delay: nil, subtitle: engine.autoNode.map { "当前 \($0)" } ?? "延迟最低的节点", selected: engine.currentSelection == Engine.autoGroup) {
+                    nodeRow(name: CoreConfigBuilder.displayName(Engine.autoGroup), type: L("自动"), delay: nil, subtitle: engine.autoNode.map { L("当前 %@", $0) } ?? L("延迟最低的节点"), selected: engine.currentSelection == Engine.autoGroup) {
                         Task { await engine.select(nil) }
                     }
                     ForEach(filteredNodes) { node in
@@ -330,8 +330,8 @@ struct PanelView: View {
                             Task { await engine.select(node.name) }
                         }
                         .contextMenu {
-                            Button(favorite ? "取消收藏" : "收藏") { engine.toggleFavorite(node.name) }
-                            Button("测速") { Task { await engine.test(node: node.name) } }
+                            Button(favorite ? L("取消收藏") : L("收藏")) { engine.toggleFavorite(node.name) }
+                            Button(L("测速")) { Task { await engine.test(node: node.name) } }
                         }
                     }
                 }
@@ -364,7 +364,7 @@ struct PanelView: View {
                     .padding(.vertical, 1)
                     .background(Capsule().fill(Color.primary.opacity(0.08)))
                 if let delay {
-                    Text(delay > 0 ? "\(delay) ms" : "超时")
+                    Text(delay > 0 ? "\(delay) ms" : L("超时"))
                         .font(.system(size: 10, weight: .medium, design: .rounded))
                         .foregroundStyle(delayColor(delay))
                 }
@@ -405,13 +405,13 @@ struct PanelView: View {
             }
             .contentShape(Rectangle())
             .onTapGesture { actions.openSettings(.share) }
-            .help("PS5、Switch 等设备把这台 Mac 当代理服务器，享受和本机一样的网络。点击查看设置")
+            .help(L("PS5、Switch 等设备把这台 Mac 当代理服务器，享受和本机一样的网络。点击查看设置"))
             Spacer(minLength: 4)
             Toggle("", isOn: Binding(get: { state.share.enabled }, set: { state.setShareEnabled($0) }))
                 .toggleStyle(.switch)
                 .labelsHidden()
                 .controlSize(.mini)
-                .help("关闭局域网共享")
+                .help(L("关闭局域网共享"))
         }
         .padding(10)
         .glassCard()
@@ -427,15 +427,15 @@ struct PanelView: View {
 
     private var shareTitle: String {
         if let address = state.lanAddress {
-            return "局域网共享 · \(address.ip):\(String(state.share.port))"
+            return L("局域网共享 · %@:%@", address.ip, String(state.share.port))
         }
-        return "局域网共享 · 没有连上局域网"
+        return L("局域网共享 · 没有连上局域网")
     }
 
     private var shareSubtitle: String {
         switch engine.shareStatus {
-        case .off: return "未运行"
-        case .starting: return "正在启动…"
+        case .off: return L("未运行")
+        case .starting: return L("正在启动…")
         case .failed(let message): return message
         case .listening: return state.shareUpstream.summary
         }
@@ -468,9 +468,9 @@ struct PanelView: View {
             Image(systemName: "network.slash")
                 .font(.system(size: 24))
                 .foregroundStyle(.secondary)
-            Text("还没有代理配置")
+            Text(L("还没有代理配置"))
                 .font(.system(size: 12, weight: .medium))
-            Button("添加代理配置") { actions.openSettings(.profiles) }
+            Button(L("添加代理配置")) { actions.openSettings(.profiles) }
                 .controlSize(.small)
         }
         .frame(maxWidth: .infinity)
@@ -487,9 +487,9 @@ struct PanelView: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(3)
             Spacer(minLength: 0)
-            Button("诊断") { actions.openSettings(.diagnose) }
+            Button(L("诊断")) { actions.openSettings(.diagnose) }
                 .controlSize(.small)
-                .help("把链路走一遍，找出打不开的原因")
+                .help(L("把链路走一遍，找出打不开的原因"))
             Button {
                 state.lastError = nil
             } label: {
@@ -520,12 +520,12 @@ struct PanelView: View {
                 }
             }
             .buttonStyle(IconButtonStyle())
-            .help("测试全部配置的连接和延迟")
+            .help(L("测试全部配置的连接和延迟"))
             .disabled(state.config.profiles.isEmpty || testing)
 
             if case .on(let profile) = state.status, profile.kind != .pac {
                 Menu {
-                    Button("zsh / bash（终端、iTerm）") { copy(TerminalCommands.export(proxyURL: profile.proxyURL, noProxy: profile.noProxy)) }
+                    Button(L("zsh / bash（终端、iTerm）")) { copy(TerminalCommands.export(proxyURL: profile.proxyURL, noProxy: profile.noProxy)) }
                     Button("fish") { copy(TerminalCommands.fish(proxyURL: profile.proxyURL, noProxy: profile.noProxy)) }
                 } label: {
                     Image(systemName: copied ? "checkmark" : "terminal")
@@ -534,13 +534,13 @@ struct PanelView: View {
                 .menuIndicator(.hidden)
                 .frame(width: 30, height: 30)
                 .background(Circle().fill(Color.primary.opacity(0.05)))
-                .help("复制在当前终端里使用代理的命令")
+                .help(L("复制在当前终端里使用代理的命令"))
             }
 
             Spacer()
 
             if let hotkey = state.config.toggleHotkey {
-                Text("\(hotkey.display) 开关")
+                Text(L("%@ 开关", hotkey.display))
                     .font(.system(size: 11))
                     .foregroundStyle(.tertiary)
             }
@@ -551,7 +551,7 @@ struct PanelView: View {
                 Image(systemName: "stethoscope")
             }
             .buttonStyle(IconButtonStyle())
-            .help("网址诊断：某个网站打不开时查原因")
+            .help(L("网址诊断：某个网站打不开时查原因"))
 
             Button {
                 actions.openSettings(nil)
@@ -559,7 +559,7 @@ struct PanelView: View {
                 Image(systemName: "gearshape")
             }
             .buttonStyle(IconButtonStyle())
-            .help("设置")
+            .help(L("设置"))
 
             Button {
                 actions.quit()
@@ -567,7 +567,7 @@ struct PanelView: View {
                 Image(systemName: "power")
             }
             .buttonStyle(IconButtonStyle())
-            .help("退出 Proxi")
+            .help(L("退出 Proxi"))
         }
         .padding(.horizontal, 2)
     }

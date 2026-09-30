@@ -207,20 +207,22 @@ struct ConnectionRecord: Identifiable, Equatable {
     /// 流量统计里的来源：程序名；共享的设备写「设备 IP」；认不出程序的本机连接算「本机其他」。
     var trafficSource: String {
         if !process.isEmpty { return process }
-        if isShare { return "设备 " + client }
-        return ["", "127.0.0.1", "::1", "localhost"].contains(client) ? "本机其他" : client
+        // 存在流量统计里的键，不随界面语言变；显示时经 TrafficEntry.displayName 翻译。
+        if isShare { return "设备 " + client }  // l10n-ignore
+        return ["", "127.0.0.1", "::1", "localhost"].contains(client) ? "本机其他" : client  // l10n-ignore
     }
 
     /// 显示用的来源：程序名；没有程序名时，本机回环来的写「本机」，其余（共享的设备）显示来源 IP。
     var source: String {
         if !process.isEmpty { return process }
         if isShare { return client }
-        return ["", "127.0.0.1", "::1", "localhost"].contains(client) ? "本机" : client
+        return ["", "127.0.0.1", "::1", "localhost"].contains(client) ? L("本机") : client
     }
 
     /// 出口连同策略组：「流媒体 → 香港 01」；没经过组时只有出口。
     var route: String {
-        group.isEmpty || group == outbound ? outbound : "\(group) → \(outbound)"
+        let exit = CoreConfigBuilder.displayName(outbound)
+        return group.isEmpty || group == outbound ? exit : "\(CoreConfigBuilder.displayName(group)) → \(exit)"
     }
 
     var startDate: Date? { CoreDates.parse(start) }

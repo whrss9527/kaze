@@ -48,7 +48,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         guard available else { return }
         let center = UNUserNotificationCenter.current()
         center.delegate = self
-        let install = UNNotificationAction(identifier: Self.installUpdateAction, title: "立即更新", options: [])
+        let install = UNNotificationAction(identifier: Self.installUpdateAction, title: L("立即更新"), options: [])
         center.setNotificationCategories([
             UNNotificationCategory(identifier: Self.updateCategory, actions: [install], intentIdentifiers: [], options: []),
         ])

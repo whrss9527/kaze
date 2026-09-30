@@ -56,6 +56,10 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 sed -e "s/__VERSION__/$VERSION/g" -e "s/__BUILD__/$BUILD/g" Resources/Info.plist > "$APP/Contents/Info.plist"
 cp "$BIN_DIR/Proxi" "$APP/Contents/MacOS/Proxi"
 cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
+# 界面文字的翻译：英文和简体中文（代码里写的是中文原文，见 Sources/Proxi/App/AppLanguage.swift）。
+for lproj in Resources/*.lproj; do
+  cp -R "$lproj" "$APP/Contents/Resources/"
+done
 # 关于页的赞赏码（「请我喝杯咖啡」）。
 [ -f Resources/donate-wechat.png ] && cp Resources/donate-wechat.png "$APP/Contents/Resources/donate-wechat.png"
 printf 'APPL????' > "$APP/Contents/PkgInfo"

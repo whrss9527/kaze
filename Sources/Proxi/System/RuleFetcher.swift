@@ -105,10 +105,10 @@ enum RuleStoreError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .badURL(let text): return "规则地址不对：\(text)"
-        case .status(let code): return "服务器返回 \(code)"
-        case .tooLarge: return "规则文件太大"
-        case .empty: return "规则文件是空的"
+        case .badURL(let text): return L("规则地址不对：%@", text)
+        case .status(let code): return L("服务器返回 %@", code)
+        case .tooLarge: return L("规则文件太大")
+        case .empty: return L("规则文件是空的")
         }
     }
 }

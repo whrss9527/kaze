@@ -18,7 +18,7 @@ final class MCPServer {
     /// 处理一行消息，返回要回的消息；通知（没有 id）不回。
     func handle(_ line: Data) -> [String: Any]? {
         guard let message = JSONRPC.decode(line) else {
-            return JSONRPC.error(id: nil, code: JSONRPC.parseError, message: "不是正确的 JSON")
+            return JSONRPC.error(id: nil, code: JSONRPC.parseError, message: L("不是正确的 JSON"))
         }
         let id = message["id"]
         guard let method = message["method"] as? String else {
@@ -58,7 +58,7 @@ final class MCPServer {
             return JSONRPC.result(id: id, ["tools": tools])
         case "tools/call":
             guard let name = params["name"] as? String, ControlCatalog.tool(named: name) != nil else {
-                return JSONRPC.error(id: id, code: JSONRPC.invalidParams, message: "没有这个工具")
+                return JSONRPC.error(id: id, code: JSONRPC.invalidParams, message: L("没有这个工具"))
             }
             let arguments = (params["arguments"] as? [String: Any]) ?? [:]
             do {
@@ -75,14 +75,14 @@ final class MCPServer {
         case "prompts/list":
             return JSONRPC.result(id: id, ["prompts": [Any]()])
         default:
-            return JSONRPC.error(id: id, code: JSONRPC.methodNotFound, message: "不支持 \(method)")
+            return JSONRPC.error(id: id, code: JSONRPC.methodNotFound, message: L("不支持 %@", method))
         }
     }
 
     /// 工具结果：一段文字（先是一句话，再是完整的 JSON），新版协议再带上结构化的内容。
     private func toolResult(_ result: [String: Any], isError: Bool) -> [String: Any] {
         var data = result
-        let summary = (data.removeValue(forKey: "text") as? String) ?? (isError ? "出错了" : "完成")
+        let summary = (data.removeValue(forKey: "text") as? String) ?? (isError ? L("出错了") : L("完成"))
         var text = summary
         if !data.isEmpty {
             text += "\n\n" + JSONRPC.pretty(data)

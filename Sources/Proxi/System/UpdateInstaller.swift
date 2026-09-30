@@ -139,9 +139,9 @@ enum InstallLocation {
     /// 界面上怎么称呼这个文件夹。
     static func displayName(of folder: URL) -> String {
         let path = folder.standardizedFileURL.path
-        if path == "/Applications" { return "「应用程序」" }
+        if path == "/Applications" { return L("「应用程序」") }
         if path == FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Applications").standardizedFileURL.path {
-            return "个人的「应用程序」（~/Applications）"
+            return L("个人的「应用程序」（~/Applications）")
         }
         return (path as NSString).abbreviatingWithTildeInPath
     }
@@ -267,20 +267,20 @@ enum UpdateInstaller {
         let plistURL = app.appendingPathComponent("Contents/Info.plist")
         guard let data = try? Data(contentsOf: plistURL),
               let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] else {
-            throw UpdateError.wrongApp("读不到 Info.plist")
+            throw UpdateError.wrongApp(L("读不到 Info.plist"))
         }
         let identifier = plist["CFBundleIdentifier"] as? String ?? ""
         if let ours = Bundle.main.bundleIdentifier, identifier != ours {
-            throw UpdateError.wrongApp("bundle identifier 是 \(identifier)")
+            throw UpdateError.wrongApp(L("bundle identifier 是 %@", identifier))
         }
         let version = plist["CFBundleShortVersionString"] as? String ?? ""
         guard version == expectedVersion else {
-            throw UpdateError.wrongApp("版本是 \(version)，不是 \(expectedVersion)")
+            throw UpdateError.wrongApp(L("版本是 %@，不是 %@", version, expectedVersion))
         }
         let result = try await Shell.run(codesignPath, ["--verify", "--deep", "--strict", app.path], timeout: 120)
-        guard result.succeeded else { throw UpdateError.wrongApp("签名校验失败：\(result.trimmedOutput)") }
+        guard result.succeeded else { throw UpdateError.wrongApp(L("签名校验失败：%@", result.trimmedOutput)) }
         if let requiredTeam, !CodeSignature.isSigned(app, byTeam: requiredTeam) {
-            let found = CodeSignature.teamIdentifier(of: app) ?? "没有开发者签名"
+            let found = CodeSignature.teamIdentifier(of: app) ?? L("没有开发者签名")
             Log.error("新版本的签名不是 \(requiredTeam)（是 \(found)），不安装")
             throw UpdateError.wrongSigner(requiredTeam)
         }

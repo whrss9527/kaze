@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
-	<string>zh_CN</string>
+	<string>en</string>
 	<key>CFBundleDisplayName</key>
 	<string>Proxi</string>
 	<key>CFBundleExecutable</key>
@@ -15,6 +15,12 @@
 	<string>com.whrss9527.proxyswitch</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
+	<!-- 界面有英文和简体中文（Resources/*.lproj），设置 → 通用里可以选。 -->
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>en</string>
+		<string>zh-Hans</string>
+	</array>
 	<key>CFBundleName</key>
 	<string>Proxi</string>
 	<key>CFBundlePackageType</key>
@@ -48,10 +54,11 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<!-- 中文的写在 Resources/zh-Hans.lproj/InfoPlist.strings。 -->
 	<key>NSLocationUsageDescription</key>
-	<string>按网络自动切换需要读取现在连接的 Wi‑Fi 名字，macOS 把它算作定位信息。Proxi 不会读取或保存你的位置。</string>
+	<string>Switching by network needs to read the name of the connected Wi‑Fi, which macOS treats as location information. Proxi doesn't read or store your location.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>按网络自动切换需要读取现在连接的 Wi‑Fi 名字，macOS 把它算作定位信息。Proxi 不会读取或保存你的位置。</string>
+	<string>Switching by network needs to read the name of the connected Wi‑Fi, which macOS treats as location information. Proxi doesn't read or store your location.</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSHumanReadableCopyright</key>

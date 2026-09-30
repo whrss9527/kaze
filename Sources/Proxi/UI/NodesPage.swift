@@ -23,7 +23,7 @@ struct NodesPage: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            PageHeader(title: "节点与订阅", subtitle: "填一个机场的订阅地址，节点就会出现在面板里；策略组给某类流量单独选节点")
+            PageHeader(title: L("节点与订阅"), subtitle: L("填一个机场的订阅地址，节点就会出现在面板里；策略组给某类流量单独选节点"))
             Form {
                 coreSection
                 subscriptionsSection
@@ -57,29 +57,29 @@ struct NodesPage: View {
     // MARK: - 内核
 
     private var coreSection: some View {
-        Section("内置代理") {
-            Toggle("启用内置代理（内核 mihomo）", isOn: Binding(get: { state.config.engine.enabled }, set: { engine.setEnabled($0) }))
-            LabeledContent("状态") { statusView }
+        Section(L("内置代理")) {
+            Toggle(L("启用内置代理（内核 mihomo）"), isOn: Binding(get: { state.config.engine.enabled }, set: { engine.setEnabled($0) }))
+            LabeledContent(L("状态")) { statusView }
             if !engine.coreAvailable {
-                Label("这个 Proxi 里没有打包内核，请到发布页重新下载完整版本", systemImage: "exclamationmark.triangle")
+                Label(L("这个 Proxi 里没有打包内核，请到发布页重新下载完整版本"), systemImage: "exclamationmark.triangle")
                     .font(.caption)
                     .foregroundStyle(.orange)
             }
             if let profile = state.engineProfile {
-                Text("配置列表里的「\(profile.name)」就是它：开启后系统代理指向 127.0.0.1:\(String(profile.port))，面板里可以选节点、切换模式。")
+                Text(L("配置列表里的「%@」就是它：开启后系统代理指向 127.0.0.1:%@，面板里可以选节点、切换模式。", profile.name, String(profile.port)))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
-                Text("添加订阅后，配置列表里会多一条「节点代理」，开关它就是开关内置代理。")
+                Text(L("添加订阅后，配置列表里会多一条「节点代理」，开关它就是开关内置代理。"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
             HStack {
-                Button("重启内核") {
+                Button(L("重启内核")) {
                     Task { await engine.restartCore() }
                 }
                 .disabled(!state.config.engine.wantsCore)
-                Button(showLog ? "隐藏日志" : "查看日志") { showLog.toggle() }
+                Button(showLog ? L("隐藏日志") : L("查看日志")) { showLog.toggle() }
             }
             if let error = engine.lastError {
                 Label(error, systemImage: "xmark.octagon")
@@ -93,17 +93,17 @@ struct NodesPage: View {
     private var statusView: some View {
         switch engine.status {
         case .off:
-            Text(state.config.engine.wantsCore ? "未运行" : "还没有订阅")
+            Text(state.config.engine.wantsCore ? L("未运行") : L("还没有订阅"))
                 .foregroundStyle(.secondary)
         case .starting:
             HStack(spacing: 6) {
                 ProgressView()
                     .controlSize(.small)
-                Text("正在启动…")
+                Text(L("正在启动…"))
                     .foregroundStyle(.secondary)
             }
         case .running(let version):
-            Label("运行中 · mihomo \(version) · \(engine.nodes.count) 个节点", systemImage: "checkmark.circle")
+            Label(L("运行中 · mihomo %@ · %@ 个节点", version, engine.nodes.count), systemImage: "checkmark.circle")
                 .foregroundStyle(.green)
         case .failed(let message):
             Label(message, systemImage: "xmark.circle")
@@ -115,9 +115,9 @@ struct NodesPage: View {
     // MARK: - 订阅
 
     private var subscriptionsSection: some View {
-        Section("订阅") {
+        Section(L("订阅")) {
             if state.config.engine.subscriptions.isEmpty {
-                Text("还没有订阅。把机场给你的订阅地址粘到下面，节点由内核下载和解析。")
+                Text(L("还没有订阅。把机场给你的订阅地址粘到下面，节点由内核下载和解析。"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -136,13 +136,13 @@ struct NodesPage: View {
             }
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    TextField("", text: $newName, prompt: Text("名称（可选）"))
+                    TextField("", text: $newName, prompt: Text(L("名称（可选）")))
                         .labelsHidden()
                         .frame(width: 140)
-                    TextField("", text: $newURL, prompt: Text("订阅地址 https://…"))
+                    TextField("", text: $newURL, prompt: Text(L("订阅地址 https://…")))
                         .labelsHidden()
                         .onSubmit { add() }
-                    Button("添加") { add() }
+                    Button(L("添加")) { add() }
                         .disabled(newURL.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
                 if let addProblem {
@@ -150,12 +150,12 @@ struct NodesPage: View {
                         .font(.caption)
                         .foregroundStyle(.red)
                 }
-                Button("导入配置…") { importing = true }
+                Button(L("导入配置…")) { importing = true }
                     .controlSize(.small)
-                    .help("导入 Clash / Surge / 小火箭 / Quantumult X 的配置或者 Proxi 的配置")
+                    .help(L("导入 Clash / Surge / 小火箭 / Quantumult X 的配置或者 Proxi 的配置"))
             }
             if !state.config.engine.subscriptions.isEmpty {
-                Text("订阅每 \(String(state.config.engine.updateIntervalHours)) 小时自动更新一次。内核以 clash.meta 的身份下载，机场返回 Clash 配置或 base64 节点列表都可以。齿轮里能设筛选（只要某些地区、去掉「剩余流量」这类假节点）、名字前缀和前置代理。")
+                Text(L("订阅每 %@ 小时自动更新一次。内核以 clash.meta 的身份下载，机场返回 Clash 配置或 base64 节点列表都可以。齿轮里能设筛选（只要某些地区、去掉「剩余流量」这类假节点）、名字前缀和前置代理。", String(state.config.engine.updateIntervalHours)))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -165,10 +165,10 @@ struct NodesPage: View {
     /// 订阅设了哪些选项，一句话。
     private func optionsSummary(_ subscription: Subscription) -> String {
         var parts: [String] = []
-        if !subscription.filter.isEmpty { parts.append("只保留 \(subscription.filter)") }
-        if !subscription.exclude.isEmpty { parts.append("去掉 \(subscription.exclude)") }
-        if !subscription.prefix.isEmpty { parts.append("前缀「\(subscription.prefix)」") }
-        if let dialer = subscription.dialer { parts.append("经 \(DialerReference.title(dialer, profiles: state.config.profiles))") }
+        if !subscription.filter.isEmpty { parts.append(L("只保留 %@", subscription.filter)) }
+        if !subscription.exclude.isEmpty { parts.append(L("去掉 %@", subscription.exclude)) }
+        if !subscription.prefix.isEmpty { parts.append(L("前缀「%@」", subscription.prefix)) }
+        if let dialer = subscription.dialer { parts.append(L("经 %@", DialerReference.title(dialer, profiles: state.config.profiles))) }
         return parts.joined(separator: " · ")
     }
 
@@ -186,9 +186,9 @@ struct NodesPage: View {
     private var nodeNames: [String] { engine.nodes.map(\.name) }
 
     private var groupsSection: some View {
-        Section("策略组") {
+        Section(L("策略组")) {
             if state.config.engine.groups.isEmpty {
-                Text("给某类流量单独选节点：比如建一个「流媒体」组，分流规则里把 Netflix、YouTube 指到它，面板里就能单独给它选节点。")
+                Text(L("给某类流量单独选节点：比如建一个「流媒体」组，分流规则里把 Netflix、YouTube 指到它，面板里就能单独给它选节点。"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -205,7 +205,7 @@ struct NodesPage: View {
             }
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 8) {
-                    TextField("", text: $newGroupName, prompt: Text("名字，比如 流媒体"))
+                    TextField("", text: $newGroupName, prompt: Text(L("名字，比如 流媒体")))
                         .labelsHidden()
                         .frame(width: 140)
                     Picker("", selection: $newGroupKind) {
@@ -214,11 +214,11 @@ struct NodesPage: View {
                         }
                     }
                     .labelsHidden()
-                    .frame(width: 110)
-                    TextField("", text: $newGroupFilter, prompt: Text("节点名筛选（正则），比如 港|HK；空为全部节点"))
+                    .frame(width: AppLanguage.width(110, english: 135))
+                    TextField("", text: $newGroupFilter, prompt: Text(L("节点名筛选（正则），比如 港|HK；空为全部节点")))
                         .labelsHidden()
                         .onSubmit { addGroup() }
-                    Button("添加") { addGroup() }
+                    Button(L("添加")) { addGroup() }
                         .disabled(newGroupName.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
                 Text(newGroupPreview)
@@ -230,7 +230,7 @@ struct NodesPage: View {
                         .foregroundStyle(.red)
                 }
             }
-            Text("手动选择的组多了「节点」「自动选择」和直连三个候选，默认跟随「节点」，所以刚建好时行为不变；自动选择、故障转移、负载均衡只在筛出来的节点里挑，一个都筛不到时内核退回直连。组名不能和节点、内核保留的名字重复。每个组的「高级」里能限定只用某几个订阅、排除节点、把别的组放进来、单独设测速地址和间隔；节点列表里也能按筛选条件直接建组。")
+            Text(L("手动选择的组多了「节点」「自动选择」和直连三个候选，默认跟随「节点」，所以刚建好时行为不变；自动选择、故障转移、负载均衡只在筛出来的节点里挑，一个都筛不到时内核退回直连。组名不能和节点、内核保留的名字重复。每个组的「高级」里能限定只用某几个订阅、排除节点、把别的组放进来、单独设测速地址和间隔；节点列表里也能按筛选条件直接建组。"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -238,15 +238,15 @@ struct NodesPage: View {
 
     private var newGroupPreview: String {
         let draft = PolicyGroup(name: newGroupName, kind: newGroupKind, filter: newGroupFilter)
-        if PolicyGroup.validateFilter(draft.filter) != nil { return "筛选不是正确的正则表达式" }
+        if PolicyGroup.validateFilter(draft.filter) != nil { return L("筛选不是正确的正则表达式") }
         let matched = draft.matches(nodeNames)
-        var text = newGroupKind.detail + "。"
+        var text = newGroupKind.detail + L("。")
         if nodeNames.isEmpty {
-            text += "内核启动后能预览筛选到的节点。"
+            text += L("内核启动后能预览筛选到的节点。")
         } else if draft.filter.isEmpty {
-            text += "没有筛选：全部 \(nodeNames.count) 个节点。"
+            text += L("没有筛选：全部 %@ 个节点。", nodeNames.count)
         } else {
-            text += "筛选到 \(matched.count) 个节点" + (matched.isEmpty ? "。" : "：\(matched.prefix(4).joined(separator: "、"))\(matched.count > 4 ? "…" : "")")
+            text += L("筛选到 %@ 个节点", matched.count) + (matched.isEmpty ? L("。") : L("：%@%@", matched.prefix(4).joined(separator: L("、")), matched.count > 4 ? L("…") : ""))
         }
         return text
     }
@@ -263,19 +263,19 @@ struct NodesPage: View {
     // MARK: - 模式
 
     private var modeSection: some View {
-        Section("模式") {
-            Picker("代理模式", selection: Binding(get: { state.config.engine.mode }, set: { engine.setMode($0) })) {
+        Section(L("模式")) {
+            Picker(L("代理模式"), selection: Binding(get: { state.config.engine.mode }, set: { engine.setMode($0) })) {
                 ForEach(EngineMode.allCases) { mode in
                     Text(mode.title).tag(mode)
                 }
             }
             .pickerStyle(.segmented)
             HStack {
-                Text(state.config.engine.mode == .global ? "全局代理：除局域网和自定义规则外的全部流量都走选中的节点。" : "规则分流：按规则集和自定义规则决定哪些走节点、哪些直连、哪些拦截。")
+                Text(state.config.engine.mode == .global ? L("全局代理：除局域网和自定义规则外的全部流量都走选中的节点。") : L("规则分流：按规则集和自定义规则决定哪些走节点、哪些直连、哪些拦截。"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
-                Button("管理分流规则") { navigation.page = .rules }
+                Button(L("管理分流规则")) { navigation.page = .rules }
                     .controlSize(.small)
             }
         }
@@ -293,24 +293,24 @@ struct NodesPage: View {
     }
 
     private var portsSection: some View {
-        Section("端口") {
+        Section(L("端口")) {
             HStack {
-                TextField("代理端口", text: $mixedPortText)
+                TextField(L("代理端口"), text: $mixedPortText)
                     .onChange(of: mixedPortText) { _, value in
                         let digits = value.filter(\.isNumber)
                         if digits != value { mixedPortText = digits }
                     }
-                TextField("API 端口", text: $apiPortText)
+                TextField(L("API 端口"), text: $apiPortText)
                     .onChange(of: apiPortText) { _, value in
                         let digits = value.filter(\.isNumber)
                         if digits != value { apiPortText = digits }
                     }
-                Button("应用") {
+                Button(L("应用")) {
                     engine.setPorts(mixed: Int(mixedPortText) ?? 7890, api: Int(apiPortText) ?? 9097)
                 }
                 .disabled(!portsValid || !portsChanged)
             }
-            Text("改端口后内核会重启，配置列表里「节点代理」的端口会跟着改。默认代理端口 7890、API 端口 9097。")
+            Text(L("改端口后内核会重启，配置列表里「节点代理」的端口会跟着改。默认代理端口 7890、API 端口 9097。"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -319,15 +319,15 @@ struct NodesPage: View {
     // MARK: - 日志
 
     private var logSection: some View {
-        Section("内核日志") {
+        Section(L("内核日志")) {
             ScrollView {
-                Text(logText.isEmpty ? "还没有日志" : logText)
+                Text(logText.isEmpty ? L("还没有日志") : logText)
                     .font(.system(size: 11, design: .monospaced))
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .frame(height: 200)
-            Text("完整日志在配置目录的 core/core.log。")
+            Text(L("完整日志在配置目录的 core/core.log。"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -386,12 +386,12 @@ struct SubscriptionRow: View {
             }
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
-            .help("筛选、前缀、前置代理")
+            .help(L("筛选、前缀、前置代理"))
             if updating {
                 ProgressView()
                     .controlSize(.small)
             } else {
-                Button("更新") { onUpdate() }
+                Button(L("更新")) { onUpdate() }
                     .controlSize(.small)
                     .disabled(!canUpdate || !subscription.enabled)
             }
@@ -402,31 +402,31 @@ struct SubscriptionRow: View {
             }
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
-            .help("删除这条订阅")
+            .help(L("删除这条订阅"))
         }
     }
 
     private var detail: String {
-        guard subscription.enabled else { return "已停用" }
-        guard let status else { return "还没有读取到节点" }
-        var parts = ["\(status.nodeCount) 个节点"]
+        guard subscription.enabled else { return L("已停用") }
+        guard let status else { return L("还没有读取到节点") }
+        var parts = [L("%@ 个节点", status.nodeCount)]
         if let info = status.info {
             if let total = info.total, total > 0 {
-                parts.append("已用 \(Engine.bytesText(info.used)) / \(Engine.bytesText(total))")
+                parts.append(L("已用 %@ / %@", Engine.bytesText(info.used), Engine.bytesText(total)))
             }
             if let expire = info.expireDate {
-                parts.append("到期 \(Self.dateFormatter.string(from: expire))")
+                parts.append(L("到期 %@", Self.dateFormatter.string(from: expire)))
             }
         }
         if let updated = status.updatedAt {
-            parts.append("更新于 \(Engine.relative(updated))")
+            parts.append(L("更新于 %@", Engine.relative(updated)))
         }
         return parts.joined(separator: " · ")
     }
 
     private static let dateFormatter: DateFormatter = {
         let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.locale = AppLanguage.locale
         formatter.dateStyle = .medium
         formatter.timeStyle = .none
         return formatter
@@ -471,7 +471,7 @@ struct PolicyGroupRow: View {
                 Image(systemName: kind.symbol)
                     .foregroundStyle(Color.accentColor)
                     .frame(width: 16)
-                TextField("", text: $name, prompt: Text("名字"))
+                TextField("", text: $name, prompt: Text(L("名字")))
                     .labelsHidden()
                     .frame(width: 140)
                     .onSubmit { save() }
@@ -481,29 +481,29 @@ struct PolicyGroupRow: View {
                     }
                 }
                 .labelsHidden()
-                .frame(width: 110)
-                TextField("", text: $filter, prompt: Text("节点名筛选（正则），空为全部"))
+                .frame(width: AppLanguage.width(110, english: 135))
+                TextField("", text: $filter, prompt: Text(L("节点名筛选（正则），空为全部")))
                     .labelsHidden()
                     .onSubmit { save() }
                 if changed {
-                    Button("保存") { save() }
+                    Button(L("保存")) { save() }
                         .controlSize(.small)
                 }
-                Button("高级") { onEdit() }
+                Button(L("高级")) { onEdit() }
                     .controlSize(.small)
-                    .help("只用某几个订阅、排除节点、包含别的组、测速地址和间隔")
+                    .help(L("只用某几个订阅、排除节点、包含别的组、测速地址和间隔"))
                 Menu {
-                    Button("上移") { onMove(true) }
-                    Button("下移") { onMove(false) }
+                    Button(L("上移")) { onMove(true) }
+                    Button(L("下移")) { onMove(false) }
                     Divider()
-                    Button("删除策略组", role: .destructive) { onDelete() }
+                    Button(L("删除策略组"), role: .destructive) { onDelete() }
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }
                 .menuStyle(.borderlessButton)
                 .menuIndicator(.hidden)
                 .fixedSize()
-                .help("上移、下移、删除")
+                .help(L("上移、下移、删除"))
             }
             Text(detail)
                 .font(.caption)
@@ -523,24 +523,24 @@ struct PolicyGroupRow: View {
         draft.filter = filter.trimmingCharacters(in: .whitespaces)
         var parts: [String] = []
         if PolicyGroup.validateFilter(draft.filter) != nil {
-            parts.append("筛选不是正确的正则表达式")
+            parts.append(L("筛选不是正确的正则表达式"))
         } else if nodeNames.isEmpty {
-            parts.append("内核启动后能看到筛选到的节点")
+            parts.append(L("内核启动后能看到筛选到的节点"))
         } else {
             let matched = draft.matches(nodeNames)
-            parts.append(draft.filter.isEmpty ? "全部 \(nodeNames.count) 个节点" : "筛选到 \(matched.count) 个节点")
+            parts.append(draft.filter.isEmpty ? L("全部 %@ 个节点", nodeNames.count) : L("筛选到 %@ 个节点", matched.count))
         }
         if let current, !current.isEmpty {
-            parts.append("现在用 \(current)")
+            parts.append(L("现在用 %@", current))
         }
         if group.hasAdvancedOptions {
             var advanced: [String] = []
-            if !group.sources.isEmpty { advanced.append("限定来源") }
-            if !group.exclude.isEmpty { advanced.append("排除 \(group.exclude)") }
-            if !group.includeGroups.isEmpty { advanced.append("包含 \(group.includeGroups.joined(separator: "、"))") }
-            if !group.testURL.isEmpty || group.interval != 0 { advanced.append("单独测速") }
+            if !group.sources.isEmpty { advanced.append(L("限定来源")) }
+            if !group.exclude.isEmpty { advanced.append(L("排除 %@", group.exclude)) }
+            if !group.includeGroups.isEmpty { advanced.append(L("包含 %@", group.includeGroups.joined(separator: L("、")))) }
+            if !group.testURL.isEmpty || group.interval != 0 { advanced.append(L("单独测速")) }
             if group.kind == .loadBalance && group.strategy != .roundRobin { advanced.append(group.strategy.title) }
-            parts.append(advanced.joined(separator: "，"))
+            parts.append(advanced.joined(separator: L("，")))
         }
         return parts.joined(separator: " · ")
     }

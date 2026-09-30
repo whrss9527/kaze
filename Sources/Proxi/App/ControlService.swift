@@ -17,10 +17,10 @@ struct ControlChange: Codable, Identifiable, Equatable {
 
     var clientTitle: String {
         switch client {
-        case "cli": return "命令行"
-        case "mcp": return "AI 助手"
-        case "url": return "URL 命令"
-        case "ui": return "设置"
+        case "cli": return L("命令行")
+        case "mcp": return L("AI 助手")
+        case "url": return L("URL 命令")
+        case "ui": return L("设置")
         default: return client
         }
     }
@@ -76,7 +76,7 @@ final class ControlService: ObservableObject {
         }
         guard server == nil else { return }
         let server = ControlSocketServer { [weak self] line in
-            guard let self else { return JSONRPC.encode(JSONRPC.error(id: nil, code: JSONRPC.internalError, message: "Proxi 正在退出")) }
+            guard let self else { return JSONRPC.encode(JSONRPC.error(id: nil, code: JSONRPC.internalError, message: L("Proxi 正在退出"))) }
             return self.handleBlocking(line)
         }
         do {
@@ -102,7 +102,7 @@ final class ControlService: ObservableObject {
             if let self {
                 box.data = await self.handle(line)
             } else {
-                box.data = JSONRPC.encode(JSONRPC.error(id: nil, code: JSONRPC.internalError, message: "Proxi 正在退出"))
+                box.data = JSONRPC.encode(JSONRPC.error(id: nil, code: JSONRPC.internalError, message: L("Proxi 正在退出")))
             }
             semaphore.signal()
         }
@@ -112,11 +112,11 @@ final class ControlService: ObservableObject {
 
     func handle(_ line: Data) async -> Data {
         guard let message = JSONRPC.decode(line) else {
-            return JSONRPC.encode(JSONRPC.error(id: nil, code: JSONRPC.parseError, message: "不是正确的 JSON"))
+            return JSONRPC.encode(JSONRPC.error(id: nil, code: JSONRPC.parseError, message: L("不是正确的 JSON")))
         }
         let id = message["id"]
         guard let method = message["method"] as? String else {
-            return JSONRPC.encode(JSONRPC.error(id: id, code: JSONRPC.invalidRequest, message: "缺少 method"))
+            return JSONRPC.encode(JSONRPC.error(id: id, code: JSONRPC.invalidRequest, message: L("缺少 method")))
         }
         let params = (message["params"] as? [String: Any]) ?? [:]
         let client = (message["client"] as? String) ?? "cli"
@@ -132,13 +132,13 @@ final class ControlService: ObservableObject {
 
     /// 执行一个工具。URL 命令也走这里（client 是 "url"）。
     func call(_ method: String, params raw: [String: Any], client: String) async throws -> [String: Any] {
-        guard let state else { throw ControlError.failed("Proxi 还没准备好") }
+        guard let state else { throw ControlError.failed(L("Proxi 还没准备好")) }
         guard let tool = ControlCatalog.tool(named: method) else {
-            throw ControlError(code: JSONRPC.methodNotFound, message: "没有这个工具：\(method)。可用的有：\(ControlCatalog.tools.map(\.name).joined(separator: "、"))")
+            throw ControlError(code: JSONRPC.methodNotFound, message: L("没有这个工具：%@。可用的有：%@", method, ControlCatalog.tools.map(\.name).joined(separator: L("、"))))
         }
         let permission = state.config.automation.permission
         guard permission.allows(tool.permission) else {
-            throw ControlError(code: JSONRPC.permissionDenied, message: "权限不够：「\(tool.title)」需要「\(tool.permission.title)」，现在是「\(permission.title)」。在 Proxi 设置的「自动化」页可以调整。")
+            throw ControlError(code: JSONRPC.permissionDenied, message: L("权限不够：「%@」需要「%@」，现在是「%@」。在 Proxi 设置的「自动化」页可以调整。", tool.title, tool.permission.title, permission.title))
         }
         lastCall = (client, method, Date())
         let params = ControlParams(raw)
@@ -151,7 +151,7 @@ final class ControlService: ObservableObject {
             let changedConfig = state.config != before
             record(ControlChange(client: client, tool: method, summary: summary, before: changedConfig ? before : nil))
             if changedConfig {
-                result["undo"] = "可以用 undo 撤销这次改动"
+                result["undo"] = L("可以用 undo 撤销这次改动")
             }
         }
         return result
@@ -170,15 +170,15 @@ final class ControlService: ObservableObject {
     /// 撤销最近一次能撤销的改动；返回说明。
     @discardableResult
     func undoLatest() throws -> String {
-        guard let state else { throw ControlError.failed("Proxi 还没准备好") }
+        guard let state else { throw ControlError.failed(L("Proxi 还没准备好")) }
         guard let index = changes.firstIndex(where: \.canUndo), let before = changes[index].before else {
-            throw ControlError.failed("没有能撤销的改动")
+            throw ControlError.failed(L("没有能撤销的改动"))
         }
         state.config = before
         changes[index].undone = true
         saveJournal()
         Log.info("已撤销：\(changes[index].summary)")
-        return "已撤销：\(changes[index].summary)"
+        return L("已撤销：%@", changes[index].summary)
     }
 
     func undo(_ id: UUID) {
@@ -228,7 +228,7 @@ final class ControlService: ObservableObject {
             let profiles = state.config.profiles.map { profile -> [String: Any] in
                 ["name": profile.name, "type": profile.engine ? "engine" : profile.kind.rawValue, "summary": profile.summary, "active": state.status.isOn && state.status.profile?.id == profile.id]
             }
-            return ["text": "\(profiles.count) 个代理配置", "profiles": profiles]
+            return ["text": L("%@ 个代理配置", profiles.count), "profiles": profiles]
         case "list_nodes":
             var nodes = engine.sortedNodes
             if let filter = params.string("filter") {
@@ -244,7 +244,7 @@ final class ControlService: ObservableObject {
                 return item
             }
             let selection = engine.currentSelection ?? ""
-            return ["text": "\(nodes.count) 个节点" + (selection.isEmpty ? "" : "，「节点」组现在选的是 \(selection)"), "selected": selection, "nodes": Array(list)]
+            return ["text": L("%@ 个节点", nodes.count) + (selection.isEmpty ? "" : L("，「节点」组现在选的是 %@", selection)), "selected": selection, "nodes": Array(list)]
         case "list_groups":
             var groups: [[String: Any]] = [["name": Engine.selectorGroup, "type": "select", "now": engine.currentSelection ?? "", "builtin": true]]
             groups.append(["name": Engine.autoGroup, "type": "url-test", "now": engine.autoNode ?? "", "builtin": true])
@@ -259,7 +259,7 @@ final class ControlService: ObservableObject {
                 }
                 groups.append(item)
             }
-            return ["text": "\(state.config.engine.groups.count) 个自定义策略组", "groups": groups]
+            return ["text": L("%@ 个自定义策略组", state.config.engine.groups.count), "groups": groups]
         case "list_rules":
             let config = state.config.engine
             let rules = config.customRules.map { rule -> [String: Any] in
@@ -271,7 +271,7 @@ final class ControlService: ObservableObject {
                 if let problem = engine.ruleSetStatus[set.id]?.problem { item["problem"] = problem }
                 return item
             }
-            return ["text": "\(rules.count) 条自定义规则、\(sets.count) 个规则集；\(engine.rulesInfo)", "mode": config.mode.rawValue, "customRules": rules, "ruleSets": sets, "final": config.finalPolicy.map(ConfigImporter.policyText) ?? "follow"]
+            return ["text": L("%@ 条自定义规则、%@ 个规则集；%@", rules.count, sets.count, engine.rulesInfo), "mode": config.mode.rawValue, "customRules": rules, "ruleSets": sets, "final": config.finalPolicy.map(ConfigImporter.policyText) ?? "follow"]
         case "list_subscriptions":
             let config = state.config.engine
             let subscriptions = config.subscriptions.map { subscription -> [String: Any] in
@@ -289,7 +289,7 @@ final class ControlService: ObservableObject {
                 return item
             }
             let manual = config.manualNodes.map { ["name": $0.name, "server": $0.server, "enabled": $0.enabled] as [String: Any] }
-            return ["text": "\(subscriptions.count) 条订阅、\(manual.count) 个手动节点", "subscriptions": subscriptions, "manualNodes": manual]
+            return ["text": L("%@ 条订阅、%@ 个手动节点", subscriptions.count, manual.count), "subscriptions": subscriptions, "manualNodes": manual]
         case "list_connections":
             let limit = params.int("limit") ?? 50
             let filter = params.string("filter")
@@ -299,7 +299,7 @@ final class ControlService: ObservableObject {
             }
             let active = engine.connections.map(ConnectionRecord.init).filter(matches).sorted { $0.start > $1.start }
             let recent = engine.history.filter(matches)
-            return ["text": "现在开着 \(engine.connections.count) 条连接", "active": active.prefix(limit).map(Self.connection), "recent": recent.prefix(limit).map(Self.connection)]
+            return ["text": L("现在开着 %@ 条连接", engine.connections.count), "active": active.prefix(limit).map(Self.connection), "recent": recent.prefix(limit).map(Self.connection)]
         case "get_traffic":
             let traffic = engine.traffic
             func entries(_ list: [TrafficEntry], _ count: Int) -> [[String: Any]] {
@@ -309,7 +309,7 @@ final class ControlService: ObservableObject {
             }
             let total = traffic.total
             return [
-                "text": "从 \(ISO8601DateFormatter().string(from: traffic.since)) 起共 ↑ \(Engine.bytesText(total.upload)) ↓ \(Engine.bytesText(total.download))",
+                "text": L("从 %@ 起共 ↑ %@ ↓ %@", ISO8601DateFormatter().string(from: traffic.since), Engine.bytesText(total.upload), Engine.bytesText(total.download)),
                 "session": ["upload": engine.sessionTraffic.upload, "download": engine.sessionTraffic.download] as [String: Any],
                 "byNode": entries(traffic.ranked, 20),
                 "bySource": entries(traffic.rankedSources, 20),
@@ -318,34 +318,34 @@ final class ControlService: ObservableObject {
         case "get_logs":
             let lines = min(500, max(10, params.int("lines") ?? 80))
             let core = engine.logTail.split(separator: "\n").suffix(lines).joined(separator: "\n")
-            return ["text": "最近的日志", "app": ControlService.masked(Log.tail(lines: lines), config: state.config), "core": ControlService.masked(core, config: state.config)]
+            return ["text": L("最近的日志"), "app": ControlService.masked(Log.tail(lines: lines), config: state.config), "core": ControlService.masked(core, config: state.config)]
         case "diagnose_url":
             let text = try params.require("url")
-            guard let url = DiagnoseTarget.normalize(text) else { throw ControlError.invalid("认不出网址：\(text)") }
-            guard let diagnoser else { throw ControlError.failed("诊断没准备好") }
+            guard let url = DiagnoseTarget.normalize(text) else { throw ControlError.invalid(L("认不出网址：%@", text)) }
+            guard let diagnoser else { throw ControlError.failed(L("诊断没准备好")) }
             let verdict = await diagnoser.runAndWait(DiagnoseTarget(url: url, perspective: .mac))
             let checks = diagnoser.rows.map { ["title": $0.title, "result": $0.summary, "detail": $0.detail] }
-            return ["text": verdict.map { "\($0.headline)：\($0.explanation)" } ?? "诊断没有完成", "checks": checks, "suggestions": verdict?.actions.map(\.title) ?? []]
+            return ["text": verdict.map { L("%@：%@", $0.headline, $0.explanation) } ?? L("诊断没有完成"), "checks": checks, "suggestions": verdict?.actions.map(\.title) ?? []]
         case "export_config":
             switch params.string("format") ?? "describe" {
             case "backup":
                 let content = try ConfigImporter.backupJSON(ConfigImporter.hidingSecrets(state.config))
-                return ["text": "完整备份（订阅和规则集的地址、手动节点的链接已隐藏）", "content": content]
+                return ["text": L("完整备份（订阅和规则集的地址、手动节点的链接已隐藏）"), "content": content]
             case "core":
                 let text = (try? String(contentsOf: engine.configURL, encoding: .utf8)) ?? ""
                 let cleaned = text.split(separator: "\n", omittingEmptySubsequences: false).filter { !$0.hasPrefix("secret:") }.joined(separator: "\n")
-                return ["text": cleaned.isEmpty ? "内核还没有生成配置" : "内核配置（去掉了密钥，订阅地址已隐藏）", "content": ControlService.masked(cleaned, config: state.config)]
+                return ["text": cleaned.isEmpty ? L("内核还没有生成配置") : L("内核配置（去掉了密钥，订阅地址已隐藏）"), "content": ControlService.masked(cleaned, config: state.config)]
             default:
-                return ["text": "Proxi 配置描述（订阅和规则集的地址、手动节点的链接已隐藏；改了以后可以用 import_config 导入，隐藏了的按名字用现有的）", "content": ConfigImporter.describeJSON(ConfigImporter.hidingSecrets(state.config))]
+                return ["text": L("Proxi 配置描述（订阅和规则集的地址、手动节点的链接已隐藏；改了以后可以用 import_config 导入，隐藏了的按名字用现有的）"), "content": ConfigImporter.describeJSON(ConfigImporter.hidingSecrets(state.config))]
             }
         case "preview_import":
             let plan = try await state.prepareImport(text: params.string("content"), url: params.string("url"), sourceName: sourceName)
-            return ["text": "导入「\(plan.sourceName)」（\(plan.format.title)）会改动：" + (plan.summaryLines.isEmpty ? "没有" : plan.summaryLines.joined(separator: "；")), "changes": plan.summaryLines, "warnings": plan.warnings]
+            return ["text": L("导入「%@」（%@）会改动：", plan.sourceName, plan.format.title) + (plan.summaryLines.isEmpty ? L("没有") : plan.summaryLines.joined(separator: L("；"))), "changes": plan.summaryLines, "warnings": plan.warnings]
         case "list_changes":
             let list = changes.map { change -> [String: Any] in
                 ["date": ISO8601DateFormatter().string(from: change.date), "client": change.clientTitle, "tool": change.tool, "summary": change.summary, "canUndo": change.canUndo, "undone": change.undone]
             }
-            return ["text": list.isEmpty ? "还没有操作记录" : "\(list.count) 条操作记录", "changes": list]
+            return ["text": list.isEmpty ? L("还没有操作记录") : L("%@ 条操作记录", list.count), "changes": list]
 
         case "turn_on":
             let profile: Profile
@@ -356,66 +356,66 @@ final class ControlService: ObservableObject {
             } else if let current = state.status.profile {
                 profile = current
             } else {
-                throw ControlError.failed("还没有代理配置")
+                throw ControlError.failed(L("还没有代理配置"))
             }
             state.turnOn(profile)
             await waitUntilIdle(state)
-            if let error = state.lastError, !state.status.isOn { throw ControlError.failed("开启失败：\(error)") }
-            return ["text": "已开启「\(profile.name)」（\(profile.summary)）"]
+            if let error = state.lastError, !state.status.isOn { throw ControlError.failed(L("开启失败：%@", error)) }
+            return ["text": L("已开启「%@」（%@）", profile.name, profile.summary)]
         case "turn_off":
             state.turnOff()
             await waitUntilIdle(state)
-            return ["text": "代理已关闭"]
+            return ["text": L("代理已关闭")]
         case "toggle":
             state.toggle()
             await waitUntilIdle(state)
-            return ["text": state.status.isOn ? "代理已开启：\(state.status.profile?.name ?? "")" : "代理已关闭"]
+            return ["text": state.status.isOn ? L("代理已开启：%@", state.status.profile?.name ?? "") : L("代理已关闭")]
         case "select_node":
             let name = try params.require("name")
             try requireEngine(engine)
-            if ["auto", "自动", "自动选择"].contains(name.lowercased()) {
+            if ["auto", "自动", "自动选择"].contains(name.lowercased()) {  // l10n-ignore：参数里的写法
                 state.selectEngineProfile()
                 await engine.select(nil)
-                return ["text": "已切到自动选择" + (engine.autoNode.map { "，现在用的是 \($0)" } ?? "")]
+                return ["text": L("已切到自动选择") + (engine.autoNode.map { L("，现在用的是 %@", $0) } ?? "")]
             }
-            let node = try resolve(name, in: engine.nodes.map(\.name), kind: "节点")
+            let node = try resolve(name, in: engine.nodes.map(\.name), kind: L("节点"))
             state.selectEngineProfile()
             await engine.select(node)
-            if let error = engine.lastError, error.contains("切换节点") { throw ControlError.failed(error) }
-            var text = "已切换到节点 \(node)"
+            if let error = engine.lastError, error.hasPrefix(L("切换节点失败：%@", "")) { throw ControlError.failed(error) }
+            var text = L("已切换到节点 %@", node)
             if !state.status.isOn || state.status.profile?.engine != true {
-                text += "（节点代理现在没开，用 turn_on 开启后生效）"
+                text += L("（节点代理现在没开，用 turn_on 开启后生效）")
             }
             return ["text": text]
         case "select_group":
             try requireEngine(engine)
             let groupName = try params.require("group")
-            let group = try resolve(groupName, in: [Engine.selectorGroup] + state.config.engine.groupNames, kind: "策略组")
+            let group = try resolve(groupName, in: [Engine.selectorGroup] + state.config.engine.groupNames, kind: L("策略组"))
             let memberName = try params.require("member")
             if group == Engine.selectorGroup {
                 var node: String?
                 if memberName != Engine.autoGroup {
-                    node = try resolve(memberName, in: engine.nodes.map(\.name) + ["DIRECT"], kind: "成员")
+                    node = try resolve(memberName, in: engine.nodes.map(\.name) + ["DIRECT"], kind: L("成员"))
                 }
                 await engine.select(node)
-                return ["text": "「节点」已切到 \(node ?? Engine.autoGroup)"]
+                return ["text": L("「节点」已切到 %@", node ?? CoreConfigBuilder.displayName(Engine.autoGroup))]
             }
             let members = engine.groupStates.first { $0.name == group }?.members ?? []
-            let member = try resolve(memberName, in: members, kind: "成员")
+            let member = try resolve(memberName, in: members, kind: L("成员"))
             await engine.select(group: group, member: member)
-            return ["text": "策略组「\(group)」已切到 \(member)"]
+            return ["text": L("策略组「%@」已切到 %@", group, member)]
         case "set_mode":
             let value = try params.require("mode")
-            guard let mode = EngineMode(rawValue: value.lowercased()) else { throw ControlError.invalid("模式只能是 rule 或 global") }
+            guard let mode = EngineMode(rawValue: value.lowercased()) else { throw ControlError.invalid(L("模式只能是 rule 或 global")) }
             engine.setMode(mode)
-            return ["text": "已切到\(mode.title)"]
+            return ["text": L("已切到%@", mode.title)]
         case "test_nodes":
             try requireEngine(engine)
             let filter = params.string("filter")
             var results: [String: Int] = [:]
             if let filter {
                 let names = engine.nodes.map(\.name).filter { $0.localizedCaseInsensitiveContains(filter) }
-                guard !names.isEmpty else { throw ControlError.invalid("没有名字里有「\(filter)」的节点") }
+                guard !names.isEmpty else { throw ControlError.invalid(L("没有名字里有「%@」的节点", filter)) }
                 await withTaskGroup(of: (String, Int).self) { group in
                     for name in names.prefix(60) {
                         group.addTask { @MainActor in (name, await engine.delay(of: name)) }
@@ -433,12 +433,12 @@ final class ControlService: ObservableObject {
             let sorted = results.sorted { ($0.value == 0 ? Int.max : $0.value) < ($1.value == 0 ? Int.max : $1.value) }
             let ok = sorted.filter { $0.value > 0 }
             let delays = sorted.map { item -> [String: Any] in ["name": item.key, "delay": item.value] }
-            return ["text": "测了 \(results.count) 个节点，\(ok.count) 个能通" + (ok.first.map { "，最快的是 \($0.key)（\($0.value) ms）" } ?? ""), "delays": delays]
+            return ["text": L("测了 %@ 个节点，%@ 个能通", results.count, ok.count) + (ok.first.map { L("，最快的是 %@（%@ ms）", $0.key, $0.value) } ?? ""), "delays": delays]
         case "check_services":
             try requireEngine(engine)
             var node = params.string("node")
             if let name = node {
-                node = try resolve(name, in: engine.nodes.map(\.name), kind: "节点")
+                node = try resolve(name, in: engine.nodes.map(\.name), kind: L("节点"))
             }
             await engine.checkServices(node: node)
             let results = engine.serviceResults[node ?? ""] ?? []
@@ -447,53 +447,53 @@ final class ControlService: ObservableObject {
                 ["service": result.service.title, "result": result.summary, "available": result.isAvailable, "region": result.region ?? ""]
             }
             return [
-                "text": "经\(node ?? "现在的节点")检测：" + (available.isEmpty ? "都不可用" : "可用 \(available.joined(separator: "、"))"),
+                "text": L("经%@检测：", node ?? L("现在的节点")) + (available.isEmpty ? L("都不可用") : L("可用 %@", available.joined(separator: L("、")))),
                 "results": items,
             ]
         case "update_subscriptions":
             try requireEngine(engine)
             await engine.updateAllSubscriptions()
-            return ["text": "订阅已更新，现在有 \(engine.nodes.count) 个节点"]
+            return ["text": L("订阅已更新，现在有 %@ 个节点", engine.nodes.count)]
         case "update_rule_sets":
             await engine.refreshAllRuleSets()
-            return ["text": "规则集已重新下载：\(engine.rulesInfo)"]
+            return ["text": L("规则集已重新下载：%@", engine.rulesInfo)]
         case "close_connections":
             if let id = params.string("id") {
                 await engine.close(connection: id)
-                return ["text": "已断开连接 \(id)"]
+                return ["text": L("已断开连接 %@", id)]
             }
             await engine.closeAllConnections()
-            return ["text": "已断开全部连接"]
+            return ["text": L("已断开全部连接")]
         case "set_share":
-            guard let enabled = params.bool("enabled") else { throw ControlError.invalid("enabled 要写 true 或 false") }
+            guard let enabled = params.bool("enabled") else { throw ControlError.invalid(L("enabled 要写 true 或 false")) }
             state.setShareEnabled(enabled)
-            return ["text": enabled ? "局域网共享已开启，设备填 \(state.lanAddress?.ip ?? "这台 Mac 的 IP"):\(state.share.port)" : "局域网共享已关闭"]
+            return ["text": enabled ? L("局域网共享已开启，设备填 %@:%@", state.lanAddress?.ip ?? L("这台 Mac 的 IP"), state.share.port) : L("局域网共享已关闭")]
         case "set_tun":
-            guard let enabled = params.bool("enabled") else { throw ControlError.invalid("enabled 要写 true 或 false") }
+            guard let enabled = params.bool("enabled") else { throw ControlError.invalid(L("enabled 要写 true 或 false")) }
             state.setTunEnabled(enabled)
-            guard enabled else { return ["text": "增强模式已关闭"] }
-            guard state.helper.isReady else { return ["text": "增强模式已打开，但特权助手还不能用（\(state.helper.summary)），请用户在设置的「高级」页安装"] }
-            return ["text": state.shareUpstream == .engine ? "增强模式已开启，所有程序的流量都经过内置代理" : "增强模式已打开，本机开着内置代理时生效"]
+            guard enabled else { return ["text": L("增强模式已关闭")] }
+            guard state.helper.isReady else { return ["text": L("增强模式已打开，但特权助手还不能用（%@），请用户在设置的「高级」页安装", state.helper.summary)] }
+            return ["text": state.shareUpstream == .engine ? L("增强模式已开启，所有程序的流量都经过内置代理") : L("增强模式已打开，本机开着内置代理时生效")]
         case "set_gateway":
-            guard let enabled = params.bool("enabled") else { throw ControlError.invalid("enabled 要写 true 或 false") }
+            guard let enabled = params.bool("enabled") else { throw ControlError.invalid(L("enabled 要写 true 或 false")) }
             state.setGatewayEnabled(enabled)
-            guard enabled else { return ["text": "网关模式已关闭"] }
-            guard state.helper.isReady else { return ["text": "网关模式已打开，但特权助手还不能用（\(state.helper.summary)），请用户在设置的「高级」页安装"] }
-            let address = state.lanAddress?.ip ?? "这台 Mac 的 IP"
-            return ["text": "网关模式已开启：设备的「路由器」和 DNS 都填 \(address)"]
+            guard enabled else { return ["text": L("网关模式已关闭")] }
+            guard state.helper.isReady else { return ["text": L("网关模式已打开，但特权助手还不能用（%@），请用户在设置的「高级」页安装", state.helper.summary)] }
+            let address = state.lanAddress?.ip ?? L("这台 Mac 的 IP")
+            return ["text": L("网关模式已开启：设备的「路由器」和 DNS 都填 %@", address)]
 
         case "add_rule":
             let value = try params.require("value")
             let groups = state.config.engine.groupNames
             let policyText = try params.require("policy")
             let policy = ConfigImporter.target(policyText, groups: groups)
-            if case .proxy = policy, !["proxy", "节点", "走节点", "代理"].contains(policyText.lowercased()) {
-                throw ControlError.invalid("认不出去向「\(policyText)」：\(ControlCatalog.policyHelp)（现有的策略组：\(groups.isEmpty ? "无" : groups.joined(separator: "、"))）")
+            if case .proxy = policy, !["proxy", "节点", "走节点", "代理"].contains(policyText.lowercased()) {  // l10n-ignore：参数里的写法
+                throw ControlError.invalid(L("认不出去向「%@」：%@（现有的策略组：%@）", policyText, ControlCatalog.policyHelp, groups.isEmpty ? L("无") : groups.joined(separator: L("、"))))
             }
             let kind = ConfigImporter.ruleKind(params.string("type")) ?? .auto
             if let problem = engine.addCustomRule(pattern: value, policy: policy, kind: kind) { throw ControlError.invalid(problem) }
             let rule = CustomRule(pattern: value, policy: policy, kind: kind)
-            return ["text": "已加规则：\(kind == .auto ? "" : kind.title + " ")\(rule.displayValue) → \(policy.title)"]
+            return ["text": L("已加规则：%@%@ → %@", kind == .auto ? "" : kind.title + " ", rule.displayValue, policy.title)]
         case "remove_rule":
             let rules = state.config.engine.customRules
             var targets: [CustomRule] = []
@@ -502,73 +502,73 @@ final class ControlService: ObservableObject {
             } else if let value = params.string("value") {
                 targets = rules.filter { $0.pattern == value || $0.pattern == CustomRule.normalize(value, kind: $0.kind) || $0.displayValue == value }
             } else {
-                throw ControlError.invalid("写上规则的内容（value）或 id")
+                throw ControlError.invalid(L("写上规则的内容（value）或 id"))
             }
-            guard !targets.isEmpty else { throw ControlError.invalid("没有找到这条规则") }
+            guard !targets.isEmpty else { throw ControlError.invalid(L("没有找到这条规则")) }
             for rule in targets {
                 engine.removeCustomRule(rule.id)
             }
-            return ["text": "已删掉 \(targets.count) 条规则：\(targets.map(\.displayValue).joined(separator: "、"))"]
+            return ["text": L("已删掉 %@ 条规则：%@", targets.count, targets.map(\.displayValue).joined(separator: L("、")))]
         case "set_final":
             let text = try params.require("policy")
-            if ["follow", "跟随", "跟随规则文件"].contains(text.lowercased()) {
+            if ["follow", "跟随", "跟随规则文件"].contains(text.lowercased()) {  // l10n-ignore：参数里的写法
                 engine.setFinalPolicy(nil)
-                return ["text": "其余流量跟随规则文件"]
+                return ["text": L("其余流量跟随规则文件")]
             }
             let policy = ConfigImporter.target(text, groups: state.config.engine.groupNames)
             engine.setFinalPolicy(policy)
-            return ["text": "其余流量：\(policy.title)"]
+            return ["text": L("其余流量：%@", policy.title)]
         case "add_subscription":
             let url = try params.require("url")
             if let problem = engine.addSubscription(name: params.string("name") ?? ConfigImporter.subscriptionName(for: url, fallback: ""), url: url) { throw ControlError.invalid(problem) }
             state.selectEngineProfile()
-            return ["text": "已加订阅，内核会去下载节点"]
+            return ["text": L("已加订阅，内核会去下载节点")]
         case "remove_subscription":
             let name = try params.require("name")
             guard let subscription = state.config.engine.subscriptions.first(where: { $0.name == name || $0.url == name }) ?? uniqueMatch(name, in: state.config.engine.subscriptions, key: \.name) else {
-                throw ControlError.invalid("没有叫「\(name)」的订阅")
+                throw ControlError.invalid(L("没有叫「%@」的订阅", name))
             }
             engine.removeSubscription(subscription.id)
-            return ["text": "已删掉订阅「\(subscription.name)」"]
+            return ["text": L("已删掉订阅「%@」", subscription.name)]
         case "add_nodes":
             let result = engine.addManualNodes(from: try params.require("links"))
             if let problem = result.problem { throw ControlError.invalid(problem) }
             state.selectEngineProfile()
-            return ["text": "已加 \(result.added) 个手动节点"]
+            return ["text": L("已加 %@ 个手动节点", result.added)]
         case "add_rule_set":
             let groups = state.config.engine.groupNames
             let policy = params.string("policy").map { ConfigImporter.target($0, groups: groups) }
             if let library = params.string("library") {
                 guard let entry = RuleLibrary.entry(named: library) else {
-                    throw ControlError.invalid("规则库里没有「\(library)」。有：\(RuleLibrary.all.map(\.name).joined(separator: "、"))")
+                    throw ControlError.invalid(L("规则库里没有「%@」。有：%@", library, RuleLibrary.all.map(\.name).joined(separator: L("、"))))
                 }
                 if let problem = engine.addRuleSet(name: entry.name, url: entry.url, policy: policy ?? entry.policy, behavior: entry.behavior) { throw ControlError.invalid(problem) }
-                return ["text": "已加规则集「\(entry.name)」→ \((policy ?? entry.policy)?.title ?? "按文件里的")"]
+                return ["text": L("已加规则集「%@」→ %@", entry.name, (policy ?? entry.policy)?.title ?? L("按文件里的"))]
             }
             let url = try params.require("url")
             let draft = RuleSet(name: "", url: url, policy: nil)
             let resolved: RuleTarget? = policy ?? (draft.kind == .inline ? nil : .proxy)
             if let problem = engine.addRuleSet(name: params.string("name") ?? "", url: url, policy: resolved) { throw ControlError.invalid(problem) }
-            return ["text": "已加规则集 \(RuleSet.defaultName(for: url))"]
+            return ["text": L("已加规则集 %@", RuleSet.defaultName(for: url))]
         case "remove_rule_set":
             let name = try params.require("name")
             let sets = state.config.engine.ruleSets
             guard let set = sets.first(where: { $0.name == name || $0.url == name }) ?? uniqueMatch(name, in: sets, key: \.name) else {
-                throw ControlError.invalid("没有叫「\(name)」的规则集")
+                throw ControlError.invalid(L("没有叫「%@」的规则集", name))
             }
             engine.removeRuleSet(set.id)
-            return ["text": "已删掉规则集「\(set.name)」"]
+            return ["text": L("已删掉规则集「%@」", set.name)]
         case "add_group":
             let name = try params.require("name")
             var group = PolicyGroup(name: name, kind: ConfigImporter.groupKind(params.string("type")) ?? .select, filter: params.string("filter") ?? "")
             group.exclude = params.string("exclude") ?? ""
             if let problem = engine.addGroup(group) { throw ControlError.invalid(problem) }
-            return ["text": "已加策略组「\(group.name)」（\(group.kind.title)），用 add_rule 把流量指到它"]
+            return ["text": L("已加策略组「%@」（%@），用 add_rule 把流量指到它", group.name, group.kind.title)]
         case "remove_group":
             let name = try params.require("name")
-            guard let group = state.config.engine.groups.first(where: { $0.name == name }) else { throw ControlError.invalid("没有叫「\(name)」的策略组") }
+            guard let group = state.config.engine.groups.first(where: { $0.name == name }) else { throw ControlError.invalid(L("没有叫「%@」的策略组", name)) }
             engine.removeGroup(group.id)
-            return ["text": "已删掉策略组「\(name)」，指向它的规则改成走节点"]
+            return ["text": L("已删掉策略组「%@」，指向它的规则改成走节点", name)]
         case "import_config":
             let plan = try await state.prepareImport(text: params.string("content"), url: params.string("url"), sourceName: sourceName)
             let mode = ImportMode(rawValue: params.string("mode") ?? "merge") ?? .merge
@@ -579,7 +579,7 @@ final class ControlService: ObservableObject {
         case "undo":
             return ["text": try undoLatest()]
         default:
-            throw ControlError(code: JSONRPC.methodNotFound, message: "没有这个工具：\(tool.name)")
+            throw ControlError(code: JSONRPC.methodNotFound, message: L("没有这个工具：%@", tool.name))
         }
     }
 
@@ -597,13 +597,13 @@ final class ControlService: ObservableObject {
         switch state.status {
         case .on(let profile):
             proxy = ["state": "on", "profile": profile.name, "summary": profile.summary]
-            text = "代理已开启：\(profile.name)"
+            text = L("代理已开启：%@", profile.name)
         case .off(let next):
             proxy = ["state": "off", "next": next?.name ?? ""]
-            text = "代理已关闭" + (next.map { "（下次开启「\($0.name)」）" } ?? "")
+            text = L("代理已关闭") + (next.map { L("（下次开启「%@」）", $0.name) } ?? "")
         case .external(let summary):
             proxy = ["state": "external", "summary": summary]
-            text = "系统代理由别的程序设置：\(summary)"
+            text = L("系统代理由别的程序设置：%@", summary)
         }
         var core: [String: Any] = ["mode": state.config.engine.mode.rawValue, "nodes": engine.nodes.count]
         switch engine.status {
@@ -615,7 +615,7 @@ final class ControlService: ObservableObject {
         if let selection = engine.currentSelection { core["selected"] = selection }
         if let node = engine.effectiveNode { core["node"] = node }
         if engine.isRunning, let node = engine.effectiveNode {
-            text += "；节点 \(node)，\(state.config.engine.mode.title)"
+            text += L("；节点 %@，%@", node, state.config.engine.mode.title)
         }
         var result: [String: Any] = ["text": text, "proxy": proxy, "engine": core]
         var share: [String: Any] = ["enabled": state.share.enabled, "port": state.share.port]
@@ -653,7 +653,7 @@ final class ControlService: ObservableObject {
 
     private func requireEngine(_ engine: Engine) throws {
         guard engine.isRunning, state?.config.engine.wantsCore == true else {
-            throw ControlError.failed("内置代理没有运行：先用 add_subscription 加订阅，或者 add_nodes 加节点")
+            throw ControlError.failed(L("内置代理没有运行：先用 add_subscription 加订阅，或者 add_nodes 加节点"))
         }
     }
 
@@ -661,7 +661,7 @@ final class ControlService: ObservableObject {
         let profiles = state.config.profiles
         if let exact = profiles.first(where: { $0.name.caseInsensitiveCompare(name) == .orderedSame }) { return exact }
         if let match = uniqueMatch(name, in: profiles, key: \.name) { return match }
-        throw ControlError.invalid("没有叫「\(name)」的配置。有：\(profiles.map(\.name).joined(separator: "、"))")
+        throw ControlError.invalid(L("没有叫「%@」的配置。有：%@", name, profiles.map(\.name).joined(separator: L("、"))))
     }
 
     /// 名字可以只写一部分：完全相同的优先，否则要唯一包含。
@@ -669,8 +669,8 @@ final class ControlService: ObservableObject {
         if let exact = candidates.first(where: { $0 == name }) ?? candidates.first(where: { $0.caseInsensitiveCompare(name) == .orderedSame }) { return exact }
         let matches = candidates.filter { $0.localizedCaseInsensitiveContains(name) }
         if matches.count == 1 { return matches[0] }
-        if matches.isEmpty { throw ControlError.invalid("没有叫「\(name)」的\(kind)") }
-        throw ControlError.invalid("「\(name)」对上了 \(matches.count) 个\(kind)：\(matches.prefix(8).joined(separator: "、"))\(matches.count > 8 ? "…" : "")，写完整一点")
+        if matches.isEmpty { throw ControlError.invalid(L("没有叫「%@」的%@", name, kind)) }
+        throw ControlError.invalid(L("「%@」对上了 %@ 个%@：%@%@，写完整一点", name, matches.count, kind, matches.prefix(8).joined(separator: L("、")), matches.count > 8 ? L("…") : ""))
     }
 
     private func uniqueMatch<T>(_ name: String, in items: [T], key: KeyPath<T, String>) -> T? {

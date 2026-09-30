@@ -9,7 +9,7 @@ struct ImportSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var text = ""
     @State private var address = ""
-    @State private var sourceName = "粘贴的内容"
+    @State private var sourceName = L("粘贴的内容")
     @State private var plan: ImportPlan?
     @State private var mode: ImportMode = .merge
     @State private var loading = false
@@ -20,9 +20,9 @@ struct ImportSheet: View {
         VStack(spacing: 0) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(plan == nil ? "导入配置" : "导入预览")
+                    Text(plan == nil ? L("导入配置") : L("导入预览"))
                         .font(.system(size: 16, weight: .semibold))
-                    Text("支持 Proxi 的 JSON、Clash / mihomo 的 YAML、Surge / 小火箭 / Quantumult X 的配置、节点链接和规则列表")
+                    Text(L("支持 Proxi 的 JSON、Clash / mihomo 的 YAML、Surge / 小火箭 / Quantumult X 的配置、节点链接和规则列表"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -56,7 +56,7 @@ struct ImportSheet: View {
 
     private var inputView: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("粘贴配置内容或节点链接")
+            Text(L("粘贴配置内容或节点链接"))
                 .font(.system(size: 12, weight: .medium))
             TextEditor(text: $text)
                 .font(.system(size: 11, design: .monospaced))
@@ -65,29 +65,29 @@ struct ImportSheet: View {
                 .background(RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(0.05)))
                 .frame(minHeight: 200)
             HStack(spacing: 8) {
-                Button("从剪贴板粘贴") {
+                Button(L("从剪贴板粘贴")) {
                     if let string = NSPasteboard.general.string(forType: .string) {
                         text = string
-                        sourceName = "剪贴板"
+                        sourceName = L("剪贴板")
                     } else {
                         let codes = QRScanner.fromPasteboard()
                         if codes.isEmpty {
-                            problem = "剪贴板里没有文字，也没有二维码图片"
+                            problem = L("剪贴板里没有文字，也没有二维码图片")
                         } else {
                             text = codes.joined(separator: "\n")
-                            sourceName = "剪贴板里的二维码"
+                            sourceName = L("剪贴板里的二维码")
                         }
                     }
                 }
-                Button("选择文件…") { chooseFile() }
+                Button(L("选择文件…")) { chooseFile() }
                 Spacer()
             }
-            Text("或者填配置的网址（订阅地址、远程配置、规则列表）")
+            Text(L("或者填配置的网址（订阅地址、远程配置、规则列表）"))
                 .font(.system(size: 12, weight: .medium))
                 .padding(.top, 4)
-            TextField("", text: $address, prompt: Text("https://…"))
+            TextField("", text: $address, prompt: Text(L("https://…")))
                 .textFieldStyle(.roundedBorder)
-            Text("来自网址的订阅和规则会加成订阅、规则集，以后跟着自动更新；粘贴的内容存成本机文件。导入前会先给你看要改动什么。")
+            Text(L("来自网址的订阅和规则会加成订阅、规则集，以后跟着自动更新；粘贴的内容存成本机文件。导入前会先给你看要改动什么。"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
             if let problem {
@@ -104,7 +104,7 @@ struct ImportSheet: View {
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
-        panel.message = "选择要导入的配置文件（.json、.yaml、.conf、.txt、.list）或者节点二维码图片"
+        panel.message = L("选择要导入的配置文件（.json、.yaml、.conf、.txt、.list）或者节点二维码图片")
         guard panel.runModal() == .OK, let url = panel.url else { return }
         Task { await load(url.absoluteString) }
     }
@@ -116,7 +116,7 @@ struct ImportSheet: View {
             if ["png", "jpg", "jpeg", "gif", "heic", "tiff", "bmp"].contains(url.pathExtension.lowercased()) {
                 let codes = QRScanner.fromFile(url)
                 guard !codes.isEmpty else {
-                    problem = "图片里没有认出二维码"
+                    problem = L("图片里没有认出二维码")
                     return
                 }
                 text = codes.joined(separator: "\n")
@@ -124,7 +124,7 @@ struct ImportSheet: View {
                 do {
                     text = try String(contentsOf: url, encoding: .utf8)
                 } catch {
-                    problem = "读不了这个文件：\(error.localizedDescription)"
+                    problem = L("读不了这个文件：%@", error.localizedDescription)
                     return
                 }
             }
@@ -155,7 +155,7 @@ struct ImportSheet: View {
                         .truncationMode(.middle)
                 }
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("会导入")
+                    Text(L("会导入"))
                         .font(.system(size: 12, weight: .semibold))
                     ForEach(plan.summaryLines, id: \.self) { line in
                         Label(line, systemImage: "plus.circle")
@@ -164,7 +164,7 @@ struct ImportSheet: View {
                 }
                 if !plan.warnings.isEmpty {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("注意")
+                        Text(L("注意"))
                             .font(.system(size: 12, weight: .semibold))
                         ForEach(plan.warnings, id: \.self) { warning in
                             Label(warning, systemImage: "exclamationmark.triangle")
@@ -175,7 +175,7 @@ struct ImportSheet: View {
                     }
                 }
                 VStack(alignment: .leading, spacing: 6) {
-                    Picker("方式", selection: $mode) {
+                    Picker(L("方式"), selection: $mode) {
                         ForEach(ImportMode.allCases) { mode in
                             Text(mode.title).tag(mode)
                         }
@@ -199,11 +199,11 @@ struct ImportSheet: View {
 
     private func modeDetail(_ plan: ImportPlan) -> String {
         if plan.backup != nil {
-            return mode == .replace ? "用备份替换全部设置（本机的端口不变）。" : "把备份里的订阅、节点、策略组、规则、代理配置加进现有设置，同名的更新。"
+            return mode == .replace ? L("用备份替换全部设置（本机的端口不变）。") : L("把备份里的订阅、节点、策略组、规则、代理配置加进现有设置，同名的更新。")
         }
         switch mode {
-        case .merge: return "加进现有设置：同名的策略组、同地址的订阅和规则集会被更新，其余的保留。"
-        case .replace: return "导入的内容替换同一类的现有设置（比如导入了策略组，原来的策略组都换掉）；没导入的类别不动。"
+        case .merge: return L("加进现有设置：同名的策略组、同地址的订阅和规则集会被更新，其余的保留。")
+        case .replace: return L("导入的内容替换同一类的现有设置（比如导入了策略组，原来的策略组都换掉）；没导入的类别不动。")
         }
     }
 
@@ -215,7 +215,7 @@ struct ImportSheet: View {
             Text(summary)
                 .font(.system(size: 13, weight: .medium))
                 .multilineTextAlignment(.center)
-            Text("内核会自动重新加载。改错了可以到「自动化」页的操作记录里撤销。")
+            Text(L("内核会自动重新加载。改错了可以到「自动化」页的操作记录里撤销。"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -229,7 +229,7 @@ struct ImportSheet: View {
     private var footer: some View {
         HStack {
             if plan != nil && done == nil {
-                Button("返回修改") {
+                Button(L("返回修改")) {
                     plan = nil
                     problem = nil
                 }
@@ -239,15 +239,15 @@ struct ImportSheet: View {
                 ProgressView()
                     .controlSize(.small)
             }
-            Button(done == nil ? "取消" : "完成") { dismiss() }
+            Button(done == nil ? L("取消") : L("完成")) { dismiss() }
                 .keyboardShortcut(done == nil ? .cancelAction : .defaultAction)
             if done == nil {
                 if let plan {
-                    Button("导入") { apply(plan) }
+                    Button(L("导入")) { apply(plan) }
                         .keyboardShortcut(.defaultAction)
                         .disabled(loading)
                 } else {
-                    Button("预览") { Task { await preview() } }
+                    Button(L("预览")) { Task { await preview() } }
                         .keyboardShortcut(.defaultAction)
                         .disabled(loading || (text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && address.trimmingCharacters(in: .whitespaces).isEmpty))
                 }
@@ -273,10 +273,10 @@ struct ImportSheet: View {
         let before = state.config
         do {
             let summary = try state.applyImport(plan, mode: mode)
-            state.control.recordImport(summary: "导入「\(plan.sourceName)」：\(summary)", before: before)
+            state.control.recordImport(summary: L("导入「%@」：%@", plan.sourceName, summary), before: before)
             done = summary
         } catch {
-            problem = "导入失败：\(error.localizedDescription)"
+            problem = L("导入失败：%@", error.localizedDescription)
         }
     }
 }

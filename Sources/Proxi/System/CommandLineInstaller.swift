@@ -17,12 +17,12 @@ enum CommandLineInstaller {
     static var script: String { script(for: executablePath) }
 
     static func script(for executable: String) -> String {
-        "#!/bin/sh\n# Proxi 的命令行工具：proxi help 看用法。\nexec \(Shell.shellQuote(executable)) \"$@\"\n"
+        "#!/bin/sh\n# Proxi 的命令行工具：proxi help 看用法。\nexec \(Shell.shellQuote(executable)) \"$@\"\n"  // l10n-ignore：脚本内容，下面按它认出自己装的脚本
     }
 
     /// 是不是这个程序装的脚本（改名前装的也算）。别的程序的同名文件不碰。
     static func isOurScript(_ text: String) -> Bool {
-        text.hasPrefix("#!/bin/sh") && text.contains("的命令行工具") && text.contains("/Contents/MacOS/")
+        text.hasPrefix("#!/bin/sh") && text.contains("的命令行工具") && text.contains("/Contents/MacOS/")  // l10n-ignore
     }
 
     /// 脚本转给的程序：exec 后面那个（单引号括起来的）路径。
@@ -83,7 +83,7 @@ enum CommandLineInstaller {
             files.append(legacyPath)
         }
         if let text = contents(path), !isOurScript(text) {
-            throw ControlError.failed("\(path) 是别的程序的文件，没有覆盖")
+            throw ControlError.failed(L("%@ 是别的程序的文件，没有覆盖", path))
         }
         return files
     }
@@ -132,12 +132,12 @@ enum CommandLineInstaller {
     }
 
     /// 请求管理员权限运行一条 shell 命令（系统会弹出输入密码的窗口）。
-    static func runAsAdmin(_ command: String, failure: String = "没有装上") async throws {
+    static func runAsAdmin(_ command: String, failure: String = L("没有装上")) async throws {
         let script = "do shell script \(Shell.appleScriptString(command)) with administrator privileges"
         let result = try await Shell.run("/usr/bin/osascript", ["-e", script], timeout: 180)
         guard result.succeeded else {
             let output = result.trimmedOutput
-            throw ControlError.failed(output.contains("-128") ? "取消了" : "\(failure)：\(output)")
+            throw ControlError.failed(output.contains("-128") ? L("取消了") : L("%@：%@", failure, output))
         }
     }
 

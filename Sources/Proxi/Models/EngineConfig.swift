@@ -3,7 +3,7 @@ import Foundation
 /// 一条订阅：机场给的地址，内核负责下载和解析节点。
 struct Subscription: Codable, Identifiable, Equatable, Hashable {
     var id: UUID = UUID()
-    var name: String = "订阅"
+    var name: String = L("订阅")
     var url: String = ""
     var enabled: Bool = true
     /// 只保留名字匹配这个正则的节点（不区分大小写）；空表示全部。
@@ -27,7 +27,7 @@ struct Subscription: Codable, Identifiable, Equatable, Hashable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
-        name = try container.decodeIfPresent(String.self, forKey: .name) ?? "订阅"
+        name = try container.decodeIfPresent(String.self, forKey: .name) ?? L("订阅")
         url = try container.decodeIfPresent(String.self, forKey: .url) ?? ""
         enabled = try container.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
         filter = try container.decodeIfPresent(String.self, forKey: .filter) ?? ""
@@ -54,9 +54,9 @@ struct Subscription: Codable, Identifiable, Equatable, Hashable {
     /// 校验筛选、排除和前缀，返回问题；没问题返回 nil。
     static func validateOptions(filter: String, exclude: String, prefix: String) -> String? {
         if let problem = PolicyGroup.validateFilter(filter) { return problem }
-        if let problem = PolicyGroup.validateFilter(exclude) { return problem.replacingOccurrences(of: "筛选", with: "排除") }
-        if prefix.count > 12 { return "前缀太长了，12 个字以内" }
-        if prefix.contains(where: { $0 == "," || $0 == "，" || $0.isNewline || $0 == "\"" || $0 == "#" }) { return "前缀里不能有逗号、引号、# 或换行" }
+        if let problem = PolicyGroup.validateFilter(exclude, exclude: true) { return problem }
+        if prefix.count > 12 { return L("前缀太长了，12 个字以内") }
+        if prefix.contains(where: { $0 == "," || $0 == "，" || $0.isNewline || $0 == "\"" || $0 == "#" }) { return L("前缀里不能有逗号、引号、# 或换行") }  // l10n-ignore：全角逗号
         return nil
     }
 
@@ -67,13 +67,13 @@ struct Subscription: Codable, Identifiable, Equatable, Hashable {
     static func validate(url text: String) -> String? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let url = URL(string: trimmed), let scheme = url.scheme?.lowercased() else {
-            return "订阅地址要以 http:// 或 https:// 开头"
+            return L("订阅地址要以 http:// 或 https:// 开头")
         }
         if scheme == "file" {
-            return url.path.isEmpty ? "文件地址不对" : nil
+            return url.path.isEmpty ? L("文件地址不对") : nil
         }
         guard ["http", "https"].contains(scheme), url.host != nil else {
-            return "订阅地址要以 http:// 或 https:// 开头"
+            return L("订阅地址要以 http:// 或 https:// 开头")
         }
         return nil
     }
@@ -94,8 +94,8 @@ enum EngineMode: String, Codable, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .rule: return "规则分流"
-        case .global: return "全局代理"
+        case .rule: return L("规则分流")
+        case .global: return L("全局代理")
         }
     }
 }
@@ -188,16 +188,16 @@ enum RuleTarget: Codable, Equatable, Hashable {
 
     var title: String {
         switch self {
-        case .proxy: return "走节点"
-        case .direct: return "直连"
-        case .reject: return "拦截"
+        case .proxy: return L("走节点")
+        case .direct: return L("直连")
+        case .reject: return L("拦截")
         case .group(let name): return name
         }
     }
 
     /// 「让 xx …」句式里用的：走节点、直连、拦截、走「组名」。
     var actionTitle: String {
-        if case .group(let name) = self { return "走「\(name)」" }
+        if case .group(let name) = self { return L("走「%@」", name) }
         return title
     }
 
@@ -214,10 +214,10 @@ enum RuleTarget: Codable, Equatable, Hashable {
     /// 内核策略名对应的显示文字。
     static func title(forCorePolicy policy: String) -> String {
         switch policy {
-        case "DIRECT": return "直连"
-        case "REJECT": return "拦截"
-        case RuleConverter.proxyGroup: return "走节点"
-        default: return "走「\(policy)」"
+        case "DIRECT": return L("直连")
+        case "REJECT": return L("拦截")
+        case RuleConverter.proxyGroup: return L("走节点")
+        default: return L("走「%@」", policy)
         }
     }
 }
@@ -414,9 +414,9 @@ enum NodeSort: String, Codable, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .original: return "订阅顺序"
-        case .name: return "按名字"
-        case .delay: return "按延迟"
+        case .original: return L("订阅顺序")
+        case .name: return L("按名字")
+        case .delay: return L("按延迟")
         }
     }
 }
@@ -443,7 +443,7 @@ enum DialerReference {
     }
 
     /// 配置列表里的代理在内核里的名字。
-    static func coreName(for profile: Profile) -> String { "前置·" + profile.name }
+    static func coreName(for profile: Profile) -> String { "前置·" + profile.name }  // l10n-ignore：内核配置里的名字，界面上用 CoreConfigBuilder.displayName
 
     /// 能当前置代理的配置：HTTP 或 SOCKS5，不是内置代理自己。
     static func usable(_ profile: Profile) -> Bool {
@@ -453,7 +453,7 @@ enum DialerReference {
     /// 显示用的文字。
     static func title(_ value: String, profiles: [Profile]) -> String {
         if let id = profileID(value) {
-            return profiles.first { $0.id == id }.map { "代理「\($0.name)」" } ?? "已删除的代理"
+            return profiles.first { $0.id == id }.map { L("代理「%@」", $0.name) } ?? L("已删除的代理")
         }
         return value
     }

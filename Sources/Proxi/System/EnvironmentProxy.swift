@@ -40,14 +40,14 @@ enum EnvironmentProxy {
     private static func setenv(_ name: String, _ value: String) async throws {
         let result = try await Shell.run(launchctlPath, ["setenv", name, value], timeout: 10)
         if !result.succeeded {
-            throw SystemProxyError.command("launchctl setenv \(name) 失败：\(result.trimmedOutput)")
+            throw SystemProxyError.command(L("launchctl setenv %@ 失败：%@", name, result.trimmedOutput))
         }
     }
 
     private static func unsetenv(_ name: String) async throws {
         let result = try await Shell.run(launchctlPath, ["unsetenv", name], timeout: 10)
         if !result.succeeded {
-            throw SystemProxyError.command("launchctl unsetenv \(name) 失败：\(result.trimmedOutput)")
+            throw SystemProxyError.command(L("launchctl unsetenv %@ 失败：%@", name, result.trimmedOutput))
         }
     }
 }
@@ -57,11 +57,11 @@ enum GitProxy {
     static var gitPath: String? { Shell.lookPath("git") }
 
     static func set(proxyURL: String) async throws {
-        guard let git = gitPath else { throw SystemProxyError.command("没有找到 git") }
+        guard let git = gitPath else { throw SystemProxyError.command(L("没有找到 git")) }
         for key in ["http.proxy", "https.proxy"] {
             let result = try await Shell.run(git, ["config", "--global", key, proxyURL])
             if !result.succeeded {
-                throw SystemProxyError.command("git config \(key) 失败：\(result.trimmedOutput)")
+                throw SystemProxyError.command(L("git config %@ 失败：%@", key, result.trimmedOutput))
             }
         }
     }
@@ -73,7 +73,7 @@ enum GitProxy {
             let result = try await Shell.run(git, ["config", "--global", "--unset-all", key])
             // 退出码 5 表示这个键本来就不存在。
             if !result.succeeded && result.status != 5 {
-                throw SystemProxyError.command("git config --unset \(key) 失败：\(result.trimmedOutput)")
+                throw SystemProxyError.command(L("git config --unset %@ 失败：%@", key, result.trimmedOutput))
             }
         }
     }

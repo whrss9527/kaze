@@ -88,52 +88,52 @@ enum HelperFiles {
     /// 读用户目录里的一个文件：必须是属于 owner 的普通文件，最后一级不能是符号链接。
     /// 这样即使别的程序在用户目录里放了指向系统文件的链接，助手也不会把 root 才能读的东西复制出去。
     static func readFile(_ relative: String, from source: String, owner: UInt32) throws -> Data {
-        guard isSafeRelativePath(relative) else { throw HelperError("文件名不对：\(relative)") }
+        guard isSafeRelativePath(relative) else { throw HelperError(L("文件名不对：%@", relative)) }
         let path = (source as NSString).appendingPathComponent(relative)
         let fd = open(path, O_RDONLY | O_NOFOLLOW | O_CLOEXEC)
-        guard fd >= 0 else { throw HelperError("读不了 \(relative)：\(String(cString: strerror(errno)))") }
+        guard fd >= 0 else { throw HelperError(L("读不了 %@：%@", relative, String(cString: strerror(errno)))) }
         defer { close(fd) }
         var info = stat()
-        guard fstat(fd, &info) == 0 else { throw HelperError("读不了 \(relative)") }
-        guard (info.st_mode & S_IFMT) == S_IFREG else { throw HelperError("\(relative) 不是普通文件") }
-        guard UInt32(info.st_uid) == owner else { throw HelperError("\(relative) 不属于这个用户") }
-        guard Int(info.st_size) <= maxFileSize else { throw HelperError("\(relative) 太大了") }
+        guard fstat(fd, &info) == 0 else { throw HelperError(L("读不了 %@", relative)) }
+        guard (info.st_mode & S_IFMT) == S_IFREG else { throw HelperError(L("%@ 不是普通文件", relative)) }
+        guard UInt32(info.st_uid) == owner else { throw HelperError(L("%@ 不属于这个用户", relative)) }
+        guard Int(info.st_size) <= maxFileSize else { throw HelperError(L("%@ 太大了", relative)) }
         var data = Data()
         var chunk = [UInt8](repeating: 0, count: 256 * 1024)
         while true {
             let count = read(fd, &chunk, chunk.count)
             if count < 0 {
                 if errno == EINTR { continue }
-                throw HelperError("读不了 \(relative)")
+                throw HelperError(L("读不了 %@", relative))
             }
             if count == 0 { break }
             data.append(contentsOf: chunk[0..<count])
-            if data.count > maxFileSize { throw HelperError("\(relative) 太大了") }
+            if data.count > maxFileSize { throw HelperError(L("%@ 太大了", relative)) }
         }
         return data
     }
 
     /// 写进 root 的目录：先写临时文件再改名，别人看到的总是完整的文件。
     static func write(_ data: Data, to relative: String, in target: String) throws {
-        guard isSafeRelativePath(relative) else { throw HelperError("文件名不对：\(relative)") }
+        guard isSafeRelativePath(relative) else { throw HelperError(L("文件名不对：%@", relative)) }
         let path = (target as NSString).appendingPathComponent(relative)
         let directory = (path as NSString).deletingLastPathComponent
         try FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o755])
         let temporary = path + ".ps-tmp"
         unlink(temporary)
         guard FileManager.default.createFile(atPath: temporary, contents: data, attributes: [.posixPermissions: 0o644]) else {
-            throw HelperError("写不了 \(relative)")
+            throw HelperError(L("写不了 %@", relative))
         }
         guard rename(temporary, path) == 0 else {
             unlink(temporary)
-            throw HelperError("写不了 \(relative)：\(String(cString: strerror(errno)))")
+            throw HelperError(L("写不了 %@：%@", relative, String(cString: strerror(errno))))
         }
     }
 
     /// 按名单复制；名单要检查过（数量、路径）。
     static func copy(_ files: [String], from source: String, to target: String, owner: UInt32) throws {
-        guard source.hasPrefix("/") else { throw HelperError("来源目录要是绝对路径") }
-        guard files.count <= maxFiles else { throw HelperError("文件太多了") }
+        guard source.hasPrefix("/") else { throw HelperError(L("来源目录要是绝对路径")) }
+        guard files.count <= maxFiles else { throw HelperError(L("文件太多了")) }
         for relative in files {
             let data = try readFile(relative, from: source, owner: owner)
             try write(data, to: relative, in: target)
@@ -192,10 +192,10 @@ enum HelperInstaller {
 
     /// 以 root 运行：复制程序和内核、准备 root 的目录、写 launchd 配置并加载。
     static func install(uid: UInt32, appVersion: String, executable: String, core: String) throws {
-        guard geteuid() == 0 else { throw HelperError("要用管理员权限运行") }
+        guard geteuid() == 0 else { throw HelperError(L("要用管理员权限运行")) }
         let fm = FileManager.default
-        guard fm.isExecutableFile(atPath: executable) else { throw HelperError("找不到程序：\(executable)") }
-        guard fm.isExecutableFile(atPath: core) else { throw HelperError("找不到内核：\(core)") }
+        guard fm.isExecutableFile(atPath: executable) else { throw HelperError(L("找不到程序：%@", executable)) }
+        guard fm.isExecutableFile(atPath: core) else { throw HelperError(L("找不到内核：%@", core)) }
         // 先停掉旧的（更新助手时），再换文件。
         _ = try? Shell.runSync("/bin/launchctl", ["bootout", "system/\(HelperPaths.label)"], timeout: 30)
         if !fm.fileExists(atPath: HelperPaths.toolsDirectory) {
@@ -215,7 +215,7 @@ enum HelperInstaller {
             Thread.sleep(forTimeInterval: 1)
             result = try Shell.runSync("/bin/launchctl", ["bootstrap", "system", HelperPaths.plist], timeout: 30)
         }
-        guard result.succeeded else { throw HelperError("launchctl 加载失败：\(result.trimmedOutput)") }
+        guard result.succeeded else { throw HelperError(L("launchctl 加载失败：%@", result.trimmedOutput)) }
         // 开着 macOS 防火墙时，让网关设备能连到内核的 DNS。
         let firewall = "/usr/libexec/ApplicationFirewall/socketfilterfw"
         if fm.isExecutableFile(atPath: firewall) {
@@ -226,7 +226,7 @@ enum HelperInstaller {
 
     /// 以 root 运行：停掉并删除助手和它的文件。
     static func uninstall() throws {
-        guard geteuid() == 0 else { throw HelperError("要用管理员权限运行") }
+        guard geteuid() == 0 else { throw HelperError(L("要用管理员权限运行")) }
         _ = try? Shell.runSync("/bin/launchctl", ["bootout", "system/\(HelperPaths.label)"], timeout: 30)
         let firewall = "/usr/libexec/ApplicationFirewall/socketfilterfw"
         if FileManager.default.isExecutableFile(atPath: firewall) {
@@ -268,7 +268,7 @@ enum HelperInstaller {
 
     private static func own(_ path: String, mode: mode_t) throws {
         guard chown(path, 0, 0) == 0, chmod(path, mode) == 0 else {
-            throw HelperError("设置 \(path) 的权限失败：\(String(cString: strerror(errno)))")
+            throw HelperError(L("设置 %@ 的权限失败：%@", path, String(cString: strerror(errno))))
         }
     }
 }
@@ -340,7 +340,7 @@ final class HelperDaemon: @unchecked Sendable {
         let path = HelperPaths.socket
         unlink(path)
         let fd = UnixSocket.makeSocket()
-        guard fd >= 0 else { throw HelperError("建不了套接字") }
+        guard fd >= 0 else { throw HelperError(L("建不了套接字")) }
         var (address, length) = try UnixSocket.address(path)
         let oldMask = umask(0o077)
         let bound = withUnsafePointer(to: &address) {
@@ -349,16 +349,16 @@ final class HelperDaemon: @unchecked Sendable {
         umask(oldMask)
         guard bound == 0 else {
             close(fd)
-            throw HelperError("绑定失败：\(String(cString: strerror(errno)))")
+            throw HelperError(L("绑定失败：%@", String(cString: strerror(errno))))
         }
         // 只有安装助手的用户（和 root）能连。
         guard chown(path, allowedUID, UInt32.max) == 0, chmod(path, 0o600) == 0 else {
             close(fd)
-            throw HelperError("设置套接字权限失败")
+            throw HelperError(L("设置套接字权限失败"))
         }
         guard listen(fd, 16) == 0 else {
             close(fd)
-            throw HelperError("监听失败")
+            throw HelperError(L("监听失败"))
         }
         return fd
     }
@@ -370,7 +370,7 @@ final class HelperDaemon: @unchecked Sendable {
         while let line = UnixSocket.readLine(client, buffer: &buffer, limit: 4 << 20) {
             if line.isEmpty { continue }
             guard let request = JSONRPC.decode(line), let method = request["method"] as? String else {
-                reply(client, JSONRPC.error(id: nil, code: JSONRPC.parseError, message: "读不懂的请求"))
+                reply(client, JSONRPC.error(id: nil, code: JSONRPC.parseError, message: L("读不懂的请求")))
                 continue
             }
             let id = request["id"]
@@ -425,25 +425,25 @@ final class HelperDaemon: @unchecked Sendable {
             endLeaseLocked()
             return ["running": false]
         case "forwarding":
-            guard let enabled = params["enabled"] as? Bool else { throw HelperError("enabled 要写 true 或 false") }
+            guard let enabled = params["enabled"] as? Bool else { throw HelperError(L("enabled 要写 true 或 false")) }
             lock.lock()
             defer { lock.unlock() }
             if enabled {
-                guard process?.isRunning == true else { throw HelperError("内核没在运行") }
+                guard process?.isRunning == true else { throw HelperError(L("内核没在运行")) }
                 try enableForwardingLocked()
             } else {
                 restoreForwardingLocked()
             }
             return ["forwarding": savedForwarding != nil]
         default:
-            throw HelperError("不认识的请求：\(method)")
+            throw HelperError(L("不认识的请求：%@", method))
         }
     }
 
     private func fileList(_ params: [String: Any]) throws -> (String, [String]) {
-        guard let source = params["source"] as? String, source.hasPrefix("/") else { throw HelperError("少了来源目录") }
+        guard let source = params["source"] as? String, source.hasPrefix("/") else { throw HelperError(L("少了来源目录")) }
         let files = (params["files"] as? [String]) ?? []
-        guard files.allSatisfy(HelperFiles.isSafeRelativePath) else { throw HelperError("文件名不对") }
+        guard files.allSatisfy(HelperFiles.isSafeRelativePath) else { throw HelperError(L("文件名不对")) }
         return (source, files)
     }
 
@@ -452,7 +452,7 @@ final class HelperDaemon: @unchecked Sendable {
     /// 复制文件、启动内核、回应，把这个连接登记成租约。回应在锁里写，内核马上退出时的事件一定排在回应后面。
     private func start(_ params: [String: Any], id: Any?, client: Int32) throws -> Lease {
         let (source, files) = try fileList(params)
-        guard files.contains("config.yaml") else { throw HelperError("少了 config.yaml") }
+        guard files.contains("config.yaml") else { throw HelperError(L("少了 config.yaml")) }
         lock.lock()
         defer { lock.unlock() }
         stopCoreLocked()
@@ -491,10 +491,10 @@ final class HelperDaemon: @unchecked Sendable {
 
     private func launchCoreLocked() throws {
         let fm = FileManager.default
-        guard fm.isExecutableFile(atPath: HelperPaths.core) else { throw HelperError("助手里没有内核，请重新安装助手") }
+        guard fm.isExecutableFile(atPath: HelperPaths.core) else { throw HelperError(L("助手里没有内核，请重新安装助手")) }
         unlink(HelperPaths.coreLog)
         guard fm.createFile(atPath: HelperPaths.coreLog, contents: nil, attributes: [.posixPermissions: 0o644]), let log = FileHandle(forWritingAtPath: HelperPaths.coreLog) else {
-            throw HelperError("写不了内核日志")
+            throw HelperError(L("写不了内核日志"))
         }
         let process = Process()
         process.executableURL = URL(fileURLWithPath: HelperPaths.core)
@@ -510,7 +510,7 @@ final class HelperDaemon: @unchecked Sendable {
         do {
             try process.run()
         } catch {
-            throw HelperError("内核启动失败：\(error.localizedDescription)")
+            throw HelperError(L("内核启动失败：%@", error.localizedDescription))
         }
         self.process = process
         Self.log("内核已启动（\(process.processIdentifier)）")
@@ -560,7 +560,7 @@ final class HelperDaemon: @unchecked Sendable {
             }
             savedForwarding = saved
         }
-        guard Forwarding.write(Forwarding.ipv4Key, 1) else { throw HelperError("打不开 IP 转发") }
+        guard Forwarding.write(Forwarding.ipv4Key, 1) else { throw HelperError(L("打不开 IP 转发")) }
         Forwarding.write(Forwarding.ipv6Key, 1)
     }
 
@@ -641,7 +641,7 @@ enum HelperClient {
 
     static func openConnection(timeout: TimeInterval) throws -> Int32 {
         let fd = UnixSocket.makeSocket()
-        guard fd >= 0 else { throw HelperError("建不了套接字") }
+        guard fd >= 0 else { throw HelperError(L("建不了套接字")) }
         UnixSocket.disableSigpipe(fd)
         var (address, length) = try UnixSocket.address(HelperPaths.socket)
         let connected = withUnsafePointer(to: &address) {
@@ -649,7 +649,7 @@ enum HelperClient {
         }
         guard connected == 0 else {
             close(fd)
-            throw HelperError(isInstalled ? "特权助手没有在运行（可能在「系统设置 → 通用 → 登录项」里被关掉了）" : "还没有安装特权助手")
+            throw HelperError(isInstalled ? L("特权助手没有在运行（可能在「系统设置 → 通用 → 登录项」里被关掉了）") : L("还没有安装特权助手"))
         }
         UnixSocket.setTimeout(fd, seconds: timeout)
         return fd
@@ -661,13 +661,13 @@ enum HelperClient {
         defer { if existing == nil { close(fd) } }
         var line = JSONRPC.encode(JSONRPC.request(id: 1, method: method, params: params))
         line.append(0x0A)
-        guard UnixSocket.writeAll(fd, line) else { throw HelperError("发不出请求") }
+        guard UnixSocket.writeAll(fd, line) else { throw HelperError(L("发不出请求")) }
         var buffer = Data()
         guard let data = UnixSocket.readLine(fd, buffer: &buffer), let response = JSONRPC.decode(data) else {
-            throw HelperError("特权助手没有回应")
+            throw HelperError(L("特权助手没有回应"))
         }
         if let error = response["error"] as? [String: Any] {
-            throw HelperError((error["message"] as? String) ?? "特权助手出错了")
+            throw HelperError((error["message"] as? String) ?? L("特权助手出错了"))
         }
         return (response["result"] as? [String: Any]) ?? [:]
     }
@@ -786,34 +786,34 @@ enum HelperCommand {
             switch action {
             case "install":
                 guard let uid = option("--uid").flatMap(UInt32.init) ?? ProcessInfo.processInfo.environment["SUDO_UID"].flatMap(UInt32.init) else {
-                    fail("不知道给哪个用户装：加上 --uid <用户 id>，或者用 sudo 运行")
+                    fail(L("不知道给哪个用户装：加上 --uid <用户 id>，或者用 sudo 运行"))
                     return 2
                 }
                 guard let core = option("--core") ?? bundledCore else {
-                    fail("找不到内核（mihomo）")
+                    fail(L("找不到内核（mihomo）"))
                     return 1
                 }
                 try HelperInstaller.install(uid: uid, appVersion: appVersion, executable: executable, core: core)
-                print("特权助手已安装，只接受用户 \(uid) 的请求")
+                print(L("特权助手已安装，只接受用户 %@ 的请求", uid))
                 return 0
             case "uninstall":
                 try HelperInstaller.uninstall()
-                print("特权助手已卸载")
+                print(L("特权助手已卸载"))
                 return 0
             case "run":
                 guard geteuid() == 0 else {
-                    fail("要以 root 运行")
+                    fail(L("要以 root 运行"))
                     return 3
                 }
                 guard let uid = option("--uid").flatMap(UInt32.init) else {
-                    fail("少了 --uid")
+                    fail(L("少了 --uid"))
                     return 2
                 }
                 HelperDaemon(uid: uid, appVersion: option("--version") ?? "").run()
             case "status":
                 let status = try HelperClient.status()
-                print("特权助手在运行：程序版本 \(status.appVersion)，内核 \(status.coreVersion)，协议 \(status.protocolVersion)" + (status.isCurrent ? "" : "（和这个程序不一致，需要重新安装）"))
-                print(status.running ? "内核在运行" + (status.forwarding ? "，IP 转发已打开" : "") : "内核没在运行")
+                print(L("特权助手在运行：程序版本 %@，内核 %@，协议 %@", status.appVersion, status.coreVersion, status.protocolVersion) + (status.isCurrent ? "" : L("（和这个程序不一致，需要重新安装）")))
+                print(status.running ? L("内核在运行") + (status.forwarding ? L("，IP 转发已打开") : "") : L("内核没在运行"))
                 return status.isCurrent ? 0 : 1
             default:
                 print(usage)
@@ -826,13 +826,23 @@ enum HelperCommand {
     }
 
     private static func fail(_ message: String) {
-        FileHandle.standardError.write(Data(("proxi helper：" + message + "\n").utf8))
+        FileHandle.standardError.write(Data((L("proxi helper：") + message + "\n").utf8))
     }
 
-    static let usage = """
+    static var usage: String { AppLanguage.isEnglish ? usageEnglish : usageChinese }
+
+    // l10n-ignore：中文界面的用法，英文的在 usageEnglish。
+    static let usageChinese = """
     用法：
       sudo proxi helper install     安装特权助手（增强模式、网关模式要用）
       sudo proxi helper uninstall   卸载特权助手
       proxi helper status           查看特权助手的状态
+    """
+
+    static let usageEnglish = """
+    Usage:
+      sudo proxi helper install     Install the privileged helper (needed for enhanced mode and gateway mode)
+      sudo proxi helper uninstall   Uninstall the privileged helper
+      proxi helper status           Show the privileged helper's status
     """
 }

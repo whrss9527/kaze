@@ -21,19 +21,19 @@ enum SettingsPage: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .profiles: return "代理配置"
-        case .nodes: return "节点与订阅"
-        case .rules: return "分流规则"
-        case .share: return "局域网共享"
-        case .connections: return "连接"
-        case .diagnose: return "网址诊断"
-        case .automation: return "自动化"
-        case .advanced: return "高级"
-        case .general: return "通用"
-        case .hotkey: return "快捷键"
-        case .sync: return "iCloud 同步"
-        case .diagnostics: return "诊断"
-        case .about: return "关于"
+        case .profiles: return L("代理配置")
+        case .nodes: return L("节点与订阅")
+        case .rules: return L("分流规则")
+        case .share: return L("局域网共享")
+        case .connections: return L("连接")
+        case .diagnose: return L("网址诊断")
+        case .automation: return L("自动化")
+        case .advanced: return L("高级")
+        case .general: return L("通用")
+        case .hotkey: return L("快捷键")
+        case .sync: return L("iCloud 同步")
+        case .diagnostics: return L("诊断")
+        case .about: return L("关于")
         }
     }
 
@@ -95,7 +95,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         let root = SettingsRootView(state: AppState.shared, navigation: navigation)
         let hosting = NSHostingController(rootView: root)
         let window = NSWindow(contentViewController: hosting)
-        window.title = "Proxi 设置"
+        window.title = L("Proxi 设置")
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
@@ -121,7 +121,7 @@ struct SettingsRootView: View {
                     .tag(page)
             }
             .listStyle(.sidebar)
-            .navigationSplitViewColumnWidth(min: 170, ideal: 190, max: 240)
+            .navigationSplitViewColumnWidth(min: AppLanguage.width(170, english: 190), ideal: AppLanguage.width(190, english: 215), max: 260)
             .safeAreaInset(edge: .top) {
                 HStack(spacing: 8) {
                     Image(nsImage: NSApp.applicationIconImage)
@@ -203,67 +203,96 @@ struct PageHeader: View {
 
 struct GeneralPage: View {
     @ObservedObject var state: AppState
+    @State private var language = LanguageSetting.current
+    @State private var relaunchError: String?
 
     var body: some View {
         VStack(spacing: 0) {
-            PageHeader(title: "通用", subtitle: "菜单栏图标的行为、关闭代理的方式、通知")
+            PageHeader(title: L("通用"), subtitle: L("界面语言、菜单栏图标的行为、关闭代理的方式、通知"))
             Form {
-                Section("启动") {
-                    Toggle("登录时自动启动", isOn: Binding(get: { state.loginItemEnabled }, set: { state.setLoginItem($0) }))
-                    Toggle("退出 Proxi 时关闭代理", isOn: $state.config.disableOnExit)
+                Section {
+                    Picker(L("界面语言"), selection: languageBinding) {
+                        ForEach(InterfaceLanguage.allCases) { option in
+                            Text(option.title).tag(option)
+                        }
+                    }
+                    if language != LanguageSetting.atLaunch {
+                        HStack {
+                            Label(L("重新启动 Proxi 后生效"), systemImage: "arrow.clockwise")
+                                .font(.caption)
+                                .foregroundStyle(.orange)
+                            Spacer()
+                            Button(L("立即重新启动")) {
+                                relaunchError = nil
+                                LanguageSetting.relaunch { relaunchError = L("重新启动失败：%@", $0) }
+                            }
+                        }
+                        if let relaunchError {
+                            Text(relaunchError)
+                                .font(.caption)
+                                .foregroundStyle(.orange)
+                        }
+                    }
+                    Text(L("跟随系统时，系统语言是中文就显示中文，其他语言都显示英文。重新启动时代理保持开着。只影响这台 Mac，不会同步。"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
-                Section("菜单栏图标") {
-                    Picker("左键点击", selection: $state.config.clickAction) {
+                Section(L("启动")) {
+                    Toggle(L("登录时自动启动"), isOn: Binding(get: { state.loginItemEnabled }, set: { state.setLoginItem($0) }))
+                    Toggle(L("退出 Proxi 时关闭代理"), isOn: $state.config.disableOnExit)
+                }
+                Section(L("菜单栏图标")) {
+                    Picker(L("左键点击"), selection: $state.config.clickAction) {
                         ForEach(ClickAction.allCases) { action in
                             Text(action.title).tag(action)
                         }
                     }
-                    Text("右键或 Control + 点击总是弹出菜单")
+                    Text(L("右键或 Control + 点击总是弹出菜单"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    Picker("实时网速", selection: $state.config.speedDisplay) {
+                    Picker(L("实时网速"), selection: $state.config.speedDisplay) {
                         ForEach(SpeedDisplay.allCases) { display in
                             Text(display.title).tag(display)
                         }
                     }
-                    Picker("网速位置", selection: $state.config.speedSide) {
+                    Picker(L("网速位置"), selection: $state.config.speedSide) {
                         ForEach(SpeedSide.allCases) { side in
                             Text(side.title).tag(side)
                         }
                     }
                     .disabled(state.config.speedDisplay == .none)
-                    Toggle("网速文字跟着代理状态变色", isOn: $state.config.speedColorFollowsStatus)
+                    Toggle(L("网速文字跟着代理状态变色"), isOn: $state.config.speedColorFollowsStatus)
                         .disabled(state.config.speedDisplay == .none)
-                    Text("上行在上、下行在下，默认显示在图标左边、开关在右边。「关代理时只显示网速」：代理关着时菜单栏里只有网速，开启后开关出现在网速左边，网速本身的位置不动；点网速和点开关一样。")
+                    Text(L("上行在上、下行在下，默认显示在图标左边、开关在右边。「关代理时只显示网速」：代理关着时菜单栏里只有网速，开启后开关出现在网速左边，网速本身的位置不动；点网速和点开关一样。"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    Text("变色：开着代理时网速用开关的颜色，系统代理是别的程序设置的时候是黄色，代理服务器连不上时是红色，关着时是普通的菜单栏文字颜色。颜色会按菜单栏深浅自动调深或调浅，保证看得清。")
+                    Text(L("变色：开着代理时网速用开关的颜色，系统代理是别的程序设置的时候是黄色，代理服务器连不上时是红色，关着时是普通的菜单栏文字颜色。颜色会按菜单栏深浅自动调深或调浅，保证看得清。"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    Text("「系统网络总速度」统计有线和 Wi‑Fi 网卡的全部流量；「只算内置代理」是经过内核的流量。")
+                    Text(L("「系统网络总速度」统计有线和 Wi‑Fi 网卡的全部流量；「只算内置代理」是经过内核的流量。"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                Section("代理") {
-                    Picker("关闭代理时", selection: $state.config.offMode) {
+                Section(L("代理")) {
+                    Picker(L("关闭代理时"), selection: $state.config.offMode) {
                         ForEach(OffMode.allCases) { mode in
                             Text(mode.title).tag(mode)
                         }
                     }
-                    Toggle("定期检查代理服务器能否连上", isOn: $state.config.healthCheck)
-                    TextField("测速地址", text: $state.config.testURL)
+                    Toggle(L("定期检查代理服务器能否连上"), isOn: $state.config.healthCheck)
+                    TextField(L("测速地址"), text: $state.config.testURL)
                         .textFieldStyle(.roundedBorder)
                 }
-                Section("通知") {
-                    Picker("通知", selection: $state.config.notifyLevel) {
+                Section(L("通知")) {
+                    Picker(L("通知"), selection: $state.config.notifyLevel) {
                         ForEach(NotifyLevel.allCases) { level in
                             Text(level.title).tag(level)
                         }
                     }
                 }
-                Section("更新") {
-                    Toggle("自动检查更新", isOn: $state.config.autoCheckUpdates)
-                    Text("启动后和之后每 6 小时检查一次 GitHub 上的新版本，有新版本时通知，不会自动安装。「关于」页里可以随时手动检查和一键更新。")
+                Section(L("更新")) {
+                    Toggle(L("自动检查更新"), isOn: $state.config.autoCheckUpdates)
+                    Text(L("启动后和之后每 6 小时检查一次 GitHub 上的新版本，有新版本时通知，不会自动安装。「关于」页里可以随时手动检查和一键更新。"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -271,6 +300,16 @@ struct GeneralPage: View {
             .formStyle(.grouped)
             .scrollContentBackground(.hidden)
         }
+    }
+
+    private var languageBinding: Binding<InterfaceLanguage> {
+        Binding(
+            get: { language },
+            set: { value in
+                LanguageSetting.set(value)
+                language = LanguageSetting.current
+            }
+        )
     }
 }
 
@@ -281,29 +320,29 @@ struct HotkeyPage: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            PageHeader(title: "快捷键", subtitle: "在任何程序里按下它就能开关代理")
+            PageHeader(title: L("快捷键"), subtitle: L("在任何程序里按下它就能开关代理"))
             Form {
-                Section("开 / 关代理") {
+                Section(L("开 / 关代理")) {
                     HStack {
                         HotkeyRecorder(binding: $state.config.toggleHotkey)
                             .frame(width: 180, height: 28)
-                        Button("清除") { state.config.toggleHotkey = nil }
+                        Button(L("清除")) { state.config.toggleHotkey = nil }
                             .disabled(state.config.toggleHotkey == nil)
                     }
-                    Text("点击方框后按下新的组合键，至少包含 ⌃、⌥、⇧、⌘ 中的一个。")
+                    Text(L("点击方框后按下新的组合键，至少包含 ⌃、⌥、⇧、⌘ 中的一个。"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    if let error = state.lastError, error.contains("快捷键") {
+                    if let error = state.lastError, error.contains(L("快捷键")) {
                         Label(error, systemImage: "exclamationmark.triangle")
                             .font(.caption)
                             .foregroundStyle(.orange)
                     }
                 }
-                Section("命令行与快捷指令") {
-                    Text("更多的命令、给 AI 助手用的接口和按网络自动切换在「自动化」页。终端里也可以用 open 命令控制：")
+                Section(L("命令行与快捷指令")) {
+                    Text(L("更多的命令、给 AI 助手用的接口和按网络自动切换在「自动化」页。终端里也可以用 open 命令控制："))
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    ForEach(["open proxi://toggle", "open proxi://on", "open proxi://off", "open \"proxi://use?name=配置名\"", "open proxi://share/on", "open proxi://update"], id: \.self) { command in
+                    ForEach(["open proxi://toggle", "open proxi://on", "open proxi://off", L("open \"proxi://use?name=配置名\""), "open proxi://share/on", "open proxi://update"], id: \.self) { command in
                         HStack {
                             Text(command)
                                 .font(.system(size: 12, design: .monospaced))
@@ -339,46 +378,46 @@ struct DiagnosticsPage: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            PageHeader(title: "诊断", subtitle: "系统里各处的代理设置，以及运行日志")
+            PageHeader(title: L("诊断"), subtitle: L("系统里各处的代理设置，以及运行日志"))
             Form {
-                Section("系统代理") {
-                    LabeledContent("当前生效", value: state.snapshot.summary)
-                    LabeledContent("自动发现（WPAD）", value: state.snapshot.autoDiscovery ? "开" : "关")
-                    LabeledContent("例外", value: state.snapshot.exceptions.isEmpty ? "无" : state.snapshot.exceptions.joined(separator: ", "))
-                    LabeledContent("网络服务", value: services.isEmpty ? "无" : services.map { $0.enabled ? $0.name : "\($0.name)（已停用）" }.joined(separator: "、"))
+                Section(L("系统代理")) {
+                    LabeledContent(L("当前生效"), value: state.snapshot.summary)
+                    LabeledContent(L("自动发现（WPAD）"), value: state.snapshot.autoDiscovery ? L("开") : L("关"))
+                    LabeledContent(L("例外"), value: state.snapshot.exceptions.isEmpty ? L("无") : state.snapshot.exceptions.joined(separator: ", "))
+                    LabeledContent(L("网络服务"), value: services.isEmpty ? L("无") : services.map { $0.enabled ? $0.name : L("%@（已停用）", $0.name) }.joined(separator: L("、")))
                     HStack {
-                        Button("打开系统的代理设置") {
+                        Button(L("打开系统的代理设置")) {
                             NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Network-Settings.extension")!)
                         }
-                        Button(clearing ? "正在清除…" : "清除所有代理设置") {
+                        Button(clearing ? L("正在清除…") : L("清除所有代理设置")) {
                             clearAll()
                         }
                         .disabled(clearing)
                     }
                 }
-                Section("环境变量（launchd）") {
+                Section(L("环境变量（launchd）")) {
                     ForEach(EnvironmentProxy.names, id: \.self) { name in
-                        LabeledContent(name, value: environment[name]?.isEmpty == false ? environment[name]! : "未设置")
+                        LabeledContent(name, value: environment[name]?.isEmpty == false ? environment[name]! : L("未设置"))
                     }
-                    Text("新打开的终端和程序会读到这些变量；已经打开的终端请用面板里的「复制终端命令」。")
+                    Text(L("新打开的终端和程序会读到这些变量；已经打开的终端请用面板里的「复制终端命令」。"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                Section("git 与 npm") {
-                    LabeledContent("git http.proxy", value: gitProxy.isEmpty ? "未设置" : gitProxy)
-                    LabeledContent("npm proxy", value: npm["proxy"] ?? "未设置")
-                    LabeledContent("npm https-proxy", value: npm["https-proxy"] ?? "未设置")
+                Section(L("git 与 npm")) {
+                    LabeledContent("git http.proxy", value: gitProxy.isEmpty ? L("未设置") : gitProxy)
+                    LabeledContent("npm proxy", value: npm["proxy"] ?? L("未设置"))
+                    LabeledContent("npm https-proxy", value: npm["https-proxy"] ?? L("未设置"))
                 }
-                Section("文件") {
-                    LabeledContent("配置目录", value: Store.directory.path)
+                Section(L("文件")) {
+                    LabeledContent(L("配置目录"), value: Store.directory.path)
                     HStack {
-                        Button("打开配置目录") { NSWorkspace.shared.open(Store.directory) }
-                        Button("刷新") { reload() }
+                        Button(L("打开配置目录")) { NSWorkspace.shared.open(Store.directory) }
+                        Button(L("刷新")) { reload() }
                     }
                 }
-                Section("日志") {
+                Section(L("日志")) {
                     ScrollView {
-                        Text(logText.isEmpty ? "还没有日志" : logText)
+                        Text(logText.isEmpty ? L("还没有日志") : logText)
                             .font(.system(size: 11, design: .monospaced))
                             .textSelection(.enabled)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -422,7 +461,7 @@ struct AboutPage: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            PageHeader(title: "关于", subtitle: "Proxi for Mac")
+            PageHeader(title: L("关于"), subtitle: "Proxi for Mac")
             // 窗口够宽时赞赏码放在右边，一眼就能看到；窄的时候排到下面。
             // 按实际宽度判断（ViewThatFits 按理想宽度量，更新说明里一行长字就会让它一直选竖排）。
             GeometryReader { geometry in
@@ -453,9 +492,9 @@ struct AboutPage: View {
                 .shadow(color: .black.opacity(0.2), radius: 12, y: 6)
             Text("Proxi")
                 .font(.system(size: 20, weight: .bold))
-            Text("版本 \(UpdateChecker.currentVersion)")
+            Text(L("版本 %@", UpdateChecker.currentVersion))
                 .foregroundStyle(.secondary)
-            Text("菜单栏里的代理开关：一键切换系统代理、环境变量、git 和 npm 的代理设置。")
+            Text(L("菜单栏里的代理开关：一键切换系统代理、环境变量、git 和 npm 的代理设置。"))
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -463,7 +502,7 @@ struct AboutPage: View {
                 .frame(maxWidth: 360)
             HStack(spacing: 10) {
                 Button("GitHub") { NSWorkspace.shared.open(AppInfo.repositoryURL) }
-                Button("反馈问题") { NSWorkspace.shared.open(AppInfo.issuesURL) }
+                Button(L("反馈问题")) { NSWorkspace.shared.open(AppInfo.issuesURL) }
             }
             Divider()
                 .padding(.horizontal, 40)
@@ -499,8 +538,8 @@ struct DonateCard: View {
                         .shadow(color: .black.opacity(0.22), radius: 12, y: 6)
                 }
                 .buttonStyle(.plain)
-                .help("点击放大")
-                .accessibilityLabel("微信赞赏码：请我喝杯咖啡")
+                .help(L("点击放大"))
+                .accessibilityLabel(L("微信赞赏码：请我喝杯咖啡"))
                 .popover(isPresented: $enlarged, arrowEdge: .leading) {
                     Image(nsImage: image)
                         .resizable()
@@ -509,12 +548,12 @@ struct DonateCard: View {
                         .frame(width: 420)
                         .padding(14)
                 }
-                Text("觉得好用的话，\n微信扫一扫请我喝杯咖啡")
+                Text(L("觉得好用的话，\n微信扫一扫请我喝杯咖啡"))
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
-                Text("点图片可以放大")
+                Text(L("点图片可以放大"))
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
             }

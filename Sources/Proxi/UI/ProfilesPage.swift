@@ -9,7 +9,7 @@ struct ProfilesPage: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            PageHeader(title: "代理配置", subtitle: "每套配置可以设置系统代理、环境变量、git 和 npm，在菜单栏里一键切换")
+            PageHeader(title: L("代理配置"), subtitle: L("每套配置可以设置系统代理、环境变量、git 和 npm，在菜单栏里一键切换"))
             HStack(alignment: .top, spacing: 16) {
                 profileList
                     .frame(width: 250)
@@ -41,7 +41,7 @@ struct ProfilesPage: View {
         VStack(spacing: 8) {
             VStack(spacing: 2) {
                 if state.config.profiles.isEmpty {
-                    Text("还没有配置")
+                    Text(L("还没有配置"))
                         .font(.system(size: 12))
                         .foregroundStyle(.secondary)
                         .padding(20)
@@ -83,25 +83,25 @@ struct ProfilesPage: View {
             .glassCard()
             HStack(spacing: 8) {
                 Button {
-                    var profile = Profile(name: uniqueName("新配置"), color: ProfilePalette.color(at: state.config.profiles.count))
-                    profile.name = uniqueName("新配置")
+                    var profile = Profile(name: uniqueName(L("新配置")), color: ProfilePalette.color(at: state.config.profiles.count))
+                    profile.name = uniqueName(L("新配置"))
                     state.addProfile(profile)
                     navigation.selectedProfileID = profile.id
                 } label: {
-                    Label("新建", systemImage: "plus")
+                    Label(L("新建"), systemImage: "plus")
                 }
                 Button {
                     showDetect = true
                 } label: {
-                    Label("自动检测", systemImage: "wand.and.stars")
+                    Label(L("自动检测"), systemImage: "wand.and.stars")
                 }
-                .help("找出本机正在运行的代理软件")
+                .help(L("找出本机正在运行的代理软件"))
                 Button {
                     importing = true
                 } label: {
-                    Label("导入", systemImage: "square.and.arrow.down")
+                    Label(L("导入"), systemImage: "square.and.arrow.down")
                 }
-                .help("导入 Clash / Surge / 小火箭 / Quantumult X 的配置、节点链接或者 Proxi 的备份")
+                .help(L("导入 Clash / Surge / 小火箭 / Quantumult X 的配置、节点链接或者 Proxi 的备份"))
             }
             .controlSize(.small)
             Spacer()
@@ -121,7 +121,7 @@ struct ProfilesPage: View {
                 Image(systemName: "slider.horizontal.3")
                     .font(.system(size: 28))
                     .foregroundStyle(.secondary)
-                Text(state.config.profiles.isEmpty ? "点「新建」手动填写，或者「自动检测」找出本机的代理软件" : "在左边选择一个配置")
+                Text(state.config.profiles.isEmpty ? L("点「新建」手动填写，或者「自动检测」找出本机的代理软件") : L("在左边选择一个配置"))
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -168,9 +168,9 @@ struct ProfileEditor: View {
         VStack(spacing: 0) {
             Form {
                 Section {
-                    TextField("名称", text: $draft.name)
+                    TextField(L("名称"), text: $draft.name)
                     HStack {
-                        Text("颜色")
+                        Text(L("颜色"))
                         Spacer()
                         ForEach(ProfilePalette.colors, id: \.self) { hex in
                             Button {
@@ -189,7 +189,7 @@ struct ProfileEditor: View {
                         }
                     }
                     if !draft.engine {
-                        Picker("类型", selection: $draft.kind) {
+                        Picker(L("类型"), selection: $draft.kind) {
                             ForEach(ProxyKind.allCases) { kind in
                                 Text(kind.title).tag(kind)
                             }
@@ -198,11 +198,11 @@ struct ProfileEditor: View {
                     }
                 }
                 if draft.engine {
-                    Section("内置代理") {
-                        Text("这是内置代理：地址是本机内核的端口（\(draft.host):\(String(draft.port))），订阅、节点、模式和端口都在「节点与订阅」页管理。")
+                    Section(L("内置代理")) {
+                        Text(L("这是内置代理：地址是本机内核的端口（%@:%@），订阅、节点、模式和端口都在「节点与订阅」页管理。", draft.host, String(draft.port)))
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                        Button("管理节点与订阅") {
+                        Button(L("管理节点与订阅")) {
                             SettingsWindowController.shared.show(page: .nodes)
                         }
                     }
@@ -211,13 +211,13 @@ struct ProfileEditor: View {
                     if draft.engine {
                         EmptyView()
                     } else if draft.kind == .pac {
-                        TextField("PAC 地址", text: $draft.pacURL, prompt: Text("http://127.0.0.1:7890/proxy.pac"))
+                        TextField(L("PAC 地址"), text: $draft.pacURL, prompt: Text("http://127.0.0.1:7890/proxy.pac"))
                     } else {
-                        TextField("主机", text: $draft.host, prompt: Text("127.0.0.1"))
+                        TextField(L("主机"), text: $draft.host, prompt: Text("127.0.0.1"))
                             .onChange(of: draft.host) { _, value in
                                 splitPastedAddress(value)
                             }
-                        TextField("端口", text: $portText, prompt: Text("7890"))
+                        TextField(L("端口"), text: $portText, prompt: Text("7890"))
                             .onChange(of: portText) { _, value in
                                 let digits = value.filter(\.isNumber)
                                 if digits != value {
@@ -228,14 +228,14 @@ struct ProfileEditor: View {
                     }
                 } header: {
                     if !draft.engine {
-                        Text(draft.kind == .pac ? "PAC 脚本" : "代理服务器")
+                        Text(draft.kind == .pac ? L("PAC 脚本") : L("代理服务器"))
                     }
                 } footer: {
                     if draft.kind != .pac && !draft.engine {
-                        Text("可以直接把 127.0.0.1:7890 或 socks5://127.0.0.1:1080 这样的整段地址粘到「主机」里，会自动拆开。")
+                        Text(L("可以直接把 127.0.0.1:7890 或 socks5://127.0.0.1:1080 这样的整段地址粘到「主机」里，会自动拆开。"))
                     }
                 }
-                Section("生效范围") {
+                Section(L("生效范围")) {
                     ForEach(ProxyTarget.allCases) { target in
                         Toggle(isOn: Binding(
                             get: { draft.targets.contains(target) },
@@ -253,21 +253,21 @@ struct ProfileEditor: View {
                         .disabled(target != .system && !draft.supportsNonSystemTargets)
                     }
                     if !draft.supportsNonSystemTargets {
-                        Text("PAC 脚本只能用于系统代理")
+                        Text(L("PAC 脚本只能用于系统代理"))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
                 }
-                Section("不经代理的地址") {
-                    TextField("系统代理的例外（逗号分隔）", text: $draft.bypass, axis: .vertical)
+                Section(L("不经代理的地址")) {
+                    TextField(L("系统代理的例外（逗号分隔）"), text: $draft.bypass, axis: .vertical)
                         .lineLimit(2...4)
                     if draft.supportsNonSystemTargets {
-                        TextField("NO_PROXY（环境变量和 npm）", text: $draft.noProxy)
+                        TextField(L("NO_PROXY（环境变量和 npm）"), text: $draft.noProxy)
                     }
                 }
                 if let result {
-                    Section("测试结果") {
-                        Label(result.ok ? "\(result.latencyText)，\(result.message)" : result.message, systemImage: result.ok ? "checkmark.circle.fill" : "xmark.circle.fill")
+                    Section(L("测试结果")) {
+                        Label(result.ok ? L("%@，%@", result.latencyText, result.message) : result.message, systemImage: result.ok ? "checkmark.circle.fill" : "xmark.circle.fill")
                             .foregroundStyle(result.ok ? Color.green : Color.red)
                     }
                 }
@@ -283,7 +283,7 @@ struct ProfileEditor: View {
                 Button(role: .destructive) {
                     onDelete()
                 } label: {
-                    Label("删除", systemImage: "trash")
+                    Label(L("删除"), systemImage: "trash")
                 }
                 Button {
                     test()
@@ -291,7 +291,7 @@ struct ProfileEditor: View {
                     if testing {
                         ProgressView().controlSize(.small)
                     } else {
-                        Label("测试连接", systemImage: "speedometer")
+                        Label(L("测试连接"), systemImage: "speedometer")
                     }
                 }
                 .disabled(testing)
@@ -301,11 +301,11 @@ struct ProfileEditor: View {
                         .font(.caption)
                         .foregroundStyle(.red)
                 } else if saved {
-                    Label("已保存", systemImage: "checkmark")
+                    Label(L("已保存"), systemImage: "checkmark")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                Button("保存") { save() }
+                Button(L("保存")) { save() }
                     .keyboardShortcut("s", modifiers: .command)
                     .buttonStyle(.borderedProminent)
                     .disabled(!dirty)
@@ -341,7 +341,7 @@ struct ProfileEditor: View {
             return
         }
         if state.config.profiles.contains(where: { $0.id != draft.id && $0.name == draft.name }) {
-            problem = "已经有叫「\(draft.name)」的配置了"
+            problem = L("已经有叫「%@」的配置了", draft.name)
             return
         }
         problem = nil
@@ -376,21 +376,21 @@ struct DetectSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("自动检测本机代理")
+            Text(L("自动检测本机代理"))
                 .font(.system(size: 16, weight: .semibold))
-            Text("检查本机监听的端口，找出能当代理用的，并测出延迟。")
+            Text(L("检查本机监听的端口，找出能当代理用的，并测出延迟。"))
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
             Group {
                 if detecting {
                     HStack(spacing: 8) {
                         ProgressView().controlSize(.small)
-                        Text("正在检测…")
+                        Text(L("正在检测…"))
                             .foregroundStyle(.secondary)
                     }
                     .frame(maxWidth: .infinity, minHeight: 120)
                 } else if found.isEmpty {
-                    Text("没有找到正在运行的代理软件。请先启动代理软件，或者手动填写地址。")
+                    Text(L("没有找到正在运行的代理软件。请先启动代理软件，或者手动填写地址。"))
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, minHeight: 120)
                 } else {
@@ -407,7 +407,7 @@ struct DetectSheet: View {
                                         .foregroundStyle(.secondary)
                                 }
                                 Spacer()
-                                Button("添加") {
+                                Button(L("添加")) {
                                     onAdd(item)
                                     dismiss()
                                 }
@@ -420,10 +420,10 @@ struct DetectSheet: View {
                 }
             }
             HStack {
-                Button("重新检测") { detect() }
+                Button(L("重新检测")) { detect() }
                     .disabled(detecting)
                 Spacer()
-                Button("关闭") { dismiss() }
+                Button(L("关闭")) { dismiss() }
                     .keyboardShortcut(.cancelAction)
             }
         }

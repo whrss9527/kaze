@@ -35,8 +35,8 @@ enum TunStack: String, Codable, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .mixed: return "混合（推荐）"
-        case .system: return "系统"
+        case .mixed: return L("混合（推荐）")
+        case .system: return L("系统")
         case .gvisor: return "gVisor"
         }
     }
@@ -53,8 +53,8 @@ enum TunDNSMode: String, Codable, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .fakeIP: return "虚拟 IP（推荐）"
-        case .realIP: return "真实 IP"
+        case .fakeIP: return L("虚拟 IP（推荐）")
+        case .realIP: return L("真实 IP")
         }
     }
 }

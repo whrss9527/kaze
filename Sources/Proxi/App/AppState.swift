@@ -168,7 +168,7 @@ final class AppState: ObservableObject {
             .sink { [weak self] status in
                 Task { @MainActor in
                     if case .failed(let message) = status {
-                        self?.notify(title: "增强模式没有开起来", body: message, problem: true)
+                        self?.notify(title: L("增强模式没有开起来"), body: message, problem: true)
                     }
                 }
             }
@@ -179,7 +179,7 @@ final class AppState: ObservableObject {
             .sink { [weak self] status in
                 Task { @MainActor in
                     if case .failed(let message) = status {
-                        self?.notify(title: "局域网共享出错", body: message, problem: true)
+                        self?.notify(title: L("局域网共享出错"), body: message, problem: true)
                     }
                 }
             }
@@ -355,18 +355,18 @@ final class AppState: ObservableObject {
     /// 增强模式现在的情况，给界面和接口用的一句话。
     var tunSummary: String {
         let tun = persisted.tun
-        guard tun.enabled || tun.gateway else { return "没开" }
+        guard tun.enabled || tun.gateway else { return L("没开") }
         guard helper.isReady else { return helper.summary }
         switch engine.tunStatus {
         case .on(let forwarding):
-            if tun.gateway && !forwarding { return "虚拟网卡开着，IP 转发还没打开" }
-            if tunInputs?.captureLocal == false && tun.enabled { return "本机没在用内置代理，只为网关模式开着虚拟网卡" }
-            return tun.gateway ? (tun.enabled ? "增强模式和网关模式都开着" : "网关模式开着") : "增强模式开着"
-        case .starting: return "正在开启…"
+            if tun.gateway && !forwarding { return L("虚拟网卡开着，IP 转发还没打开") }
+            if tunInputs?.captureLocal == false && tun.enabled { return L("本机没在用内置代理，只为网关模式开着虚拟网卡") }
+            return tun.gateway ? (tun.enabled ? L("增强模式和网关模式都开着") : L("网关模式开着")) : L("增强模式开着")
+        case .starting: return L("正在开启…")
         case .failed(let message): return message
         case .off:
-            if tun.enabled && !tun.gateway && shareUpstream != .engine { return "本机开着内置代理时才生效" }
-            return "没开"
+            if tun.enabled && !tun.gateway && shareUpstream != .engine { return L("本机开着内置代理时才生效") }
+            return L("没开")
         }
     }
 
@@ -380,7 +380,7 @@ final class AppState: ObservableObject {
             if let next {
                 turnOn(next)
             } else {
-                lastError = "还没有代理配置，请先在设置里添加一个"
+                lastError = L("还没有代理配置，请先在设置里添加一个")
                 SettingsWindowController.shared.show(page: .profiles)
             }
         }
@@ -403,7 +403,7 @@ final class AppState: ObservableObject {
                 do {
                     try await engine.ensureRunning()
                 } catch {
-                    finish(action: "开启 \(profile.name)", failures: ["内核：\(error.localizedDescription)"], successText: "")
+                    finish(action: L("开启 %@", profile.name), failures: [L("内核：%@", error.localizedDescription)], successText: "")
                     return
                 }
             }
@@ -411,19 +411,19 @@ final class AppState: ObservableObject {
             if let previous {
                 for target in previous.targets where !profile.targets.contains(target) {
                     if let error = await clear(target: target, mode: mode) {
-                        failures.append("\(target.title)（清除）：\(error)")
+                        failures.append(L("%@（清除）：%@", target.title, error))
                     }
                 }
             }
             for target in ProxyTarget.allCases where profile.targets.contains(target) {
                 if let error = await set(target: target, profile: profile) {
-                    failures.append("\(target.title)：\(error)")
+                    failures.append(L("%@：%@", target.title, error))
                 }
             }
             persisted.lastProfileID = profile.id
             persisted.enabledByUs = failures.count < profile.targets.count
             Store.save(persisted)
-            finish(action: "开启 \(profile.name)", failures: failures, successText: profile.summary)
+            finish(action: L("开启 %@", profile.name), failures: failures, successText: profile.summary)
         }
     }
 
@@ -437,12 +437,12 @@ final class AppState: ObservableObject {
             switch current {
             case .external:
                 if let error = await clear(target: .system, mode: .direct) {
-                    failures.append("系统代理：\(error)")
+                    failures.append(L("系统代理：%@", error))
                 }
             case .on(let profile):
                 for target in ProxyTarget.allCases where profile.targets.contains(target) {
                     if let error = await clear(target: target, mode: mode) {
-                        failures.append("\(target.title)：\(error)")
+                        failures.append(L("%@：%@", target.title, error))
                     }
                 }
             case .off:
@@ -451,7 +451,7 @@ final class AppState: ObservableObject {
             persisted.enabledByUs = false
             persisted.original = nil
             Store.save(persisted)
-            finish(action: "关闭代理", failures: failures, successText: mode == .restore ? "已恢复开启前的设置" : "已改为直接连接")
+            finish(action: L("关闭代理"), failures: failures, successText: mode == .restore ? L("已恢复开启前的设置") : L("已改为直接连接"))
         }
     }
 
@@ -481,10 +481,10 @@ final class AppState: ObservableObject {
             lastError = nil
             notify(title: action, body: successText, problem: false)
         } else {
-            let text = failures.joined(separator: "；")
+            let text = failures.joined(separator: L("；"))
             Log.error("\(action) 失败：\(text)")
             lastError = text
-            notify(title: "\(action)时出错", body: text, problem: true)
+            notify(title: L("%@时出错", action), body: text, problem: true)
         }
         Task { await checkHealth() }
     }
@@ -585,11 +585,11 @@ final class AppState: ObservableObject {
 
     /// 把别的程序设置的系统代理保存成配置。
     func saveExternalAsProfile() {
-        guard var profile = snapshot.asProfile(name: "系统代理") else { return }
+        guard var profile = snapshot.asProfile(name: L("系统代理")) else { return }
         var index = 1
         while config.profiles.contains(where: { $0.name == profile.name }) {
             index += 1
-            profile.name = "系统代理 \(index)"
+            profile.name = L("系统代理 %@", index)
         }
         profile.color = ProfilePalette.color(at: config.profiles.count)
         addProfile(profile)
@@ -603,7 +603,7 @@ final class AppState: ObservableObject {
             try LoginItem.set(enabled: enabled)
             loginItemEnabled = LoginItem.isEnabled
         } catch {
-            lastError = "设置登录时启动失败：\(error.localizedDescription)"
+            lastError = L("设置登录时启动失败：%@", error.localizedDescription)
             loginItemEnabled = LoginItem.isEnabled
         }
     }
@@ -632,7 +632,7 @@ final class AppState: ObservableObject {
         let reachable = await ProxyTester.reachable(host: profile.host, port: profile.port)
         if reachable {
             if health == .down {
-                notify(title: "代理服务器恢复了", body: profile.summary, problem: false)
+                notify(title: L("代理服务器恢复了"), body: profile.summary, problem: false)
             }
             health = .ok
             healthFailures = 0
@@ -641,7 +641,7 @@ final class AppState: ObservableObject {
             // 连续两次连不上才算故障，避免偶发抖动。
             if healthFailures >= 2 && health != .down {
                 health = .down
-                notify(title: "连不上代理服务器", body: "\(profile.name)（\(profile.summary)）没有响应，浏览器可能无法上网", problem: true)
+                notify(title: L("连不上代理服务器"), body: L("%@（%@）没有响应，浏览器可能无法上网", profile.name, profile.summary), problem: true)
             }
         }
         onStatusChanged?()
@@ -680,12 +680,12 @@ final class AppState: ObservableObject {
            let inner = URLComponents(string: address)?.queryItems?.first(where: { $0.name == "url" })?.value {
             address = inner
         }
-        guard let parsed = URL(string: address), let scheme = parsed.scheme?.lowercased() else { throw ImportError.invalid("认不出网址：\(address)") }
+        guard let parsed = URL(string: address), let scheme = parsed.scheme?.lowercased() else { throw ImportError.invalid(L("认不出网址：%@", address)) }
         if scheme == "file" {
             let text = try String(contentsOf: parsed, encoding: .utf8)
             return try ConfigImporter.plan(text, sourceName: parsed.deletingPathExtension().lastPathComponent, existing: config)
         }
-        guard ["http", "https"].contains(scheme), parsed.host != nil else { throw ImportError.invalid("网址要以 http:// 或 https:// 开头") }
+        guard ["http", "https"].contains(scheme), parsed.host != nil else { throw ImportError.invalid(L("网址要以 http:// 或 https:// 开头")) }
         let corePort = engine.isRunning && config.engine.wantsCore ? config.engine.mixedPort : nil
         let data = try await RuleStore.download(address, routes: NetworkRoute.routes(for: parsed, corePort: corePort, system: SystemProxy.current()))
         let text = String(decoding: data, as: UTF8.self)
@@ -693,7 +693,7 @@ final class AppState: ObservableObject {
         if ConfigImporter.detect(text) == nil {
             var plan = ImportPlan(format: .links, sourceName: name)
             plan.subscriptions = [Subscription(name: name, url: address)]
-            plan.warnings.append("认不出内容的格式，当作订阅添加，交给内核解析")
+            plan.warnings.append(L("认不出内容的格式，当作订阅添加，交给内核解析"))
             return plan
         }
         return try ConfigImporter.plan(text, sourceName: name, sourceURL: address, existing: config)
@@ -742,7 +742,7 @@ final class AppState: ObservableObject {
         if !HotkeyCenter.shared.register(id: 1, binding: binding, action: { [weak self] in
             Task { @MainActor in self?.toggle() }
         }) {
-            lastError = "快捷键 \(binding.display) 已被其他程序占用，请换一个"
+            lastError = L("快捷键 %@ 已被其他程序占用，请换一个", binding.display)
         }
     }
 }

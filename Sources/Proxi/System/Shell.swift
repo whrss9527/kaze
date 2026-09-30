@@ -14,8 +14,8 @@ enum ShellError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .timeout(let name): return "\(name) 执行超时"
-        case .launchFailed(let name, let reason): return "无法运行 \(name)：\(reason)"
+        case .timeout(let name): return L("%@ 执行超时", name)
+        case .launchFailed(let name, let reason): return L("无法运行 %@：%@", name, reason)
         }
     }
 }

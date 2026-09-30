@@ -52,13 +52,13 @@ enum ControlCatalog {
         // 查看
         ControlTool(name: "get_status", title: L("查看状态"), description: L("查看代理现在的状态：开没开、用的哪个配置、内置代理的节点和模式、局域网共享、出口 IP。做任何操作前先看一下。"), permission: .readOnly),
         ControlTool(name: "list_profiles", title: L("代理配置"), description: L("列出所有代理配置（内置代理、公司代理、别的代理软件等），开启时用配置名。"), permission: .readOnly),
-        ControlTool(name: "list_nodes", title: L("节点"), description: L("列出内置代理的节点和延迟（毫秒，0 是超时），收藏的在前。"), permission: .readOnly, parameters: [
+        ControlTool(name: "list_nodes", title: L("节点‖列表"), description: L("列出内置代理的节点和延迟（毫秒，0 是超时），收藏的在前。"), permission: .readOnly, parameters: [
             ControlParameter(name: "filter", kind: .string, description: L("只列出名字里有这个词的节点")),
             ControlParameter(name: "limit", kind: .integer, description: L("最多列出多少个，默认 200")),
         ]),
         ControlTool(name: "list_groups", title: L("策略组"), description: L("列出策略组、它们现在用的成员和全部候选。"), permission: .readOnly),
         ControlTool(name: "list_rules", title: L("分流规则"), description: L("列出自定义规则、规则集和其余流量的去向。规则的匹配顺序：局域网直连 → 自定义规则 → 规则集（按顺序）→ 其余流量。"), permission: .readOnly),
-        ControlTool(name: "list_subscriptions", title: L("订阅"), description: L("列出订阅、手动节点和它们的节点数、流量、到期时间。"), permission: .readOnly),
+        ControlTool(name: "list_subscriptions", title: L("订阅‖列表"), description: L("列出订阅、手动节点和它们的节点数、流量、到期时间。"), permission: .readOnly),
         ControlTool(name: "list_connections", title: L("连接"), description: L("列出现在开着的和最近的连接：谁访问了什么、走了哪个节点、命中了哪条规则。"), permission: .readOnly, parameters: [
             ControlParameter(name: "filter", kind: .string, description: L("按域名、程序、规则或节点筛选")),
             ControlParameter(name: "limit", kind: .integer, description: L("最多列出多少条，默认 50")),
@@ -278,8 +278,8 @@ struct ControlParams {
     func bool(_ name: String) -> Bool? {
         if let number = values[name] as? NSNumber { return number.boolValue }
         if let text = (values[name] as? String)?.lowercased() {
-            if ["true", "yes", "on", "1", L("开")].contains(text) { return true }
-            if ["false", "no", "off", "0", L("关")].contains(text) { return false }
+            if ["true", "yes", "on", "1", "开"].contains(text) { return true }  // l10n-ignore：参数里的写法
+            if ["false", "no", "off", "0", "关"].contains(text) { return false }  // l10n-ignore：参数里的写法
         }
         return nil
     }

@@ -53,6 +53,8 @@ final class LanguageTests: XCTestCase {
         XCTAssertEqual(L("设置…"), "设置…")
         XCTAssertEqual(L("%@ 个节点", 12), "12 个节点")
         XCTAssertEqual(L("节点 %@（%@）", "香港 01", "机场"), "节点 香港 01（机场）")
+        // 「‖」后面是给翻译看的说明，中文里不显示。
+        XCTAssertEqual(L("关闭‖按钮"), "关闭")
     }
 
     /// 内核配置里的名字不翻译，界面上换成界面语言（测试里是中文）。

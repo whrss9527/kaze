@@ -423,7 +423,7 @@ struct DetectSheet: View {
                 Button(L("重新检测")) { detect() }
                     .disabled(detecting)
                 Spacer()
-                Button(L("关闭")) { dismiss() }
+                Button(L("关闭‖按钮")) { dismiss() }
                     .keyboardShortcut(.cancelAction)
             }
         }

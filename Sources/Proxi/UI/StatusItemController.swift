@@ -228,7 +228,7 @@ final class StatusItemController: NSObject {
         }
         if state.config.engine.wantsCore {
             menu.addItem(.separator())
-            let nodesItem = NSMenuItem(title: L("节点"), action: nil, keyEquivalent: "")
+            let nodesItem = NSMenuItem(title: L("节点‖列表"), action: nil, keyEquivalent: "")
             nodesItem.submenu = nodesMenu()
             menu.addItem(nodesItem)
             if !state.engine.groupStates.isEmpty {

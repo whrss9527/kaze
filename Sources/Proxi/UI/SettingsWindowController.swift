@@ -290,7 +290,7 @@ struct GeneralPage: View {
                         }
                     }
                 }
-                Section(L("更新")) {
+                Section(L("更新‖标题")) {
                     Toggle(L("自动检查更新"), isOn: $state.config.autoCheckUpdates)
                     Text(L("启动后和之后每 6 小时检查一次 GitHub 上的新版本，有新版本时通知，不会自动安装。「关于」页里可以随时手动检查和一键更新。"))
                         .font(.caption)

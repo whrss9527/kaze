@@ -115,7 +115,7 @@ struct NodesPage: View {
     // MARK: - 订阅
 
     private var subscriptionsSection: some View {
-        Section(L("订阅")) {
+        Section(L("订阅‖列表")) {
             if state.config.engine.subscriptions.isEmpty {
                 Text(L("还没有订阅。把机场给你的订阅地址粘到下面，节点由内核下载和解析。"))
                     .font(.caption)

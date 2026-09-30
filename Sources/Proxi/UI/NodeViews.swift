@@ -17,7 +17,7 @@ struct NodeListSection: View {
     private var results: [Engine.Node] { query.apply(engine.nodes, favorites: favorites) }
 
     var body: some View {
-        Section(L("节点")) {
+        Section(L("节点‖列表")) {
             if engine.nodes.isEmpty {
                 Text(engine.isRunning ? L("订阅里没有解析出节点") : L("内核启动后这里会列出所有节点"))
                     .font(.caption)

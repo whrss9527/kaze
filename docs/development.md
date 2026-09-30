@@ -30,7 +30,7 @@ VERSION=0.1.0 Scripts/build-app.sh   # 组装通用二进制的 dist/Proxi.app �
 
 ### 界面语言
 
-界面有英文和简体中文。代码里显示给用户的文字写中文原文，经 `L("中文原文", 参数…)` 翻译（见 `Sources/Proxi/App/AppLanguage.swift`）；中文原文就是 `Resources/en.lproj/Localizable.strings` 和 `Resources/zh-Hans.lproj/Localizable.strings` 里的键，`Scripts/build-app.sh` 把它们拷进程序。参数用 `%@` 占位，译文里可以用 `%1$@`、`%2$@` 调换顺序。日志、内核配置里的名字（「节点」「自动选择」这类，界面上经 `CoreConfigBuilder.displayName` 换成界面语言）和按中文匹配的关键词不翻译，行尾标 `// l10n-ignore`。
+界面有英文和简体中文。代码里显示给用户的文字写中文原文，经 `L("中文原文", 参数…)` 翻译（见 `Sources/Proxi/App/AppLanguage.swift`）；中文原文就是 `Resources/en.lproj/Localizable.strings` 和 `Resources/zh-Hans.lproj/Localizable.strings` 里的键，`Scripts/build-app.sh` 把它们拷进程序。参数用 `%@` 占位，译文里可以用 `%1$@`、`%2$@` 调换顺序；同一个中文在不同地方要译成不同的英文时，键后面加「‖」和说明（`L("关闭‖按钮")`），中文界面只显示「‖」前面的部分。日志、内核配置里的名字（「节点」「自动选择」这类，界面上经 `CoreConfigBuilder.displayName` 换成界面语言）和按中文匹配的关键词不翻译，行尾标 `// l10n-ignore`。
 
 加了或改了文字，两个表都要改，再跑一遍 `python3 Scripts/check-localization.py`，CI 每次推送都会跑。界面语言跟着系统，设置 → 通用 → 界面语言可以单独选（写在 Proxi 自己偏好设置的 `AppleLanguages` 里，重新启动生效）。不改系统语言试英文界面：
 

@@ -38,14 +38,14 @@ struct DNSSettings: Codable, Equatable {
     /// 校验，返回问题；没问题返回 nil。
     func validate() -> String? {
         guard enabled else { return nil }
-        if nameservers.isEmpty { return "至少填一个 DNS 服务器" }
+        if nameservers.isEmpty { return L("至少填一个 DNS 服务器") }
         for server in nameservers + fallback {
             if let problem = DNSSettings.validateServer(server) { return problem }
         }
-        if bootstrap.isEmpty { return "至少填一个用来解析 DNS 服务器域名的 IP" }
+        if bootstrap.isEmpty { return L("至少填一个用来解析 DNS 服务器域名的 IP") }
         for server in bootstrap {
             let host = DNSSettings.plainHost(server)
-            if !IPPrefix.isIPv4Address(host) && !IPPrefix.isIPv6Address(host) { return "「\(server)」要填 IP 地址" }
+            if !IPPrefix.isIPv4Address(host) && !IPPrefix.isIPv6Address(host) { return L("「%@」要填 IP 地址", server) }
         }
         for policy in policies {
             if let problem = policy.validate() { return problem }
@@ -56,20 +56,20 @@ struct DNSSettings: Codable, Equatable {
     /// DNS 服务器的写法：IP（可带端口）、udp:// tcp:// tls:// https:// quic:// dhcp://网卡、system。
     static func validateServer(_ raw: String) -> String? {
         let server = raw.trimmingCharacters(in: .whitespaces)
-        if server.isEmpty { return "DNS 服务器不能为空" }
-        if server.contains(where: { $0.isWhitespace || $0 == "," || $0 == "\"" }) { return "「\(server)」里不能有空格、逗号或引号" }
+        if server.isEmpty { return L("DNS 服务器不能为空") }
+        if server.contains(where: { $0.isWhitespace || $0 == "," || $0 == "\"" }) { return L("「%@」里不能有空格、逗号或引号", server) }
         if server == "system" || server == "system://" { return nil }
         if let range = server.range(of: "://") {
             let scheme = server[..<range.lowerBound].lowercased()
             guard ["udp", "tcp", "tls", "https", "http", "quic", "dhcp"].contains(scheme) else {
-                return "「\(server)」的协议不认识：支持 udp、tcp、tls、https、quic、dhcp"
+                return L("「%@」的协议不认识：支持 udp、tcp、tls、https、quic、dhcp", server)
             }
             let rest = server[range.upperBound...]
-            return rest.isEmpty ? "「\(server)」没有写服务器地址" : nil
+            return rest.isEmpty ? L("「%@」没有写服务器地址", server) : nil
         }
         let host = plainHost(server)
         if IPPrefix.isIPv4Address(host) || IPPrefix.isIPv6Address(host) { return nil }
-        return "「\(server)」不是 IP：域名形式的服务器要写成 https://… 或 tls://…"
+        return L("「%@」不是 IP：域名形式的服务器要写成 https://… 或 tls://…", server)
     }
 
     /// 「1.1.1.1:53」「[2606:4700::1111]:53」去掉端口。
@@ -86,7 +86,7 @@ struct DNSSettings: Codable, Equatable {
 
     /// 从一段文字（逗号、空格、换行分隔）拆出服务器列表。
     static func parseList(_ text: String) -> [String] {
-        text.split(whereSeparator: { $0 == "," || $0 == "，" || $0.isWhitespace })
+        text.split(whereSeparator: { $0 == "," || $0 == "，" || $0.isWhitespace })  // l10n-ignore：全角逗号
             .map { String($0).trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
     }
@@ -121,8 +121,8 @@ struct DNSPolicy: Codable, Equatable, Identifiable, Hashable {
     }
 
     func validate() -> String? {
-        if !HostEntry.validDomainPattern(domain) { return "认不出域名「\(domain)」" }
-        if servers.isEmpty { return "「\(domain)」没有填 DNS 服务器" }
+        if !HostEntry.validDomainPattern(domain) { return L("认不出域名「%@」", domain) }
+        if servers.isEmpty { return L("「%@」没有填 DNS 服务器", domain) }
         for server in servers {
             if let problem = DNSSettings.validateServer(server) { return problem }
         }
@@ -158,17 +158,17 @@ struct HostEntry: Codable, Equatable, Identifiable, Hashable {
 
     /// 值拆成 IP 列表；是域名别名时是那一个域名。
     var values: [String] {
-        value.split(whereSeparator: { $0 == "," || $0 == "，" || $0.isWhitespace }).map(String.init).filter { !$0.isEmpty }
+        value.split(whereSeparator: { $0 == "," || $0 == "，" || $0.isWhitespace }).map(String.init).filter { !$0.isEmpty }  // l10n-ignore：全角逗号
     }
 
     func validate() -> String? {
-        if !HostEntry.validDomainPattern(domain) { return "认不出域名「\(domain)」" }
+        if !HostEntry.validDomainPattern(domain) { return L("认不出域名「%@」", domain) }
         let items = values
-        if items.isEmpty { return "「\(domain)」没有填 IP" }
+        if items.isEmpty { return L("「%@」没有填 IP", domain) }
         // 一个域名（至少有一个字母，1.2.3 这种写错的 IP 不算）就是别名。
         if items.count == 1, RuleConverter.looksLikeDomain(items[0]), items[0].contains(where: \.isLetter) { return nil }
         for item in items where !IPPrefix.isIPv4Address(item) && !IPPrefix.isIPv6Address(item) {
-            return "「\(item)」不是 IP（要么填一个或多个 IP，要么填一个域名当别名）"
+            return L("「%@」不是 IP（要么填一个或多个 IP，要么填一个域名当别名）", item)
         }
         return nil
     }

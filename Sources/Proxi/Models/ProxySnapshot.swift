@@ -65,7 +65,7 @@ struct ProxySnapshot: Codable, Equatable {
             }
         }
         if socksActive { parts.append("socks5://\(socksHost):\(socksPort)") }
-        return parts.isEmpty ? "未开启" : parts.joined(separator: " + ")
+        return parts.isEmpty ? L("未开启") : parts.joined(separator: " + ")
     }
 
     /// 系统代理是否正是这个配置设置的。

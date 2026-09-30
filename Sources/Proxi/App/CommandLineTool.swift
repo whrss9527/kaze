@@ -44,7 +44,7 @@ enum CommandLineTool {
                 return 0
             case "tools":
                 for tool in ControlCatalog.tools {
-                    print("\(tool.name)（\(tool.title)，\(tool.permission.title)）：\(tool.description)")
+                    print(L("%@（%@，%@）：%@", tool.name, tool.title, tool.permission.title, tool.description))
                 }
                 return 0
             case "mcp":
@@ -55,7 +55,7 @@ enum CommandLineTool {
                 return HelperCommand.run(rest, appVersion: UpdateChecker.currentVersion, executable: Bundle.main.executablePath ?? CommandLine.arguments[0], bundledCore: CoreBinary.bundledPath)
             default:
                 guard let (method, params) = try request(for: command, rest, type: type, replace: replace, preview: preview) else {
-                    printError("用法不对。\n\n" + help)
+                    printError(L("用法不对。\n\n") + help)
                     return 2
                 }
                 let result = try callLaunching(method, params: params, client: "cli")
@@ -216,7 +216,7 @@ enum CommandLineTool {
             if rest.count > 1 {
                 let text = rest[1...].joined(separator: " ")
                 guard let data = text.data(using: .utf8), let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-                    throw ControlError.invalid("参数要是 JSON 对象，比如 '{\"name\":\"香港\"}'")
+                    throw ControlError.invalid(L("参数要是 JSON 对象，比如 '{\"name\":\"香港\"}'"))
                 }
                 params = object
             }
@@ -286,7 +286,7 @@ enum CommandLineTool {
         switch method {
         case "list_nodes":
             for node in rows("nodes") {
-                let delay = (node["delay"] as? Int).map { $0 > 0 ? "\($0) ms" : "超时" } ?? ""
+                let delay = (node["delay"] as? Int).map { $0 > 0 ? "\($0) ms" : L("超时") } ?? ""
                 let mark = (node["inUse"] as? Bool) == true ? "●" : ((node["favorite"] as? Bool) == true ? "★" : " ")
                 print("\(mark) \(node["name"] ?? "")  \(delay)  \(node["source"] ?? "")")
             }
@@ -296,22 +296,22 @@ enum CommandLineTool {
             }
         case "list_groups":
             for group in rows("groups") {
-                print("\(group["name"] ?? "")（\(group["type"] ?? "")）→ \(group["now"] ?? "")")
+                print(L("%@（%@）→ %@", group["name"] ?? "", group["type"] ?? "", group["now"] ?? ""))
             }
         case "list_rules":
             for rule in rows("customRules") {
                 print("\((rule["enabled"] as? Bool) == false ? "○" : "●") [\(rule["type"] ?? "")] \(rule["value"] ?? "") → \(rule["policy"] ?? "")")
             }
             for set in rows("ruleSets") {
-                print("\((set["enabled"] as? Bool) == false ? "○" : "●") 规则集 \(set["name"] ?? "") → \(set["policy"] ?? "")")
+                print(L("%@ 规则集 %@ → %@", (set["enabled"] as? Bool) == false ? "○" : "●", set["name"] ?? "", set["policy"] ?? ""))
             }
-            print("其余流量 → \(result["final"] ?? "")")
+            print(L("其余流量 → %@", result["final"] ?? ""))
         case "list_subscriptions":
             for sub in rows("subscriptions") {
-                print("\((sub["enabled"] as? Bool) == false ? "○" : "●") \(sub["name"] ?? "")  \(sub["nodes"].map { "\($0) 个节点" } ?? "")  \(sub["usage"] ?? "")")
+                print(L("%@ %@  %@  %@", (sub["enabled"] as? Bool) == false ? "○" : "●", sub["name"] ?? "", sub["nodes"].map { L("%@ 个节点", $0) } ?? "", sub["usage"] ?? ""))
             }
             for node in rows("manualNodes") {
-                print("  手动 \(node["name"] ?? "")  \(node["server"] ?? "")")
+                print(L("  手动 %@  %@", node["name"] ?? "", node["server"] ?? ""))
             }
         case "list_connections":
             for connection in rows("active") {
@@ -320,15 +320,15 @@ enum CommandLineTool {
         case "test_nodes":
             for item in rows("delays").prefix(40) {
                 let delay = (item["delay"] as? Int) ?? 0
-                print("\(delay > 0 ? "\(delay) ms" : "超时")\t\(item["name"] ?? "")")
+                print(L("%@\t%@", delay > 0 ? "\(delay) ms" : L("超时"), item["name"] ?? ""))
             }
         case "check_services":
             for item in rows("results") {
-                print("\((item["available"] as? Bool) == true ? "✓" : "✗") \(item["service"] ?? "")：\(item["result"] ?? "")")
+                print(L("%@ %@：%@", (item["available"] as? Bool) == true ? "✓" : "✗", item["service"] ?? "", item["result"] ?? ""))
             }
         case "diagnose_url":
             for check in rows("checks") {
-                print("· \(check["title"] ?? "")：\(check["result"] ?? "")")
+                print(L("· %@：%@", check["title"] ?? "", check["result"] ?? ""))
             }
         case "export_config":
             if let content = result["content"] as? String {
@@ -343,12 +343,12 @@ enum CommandLineTool {
             }
         case "list_changes":
             for change in rows("changes") {
-                let undo = (change["undone"] as? Bool) == true ? "（已撤销）" : ((change["canUndo"] as? Bool) == true ? "（可撤销）" : "")
+                let undo = (change["undone"] as? Bool) == true ? L("（已撤销）") : ((change["canUndo"] as? Bool) == true ? L("（可撤销）") : "")
                 print("\(change["date"] ?? "")  \(change["client"] ?? "")  \(change["summary"] ?? "")\(undo)")
             }
         case "get_logs":
             print((result["app"] as? String) ?? "")
-            print("----- 内核 -----")
+            print(L("----- 内核 -----"))
             print((result["core"] as? String) ?? "")
         case "get_traffic":
             for item in rows("byNode").prefix(10) {
@@ -360,14 +360,17 @@ enum CommandLineTool {
     }
 
     static func printError(_ message: String) {
-        FileHandle.standardError.write(Data(("proxi：" + message + "\n").utf8))
+        FileHandle.standardError.write(Data((L("proxi：") + message + "\n").utf8))
     }
 
     static func readStandardInput() -> String {
         String(decoding: FileHandle.standardInput.readDataToEndOfFile(), as: UTF8.self)
     }
 
-    static let help = """
+    static var help: String { AppLanguage.isEnglish ? helpEnglish : helpChinese }
+
+    // l10n-ignore：中文界面的用法说明，英文的在 helpEnglish。
+    static let helpChinese = """
     用法：proxi <命令> [参数] [--json]
 
     查看
@@ -415,5 +418,55 @@ enum CommandLineTool {
       version
 
     Proxi 没在运行时会自动在后台打开。权限在设置的「自动化」页调整。
+    """
+
+    static let helpEnglish = """
+    Usage: proxi <command> [arguments] [--json]
+
+    View
+      status                    Current proxy status
+      profiles                  Proxy profiles
+      nodes [keyword]           Nodes and latency
+      groups                    Policy groups
+      rules                     Routing rules
+      subs                      Subscriptions and manual nodes
+      connections [keyword]     Connections
+      traffic                   Traffic statistics
+      logs [lines]              Logs
+      history                   Change history
+
+    Control
+      on [profile] / off / toggle
+      node <name|auto>          Switch node (part of the name is enough)
+      group <group> <member>    Switch a policy group
+      mode <rule|global>        Switch mode
+      test [keyword]            Test latency
+      services [node]           Check whether ChatGPT, Netflix and other services work
+      diagnose <url>            Find out why a website won't open
+      share <on|off>            LAN sharing
+      tun <on|off>              Enhanced mode (all apps go through the built-in proxy; install the privileged helper first)
+      gateway <on|off>          Gateway mode (devices set their router and DNS to this Mac)
+      close [connection id]     Close connections (all of them if no id is given)
+
+    Change settings (every change can be reverted with undo)
+      rule add <value> <target> [--type type]  Add a rule; target is proxy, direct, reject or a group name
+      rule remove <value>
+      final <target|follow>                    Everything else
+      sub add <url> [name] / sub remove <name> / sub update
+      add-nodes <links...>                     Add nodes (reads standard input when no links are given)
+      ruleset add <url|library name> [target] / ruleset remove <name> / ruleset update
+      group-add <name> [type] [filter] / group-remove <name>
+      import <file|url|-> [--replace] [--preview]
+      export [describe|backup|core]
+      undo
+
+    Other
+      tools                     All tools (the same ones AI assistants use)
+      call <tool> ['{"param":"value"}']
+      mcp                       Run as an MCP server (for AI assistants)
+      helper <install|uninstall|status>  Privileged helper (install and uninstall need sudo)
+      version
+
+    Proxi is opened in the background when it isn't running. Permissions are in Settings → Automation.
     """
 }

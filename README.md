@@ -1,95 +1,101 @@
 <div align="center">
-  <img src="docs/icon.png" width="128" height="128" alt="Proxi 图标">
+  <img src="docs/icon.png" width="128" height="128" alt="Proxi icon">
   <h1>Proxi</h1>
-  <p><strong>一个开关，管好所有代理</strong></p>
-  <p>住在 macOS 菜单栏里的代理开关。原生 Swift，玻璃质感，开源免费。</p>
+  <p><strong>One switch for all your proxies</strong></p>
+  <p>A proxy switch that lives in the macOS menu bar. Native Swift, glass design, free and open source.</p>
   <p>
-    <a href="https://github.com/whrss9527/proxi/releases/latest"><img alt="最新版本" src="https://img.shields.io/github/v/release/whrss9527/proxi?include_prereleases&label=release&color=2F6BEA"></a>
+    <a href="https://github.com/whrss9527/proxi/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/whrss9527/proxi?include_prereleases&label=release&color=2F6BEA"></a>
     <img alt="macOS 14+" src="https://img.shields.io/badge/macOS-14%2B-111827?logo=apple&logoColor=white">
     <img alt="Liquid Glass" src="https://img.shields.io/badge/UI-Liquid%20Glass-7C6CFF">
     <a href="LICENSE"><img alt="GPL-3.0" src="https://img.shields.io/badge/license-GPL--3.0-2563EB"></a>
   </p>
   <p>
-    <a href="https://github.com/whrss9527/proxi/releases/latest"><b>下载</b></a> ·
-    <a href="CHANGELOG.md">更新日志</a> ·
-    <a href="docs/automation.md">自动化</a> ·
-    <a href="https://github.com/whrss9527/proxyswitch">Windows 版</a>
+    <a href="https://github.com/whrss9527/proxi/releases/latest"><b>Download</b></a> ·
+    <a href="CHANGELOG.md">Changelog</a> ·
+    <a href="docs/automation.md">Automation</a> ·
+    <a href="https://github.com/whrss9527/proxyswitch">Windows version</a> ·
+    <a href="README.zh-CN.md">简体中文</a>
   </p>
 </div>
 
 ### **Proxi** /ˈprɒk.si/
 
-念起来还是 **proxy**。
+Say it out loud and it's still **proxy**.
 
-把 **y** 换成 **i**：**y** 是 *why*，**i** 是 *I*。
+Swap the **y** for an **i**: **y** is *why*, **i** is *I*.
 
-少一个“为什么”，多一个“我”。
+One less "why", one more "I".
 
-代理不应该只是一个复杂的网络工具，而应该是一个真正交到你手里的遥控器：怎么连、走哪里、什么时候开关，都由你自己决定。
+A proxy shouldn't be just a complicated networking tool. It should be a remote control that's truly in your hands: how you connect, where traffic goes and when it's on are all up to you.
 
-**Proxi**，就是属于你的代理。
+**Proxi** is the proxy that's yours.
 
-<p align="center"><img src="docs/hero.png" width="1000" alt="设置窗口、菜单栏面板和菜单栏里的网速"></p>
+<p align="center"><img src="docs/hero.png" width="1000" alt="The Settings window, the menu bar panel and the network speed in the menu bar"></p>
 
-## 特性
+The screenshots show the Chinese interface. Proxi is in English when your system language isn't Chinese, and you can pick the language under Settings → General → Language.
 
-- **一键切换**：系统代理、环境变量、git、npm 一起开关；配好几套，点一下就换。
-- **订阅直接用**：填上机场的订阅地址，选节点、测速、按规则分流，面板里都能搞定。
-- **整台 Mac，连同游戏机**：增强模式让终端和游戏也走代理；局域网共享和网关模式让 PS5、Switch、手机跟着这台 Mac 走。
-- **每条连接都看得见**：哪个程序连了哪里、命中哪条规则、走了哪个节点，一清二楚；网站打不开时，一键诊断。
-- **交给脚本和 AI**：命令行、MCP、URL 命令都能控制，还能按 Wi‑Fi 自动切换配置。
-- **省心**：配置用 iCloud 在几台 Mac 之间同步；有新版本，点一下就更新好。
+## Features
 
-## 安装
+- **One-click switching**: the system proxy, environment variables, git and npm switch together; set up several profiles and change between them with a click.
+- **Subscriptions that just work**: paste your provider's subscription URL, then pick nodes, test latency and route by rules, all from the panel.
+- **The whole Mac, and your game console too**: enhanced mode sends Terminal and games through the proxy; LAN sharing and gateway mode let a PS5, Switch or phone use this Mac's connection.
+- **Every connection in sight**: which app connected where, which rule matched and which node it used; when a site won't open, diagnose it with one click.
+- **Scripts and AI**: control it from the command line, MCP and URL commands, and switch profiles automatically by Wi‑Fi.
+- **Low maintenance**: profiles sync across your Macs with iCloud; new versions install with one click.
+- **English or Chinese**: the interface follows your system language, or pick one under Settings → General.
 
-需要 macOS 14 或更新版本，Intel 和 Apple 芯片都能用。
+## Install
 
-1. 在 [Releases](../../releases) 下载 `Proxi-macos.zip`，解压后把 `Proxi.app` 拖到「应用程序」。
-2. 双击打开。没经过公证的版本第一次打开的办法见[使用指南](docs/guide.md#安装)。
-3. 以后有新版本，面板里点「更新」就行。
+Requires macOS 14 or later, on Intel or Apple silicon.
 
-以前用 ProxySwitch 的，在旧版本里一键更新就会变成 Proxi，配置都在，见[从 ProxySwitch 更新](docs/guide.md#从-proxyswitch-更新)。Windows 版在 [proxyswitch](https://github.com/whrss9527/proxyswitch)。
+1. Download `Proxi-macos.zip` from [Releases](../../releases), unzip it and drag `Proxi.app` to Applications.
+2. Double-click to open it. For opening versions that weren't notarized, see the [user guide](docs/guide.md#安装) (in Chinese).
+3. When a new version comes out, click "Update" in the panel.
 
-## 上手
+If you used ProxySwitch, updating from the old version in one click turns it into Proxi and keeps your settings; see [updating from ProxySwitch](docs/guide.md#从-proxyswitch-更新). The Windows version is [proxyswitch](https://github.com/whrss9527/proxyswitch).
 
-| 操作 | 效果 |
+## Getting started
+
+| Action | Result |
 | --- | --- |
-| 左键点菜单栏图标 | 打开面板：大开关、配置列表、延迟、一键测速 |
-| 右键（或 Control + 点击） | 简洁菜单 |
-| ⌃⌥P | 在任何地方开关代理（可以在设置里换） |
-| 设置 → 节点与订阅 | 粘上机场的订阅地址，节点就出现在面板里 |
-| 终端里 `proxi status`、`proxi node 香港` | 用命令行查看和切换（先在「自动化」页装上命令行工具） |
+| Left-click the menu bar icon | Opens the panel: the big switch, profiles, latency and one-click testing |
+| Right-click (or Control-click) | A compact menu |
+| ⌃⌥P | Turns the proxy on or off from anywhere (you can change it in Settings) |
+| Settings → Nodes & Subscriptions | Paste your provider's subscription URL and the nodes appear in the panel |
+| `proxi status`, `proxi node HK` in Terminal | Check and switch from the command line (install the command-line tool on the Automation page first) |
 
-## 文档
+## Documentation
 
-- [使用指南](docs/guide.md)：安装与更新、全部功能、内置节点代理、增强模式和网关模式、局域网共享、权限与文件位置
-- [自动化](docs/automation.md)：命令行、MCP、URL 命令、能导入的格式
-- [开发指南](docs/development.md)：构建、代码结构、CI 与发版；签名和公证见 [docs/signing.md](docs/signing.md)
-- [更新日志](CHANGELOG.md)
+The documents are in Chinese for now.
 
-## 支持
+- [User guide](docs/guide.md): installing and updating, every feature, the built-in node proxy, enhanced mode and gateway mode, LAN sharing, permissions and file locations
+- [Automation](docs/automation.md): the command line, MCP, URL commands and the formats Proxi can import
+- [Development guide](docs/development.md): building, code layout, CI and releases; signing and notarization are in [docs/signing.md](docs/signing.md)
+- [Changelog](CHANGELOG.md)
 
-Proxi 免费开源。觉得好用的话，点个 ⭐ Star 就是很大的鼓励；也可以微信扫一扫请我喝杯咖啡（程序里「设置 → 关于」也有这张码）。
+## Support
 
-<p align="center"><img src="Resources/donate-wechat.png" width="240" alt="微信赞赏码：请我喝杯咖啡"></p>
+Proxi is free and open source. If you find it useful, a ⭐ Star means a lot; you can also buy me a coffee with WeChat (the code is also in Settings → About).
 
-## 许可证
+<p align="center"><img src="Resources/donate-wechat.png" width="240" alt="WeChat tip code: buy me a coffee"></p>
+
+## License
 
 Copyright © 2026 吴彦祖
 
-Proxi 是自由软件，以 [GNU 通用公共许可证第 3 版（GPL-3.0）](LICENSE) 发布：可以自由使用、研究、修改和分享；分发 Proxi 或修改后的版本时，需要以同样的许可证提供源代码。
+Proxi is free software released under the [GNU General Public License v3 (GPL-3.0)](LICENSE): you can use, study, modify and share it freely; when you distribute Proxi or a modified version, you must provide the source code under the same license.
 
-「Proxi」这个名字和 Proxi 的图标不在 GPL 授权范围内（GPL-3.0 第 7 条 e 项）。介绍 Proxi、分享未经修改的副本时可以使用；分发修改后的版本时，请换用自己的名字和图标。
+The name "Proxi" and the Proxi icon aren't covered by the GPL (GPL-3.0 section 7(e)). You may use them to talk about Proxi or to share unmodified copies; when distributing a modified version, please use your own name and icon.
 
-贡献需接受 [CONTRIBUTING.md](CONTRIBUTING.md) 里的贡献者协议。
+Contributions require accepting the contributor agreement in [CONTRIBUTING.md](CONTRIBUTING.md).
 
-0.10.0 及以前的版本以 MIT 许可证发布，这些版本仍然适用 MIT 许可证。
+Versions 0.10.0 and earlier were released under the MIT license, which still applies to those versions.
 
 ---
 
 <div align="center">
-  <p><b>同样住在菜单栏里</b></p>
-  <a href="https://github.com/whrss9527/pop"><img src="https://raw.githubusercontent.com/whrss9527/whrss9527/master/assets/cards/pop.svg" width="30%" alt="Pop：长按右键，一划即达"></a>
-  <a href="https://github.com/whrss9527/meno"><img src="https://raw.githubusercontent.com/whrss9527/whrss9527/master/assets/cards/meno.svg" width="30%" alt="Meno：安静的菜单栏，由玻璃打造"></a>
-  <a href="https://github.com/whrss9527/stox"><img src="https://raw.githubusercontent.com/whrss9527/whrss9527/master/assets/cards/stox.svg" width="30%" alt="Stox：一眼看盘，一键隐身"></a>
+  <p><b>Also living in the menu bar</b></p>
+  <a href="https://github.com/whrss9527/pop"><img src="https://raw.githubusercontent.com/whrss9527/whrss9527/master/assets/cards/pop.svg" width="30%" alt="Pop: long-press right-click, one swipe away"></a>
+  <a href="https://github.com/whrss9527/meno"><img src="https://raw.githubusercontent.com/whrss9527/whrss9527/master/assets/cards/meno.svg" width="30%" alt="Meno: a quiet menu bar made of glass"></a>
+  <a href="https://github.com/whrss9527/stox"><img src="https://raw.githubusercontent.com/whrss9527/whrss9527/master/assets/cards/stox.svg" width="30%" alt="Stox: quotes at a glance, gone in a click"></a>
 </div>

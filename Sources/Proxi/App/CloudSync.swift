@@ -96,7 +96,7 @@ final class CloudSync: ObservableObject {
             // 云端没有文件、内容一样或者是空的：直接把本机的写上去。
             await finishEnable(config: local, push: true)
         } catch {
-            status = .error("读取 iCloud 失败：\(error.localizedDescription)")
+            status = .error(L("读取 iCloud 失败：%@", error.localizedDescription))
             Log.error("iCloud 同步：读取失败：\(error.localizedDescription)")
         }
     }
@@ -199,7 +199,7 @@ final class CloudSync: ObservableObject {
             status = .synced(synced.updatedAt, synced.device)
             Log.info("iCloud 同步：已写入本机的配置")
         } catch {
-            status = .error("写入 iCloud 失败：\(error.localizedDescription)")
+            status = .error(L("写入 iCloud 失败：%@", error.localizedDescription))
             Log.error("iCloud 同步：写入失败：\(error.localizedDescription)")
         }
     }
@@ -249,7 +249,7 @@ final class CloudSync: ObservableObject {
             }
             status = .synced(remote.updatedAt, remote.device)
         } catch {
-            status = .error("读取 iCloud 失败：\(error.localizedDescription)")
+            status = .error(L("读取 iCloud 失败：%@", error.localizedDescription))
             Log.error("iCloud 同步：读取失败：\(error.localizedDescription)")
         }
     }

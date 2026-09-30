@@ -36,9 +36,9 @@ enum CoreRunnerError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .missingBinary: return "这个 Proxi 里没有打包内核（mihomo），请重新下载完整版本"
-        case .launchFailed(let text): return "内核启动失败：\(text)"
-        case .notReady(let text): return "内核没有正常启动：\(text)"
+        case .missingBinary: return L("这个 Proxi 里没有打包内核（mihomo），请重新下载完整版本")
+        case .launchFailed(let text): return L("内核启动失败：%@", text)
+        case .notReady(let text): return L("内核没有正常启动：%@", text)
         }
     }
 }
@@ -82,7 +82,7 @@ final class CoreRunner {
         process.terminationHandler = { [weak self] finished in
             pipe.fileHandleForReading.readabilityHandler = nil
             let status = finished.terminationStatus
-            self?.append(Data("[Proxi] 内核退出，状态 \(status)\n".utf8))
+            self?.append(Data("[Proxi] 内核退出，状态 \(status)\n".utf8))  // l10n-ignore：内核日志
             Task { @MainActor in self?.onExit?(status) }
         }
         do {

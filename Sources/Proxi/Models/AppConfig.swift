@@ -9,8 +9,8 @@ enum ClickAction: String, Codable, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .panel: return "打开面板"
-        case .toggle: return "直接开关代理"
+        case .panel: return L("打开面板")
+        case .toggle: return L("直接开关代理")
         }
     }
 }
@@ -24,8 +24,8 @@ enum OffMode: String, Codable, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .direct: return "直接连接"
-        case .restore: return "恢复开启前的设置"
+        case .direct: return L("直接连接")
+        case .restore: return L("恢复开启前的设置")
         }
     }
 }
@@ -39,9 +39,9 @@ enum NotifyLevel: String, Codable, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .all: return "全部显示"
-        case .problems: return "只显示问题"
-        case .none: return "不显示"
+        case .all: return L("全部显示")
+        case .problems: return L("只显示问题")
+        case .none: return L("不显示")
         }
     }
 }
@@ -66,9 +66,9 @@ enum SpeedDisplay: String, Codable, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .none: return "不显示"
-        case .system: return "系统网络总速度"
-        case .engine: return "只算内置代理"
+        case .none: return L("不显示")
+        case .system: return L("系统网络总速度")
+        case .engine: return L("只算内置代理")
         }
     }
 }
@@ -84,9 +84,9 @@ enum SpeedSide: String, Codable, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .left: return "图标左边"
-        case .right: return "图标右边"
-        case .speedOnly: return "关代理时只显示网速"
+        case .left: return L("图标左边")
+        case .right: return L("图标右边")
+        case .speedOnly: return L("关代理时只显示网速")
         }
     }
 }

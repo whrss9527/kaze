@@ -22,6 +22,9 @@ jobs:
           sudo xcode-select -s "$latest"
           xcodebuild -version
           swift --version
+      - name: 检查界面文字的翻译
+        # 代码里的中文都经过 L()，英文和简体中文的翻译表和代码一致。
+        run: python3 Scripts/check-localization.py
       - name: 编译
         run: swift build
       - name: 单元测试
@@ -44,6 +47,11 @@ jobs:
           lipo -archs dist/thin-arm64/Proxi.app/Contents/MacOS/mihomo
           [ "$(lipo -archs dist/thin-arm64/Proxi.app/Contents/MacOS/mihomo)" = "arm64" ] || { echo "精简包里的内核不是单架构"; exit 1; }
           [ -f dist/Proxi.app/Contents/Resources/donate-wechat.png ] || { echo "关于页的赞赏码没有打包进去"; exit 1; }
+          for lang in en zh-Hans; do
+            for table in Localizable InfoPlist; do
+              plutil -lint "dist/Proxi.app/Contents/Resources/$lang.lproj/$table.strings" || { echo "$lang 的 $table.strings 没有打包进去或者格式不对"; exit 1; }
+            done
+          done
           # 程序和内核都开着 hardened runtime（公证要求），后面的冒烟和更新测试跑的就是这种运行方式。
           for code in dist/Proxi.app dist/Proxi.app/Contents/MacOS/mihomo dist/thin-arm64/Proxi.app; do
             codesign -dv "$code" 2>&1 | grep -q 'flags=.*runtime' || { codesign -dv "$code"; echo "$code 没有开 hardened runtime"; exit 1; }
@@ -53,6 +61,9 @@ jobs:
         run: |
           support="$HOME/Library/Application Support/Proxi"
           mkdir -p "$support" screenshots
+          # runner 的系统语言是英文。下面的检查和截图用中文界面：先在 Proxi 自己的偏好设置里把界面语言选成简体中文
+          # （和设置 → 通用 → 界面语言选「简体中文」一样）；英文界面在下一步单独启动。
+          defaults write com.whrss9527.proxyswitch AppleLanguages -array zh-Hans
           # 预置几套配置，面板里有内容可看。
           cat > "$support/config.json" <<'JSON'
           {"profiles":[{"id":"6D2F2A1E-0000-4000-8000-000000000001","name":"Clash","color":"#16a34a","kind":"http","host":"127.0.0.1","port":7890},
@@ -149,6 +160,7 @@ jobs:
           echo "===== 内核日志 ====="; cat "$support/core/core.log" || true
           echo "===== 程序日志 ====="; cat "$support/proxi.log" || true
           grep -q "应用了来自 另一台 Mac 的配置" "$support/proxi.log" || { echo "没有从假 iCloud 拉到配置"; exit 1; }
+          grep -q '界面语言 english=false setting=simplifiedChinese sample="设置…"' "$support/proxi.log" || { echo "界面选了简体中文，应该是中文"; exit 1; }
           grep -q "iCloud 来的" "$support/config.json" || { echo "拉到的配置没有写到本机"; cat "$support/config.json"; exit 1; }
           grep -q "内核已启动" "$support/proxi.log" || { echo "内核没有启动"; exit 1; }
           grep -q "读取到 4 个节点" "$support/proxi.log" || { echo "没有读到假订阅的 3 个节点和 1 个手动节点"; exit 1; }
@@ -286,6 +298,52 @@ jobs:
           pkill -x Proxi || true
           sleep 3
           pgrep -x mihomo && { echo "程序退出后内核还在运行"; exit 1; }
+          ls -la screenshots
+      - name: 英文界面冒烟并截图
+        run: |
+          support="$HOME/Library/Application Support/Proxi"
+          domain=com.whrss9527.proxyswitch
+          app=dist/Proxi.app/Contents/MacOS/Proxi
+          # 等 Proxi 写出启动的那一行（界面语言跟着写在后面）。
+          wait_started() {
+            for i in $(seq 1 30); do grep -q "界面语言 english=" "$support/proxi.log" && return 0; sleep 1; done
+            echo "Proxi 没有启动"; tail -30 "$support/proxi.log"; exit 1
+          }
+          # 设置里选了 English：只在 Proxi 自己的偏好设置里写 AppleLanguages，界面、菜单和命令行都是英文。
+          defaults write "$domain" AppleLanguages -array en
+          "$app" help | tee "$RUNNER_TEMP/help-en.txt" | head -3
+          grep -q "^Usage: proxi <command>" "$RUNNER_TEMP/help-en.txt" || { echo "英文界面下命令行的用法应该是英文"; exit 1; }
+          : > "$support/proxi.log"
+          "$app" >/dev/null 2>&1 &
+          wait_started
+          grep '界面语言 english=' "$support/proxi.log"
+          grep -q '界面语言 english=true setting=english sample="Settings…"' "$support/proxi.log" || { echo "设置里选了 English，界面应该是英文"; exit 1; }
+          sleep 4
+          open "proxi://panel"; sleep 3
+          screencapture -x screenshots/en-panel.png || true
+          for page in general nodes rules share connections automation advanced about; do
+            open "proxi://settings?page=$page"; sleep 3
+            screencapture -x "screenshots/en-$page.png" || true
+          done
+          # 命令行经正在运行的程序拿到的文字也是英文。
+          "$app" status
+          pkill -x Proxi || true
+          sleep 3
+          # 跟随系统：删掉 Proxi 自己的选择，runner 的系统语言是英文，界面就是英文。
+          # 同时测「立即重新启动」打开的新实例会先等旧的退出：带上一个还在运行的进程号，它退出前不该启动。
+          defaults delete "$domain" AppleLanguages
+          sleep 8 & waiter=$!
+          : > "$support/proxi.log"
+          "$app" --relaunch-after "$waiter" >/dev/null 2>&1 &
+          sleep 3
+          if grep -q "界面语言 english=" "$support/proxi.log"; then echo "没有等旧的实例退出就启动了"; exit 1; fi
+          wait "$waiter" || true
+          wait_started
+          grep -q '界面语言 english=true setting=system sample="Settings…"' "$support/proxi.log" || { echo "跟随系统时（系统是英文）界面应该是英文"; grep '界面语言' "$support/proxi.log"; exit 1; }
+          pkill -x Proxi || true
+          sleep 3
+          # 后面的步骤用回中文。
+          defaults write "$domain" AppleLanguages -array zh-Hans
           ls -la screenshots
       - uses: actions/upload-artifact@v4
         with:
@@ -590,8 +648,15 @@ jobs:
             fi
             sips -Z 560 -s format jpeg -s formatOptions 65 panel-update-crop.png --out panel-update.jpg >/dev/null
           fi
+          if [ -f en-panel.png ]; then
+            width=$(sips -g pixelWidth en-panel.png | awk '/pixelWidth/{print $2}')
+            if ! sips -c 760 640 --cropOffset 0 $((width - 640)) en-panel.png --out en-panel-crop.png >/dev/null 2>&1; then
+              cp en-panel.png en-panel-crop.png
+            fi
+            sips -Z 560 -s format jpeg -s formatOptions 65 en-panel-crop.png --out en-panel.jpg >/dev/null
+          fi
           # 设置窗口居中，裁到窗口附近再缩小，日志里放得下、看得清。
-          for name in settings sync nodes rules connections share diagnose about about-after about-relocate; do
+          for name in settings sync nodes rules connections share diagnose about about-after about-relocate en-general en-nodes en-rules en-share en-connections en-automation en-advanced en-about; do
             [ -f "$name.png" ] || continue
             width=$(sips -g pixelWidth "$name.png" | awk '/pixelWidth/{print $2}')
             height=$(sips -g pixelHeight "$name.png" | awk '/pixelHeight/{print $2}')
@@ -601,7 +666,7 @@ jobs:
             fi
             sips -Z 1000 -s format jpeg -s formatOptions 60 "$name-crop.png" --out "$name.jpg" >/dev/null
           done
-          for name in settings sync nodes rules connections share diagnose about-after panel about panel-update about-relocate; do
+          for name in settings sync nodes rules connections share diagnose about-after panel about panel-update about-relocate en-panel en-general en-nodes en-rules en-share en-connections en-automation en-advanced en-about; do
             [ -f "$name.jpg" ] || continue
             echo "=====BEGIN $name.jpg====="
             base64 -b 76 -i "$name.jpg"

@@ -15,19 +15,19 @@ enum PolicyGroupKind: String, Codable, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .select: return "手动选择"
-        case .urlTest: return "自动选择"
-        case .fallback: return "故障转移"
-        case .loadBalance: return "负载均衡"
+        case .select: return L("手动选择")
+        case .urlTest: return L("自动选择")
+        case .fallback: return L("故障转移")
+        case .loadBalance: return L("负载均衡")
         }
     }
 
     var detail: String {
         switch self {
-        case .select: return "在面板里自己选，默认跟随「节点」的选择"
-        case .urlTest: return "定期测延迟，自动用最低的那个"
-        case .fallback: return "按列表顺序用第一个可用的节点，坏了自动换下一个"
-        case .loadBalance: return "匹配到的节点轮流用，分摊流量"
+        case .select: return L("在面板里自己选，默认跟随「节点」的选择")
+        case .urlTest: return L("定期测延迟，自动用最低的那个")
+        case .fallback: return L("按列表顺序用第一个可用的节点，坏了自动换下一个")
+        case .loadBalance: return L("匹配到的节点轮流用，分摊流量")
         }
     }
 
@@ -64,9 +64,9 @@ enum LoadBalanceStrategy: String, Codable, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .roundRobin: return "轮流"
-        case .consistentHashing: return "同一网站固定节点"
-        case .stickySessions: return "同一会话固定节点"
+        case .roundRobin: return L("轮流")
+        case .consistentHashing: return L("同一网站固定节点")
+        case .stickySessions: return L("同一会话固定节点")
         }
     }
 
@@ -161,53 +161,53 @@ struct PolicyGroup: Codable, Identifiable, Equatable, Hashable {
     /// 校验名字和筛选，返回问题；没问题返回 nil。others 是其他已有的组（改名时不含自己）。
     static func validate(name rawName: String, filter: String, others: [PolicyGroup]) -> String? {
         let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
-        if name.isEmpty { return "请填写策略组的名字" }
-        if name.count > maxNameLength { return "名字太长了，\(maxNameLength) 个字以内" }
+        if name.isEmpty { return L("请填写策略组的名字") }
+        if name.count > maxNameLength { return L("名字太长了，%@ 个字以内", maxNameLength) }
         // 规则行用逗号分隔字段，名字里有逗号会被拆开。
-        if name.contains(where: { $0 == "," || $0 == "，" || $0.isNewline || $0 == "\"" || $0 == "`" || $0 == "#" }) { return "名字里不能有逗号、引号、# 或换行" }
-        if reservedNames.contains(where: { $0.caseInsensitiveCompare(name) == .orderedSame }) { return "「\(name)」是内核保留的名字，换一个" }
+        if name.contains(where: { $0 == "," || $0 == "，" || $0.isNewline || $0 == "\"" || $0 == "`" || $0 == "#" }) { return L("名字里不能有逗号、引号、# 或换行") }  // l10n-ignore：全角逗号
+        if reservedNames.contains(where: { $0.caseInsensitiveCompare(name) == .orderedSame }) { return L("「%@」是内核保留的名字，换一个", name) }
         let lowered = name.lowercased()
-        if lowered.hasPrefix("sub-") || lowered.hasPrefix("rs-") || lowered.hasPrefix("ps-") || lowered == ManualNode.providerName { return "名字不能以 sub-、rs-、ps- 开头，也不能叫 manual，这些是给订阅和规则集用的" }
-        if others.contains(where: { $0.name.caseInsensitiveCompare(name) == .orderedSame }) { return "已经有叫「\(name)」的策略组了" }
+        if lowered.hasPrefix("sub-") || lowered.hasPrefix("rs-") || lowered.hasPrefix("ps-") || lowered == ManualNode.providerName { return L("名字不能以 sub-、rs-、ps- 开头，也不能叫 manual，这些是给订阅和规则集用的") }
+        if others.contains(where: { $0.name.caseInsensitiveCompare(name) == .orderedSame }) { return L("已经有叫「%@」的策略组了", name) }
         return validateFilter(filter)
     }
 
-    /// 筛选要是正确的正则表达式。
-    static func validateFilter(_ filter: String) -> String? {
+    /// 筛选要是正确的正则表达式。exclude 为 true 时校验的是排除，提示里说「排除」。
+    static func validateFilter(_ filter: String, exclude: Bool = false) -> String? {
         let trimmed = filter.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return nil }
-        if trimmed.contains("`") { return "筛选里不能有反引号" }
+        if trimmed.contains("`") { return exclude ? L("排除里不能有反引号") : L("筛选里不能有反引号") }
         do {
             _ = try NSRegularExpression(pattern: trimmed)
         } catch {
-            return "筛选不是正确的正则表达式"
+            return exclude ? L("排除不是正确的正则表达式") : L("筛选不是正确的正则表达式")
         }
         return nil
     }
 
     /// 校验高级选项：排除的正则、包含的组（不能包含自己，也不能绕一圈包含回来）、测速地址和间隔。all 是全部的组（改过的这个替换进去）。
     static func validateAdvanced(_ group: PolicyGroup, all: [PolicyGroup]) -> String? {
-        if let problem = validateFilter(group.exclude) { return problem.replacingOccurrences(of: "筛选", with: "排除") }
+        if let problem = validateFilter(group.exclude, exclude: true) { return problem }
         let names = Set(all.map(\.name))
         for member in group.includeGroups {
-            if member == group.name { return "策略组不能包含自己" }
-            if !names.contains(member) && !builtinMembers.contains(member) { return "没有叫「\(member)」的策略组" }
+            if member == group.name { return L("策略组不能包含自己") }
+            if !names.contains(member) && !builtinMembers.contains(member) { return L("没有叫「%@」的策略组", member) }
         }
         var groups = all.map { $0.id == group.id ? group : $0 }
         if !groups.contains(where: { $0.id == group.id }) {
             groups.append(group)
         }
         if let cycle = cycle(in: groups) {
-            return "策略组互相包含：\(cycle.joined(separator: " → "))"
+            return L("策略组互相包含：%@", cycle.joined(separator: " → "))
         }
         let url = group.testURL.trimmingCharacters(in: .whitespaces)
         if !url.isEmpty {
             guard let parsed = URL(string: url), let scheme = parsed.scheme?.lowercased(), ["http", "https"].contains(scheme), parsed.host != nil else {
-                return "测速地址要以 http:// 或 https:// 开头"
+                return L("测速地址要以 http:// 或 https:// 开头")
             }
         }
-        if group.interval != 0 && !(30...86400).contains(group.interval) { return "测速间隔在 30 秒到 1 天之间" }
-        if group.tolerance < 0 || group.tolerance > 5000 { return "切换的容差在 0~5000 毫秒之间" }
+        if group.interval != 0 && !(30...86400).contains(group.interval) { return L("测速间隔在 30 秒到 1 天之间") }
+        if group.tolerance < 0 || group.tolerance > 5000 { return L("切换的容差在 0~5000 毫秒之间") }
         return nil
     }
 

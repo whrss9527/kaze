@@ -30,12 +30,25 @@ enum CoreConfigBuilder {
     }
 
     static let selectorGroup = RuleConverter.proxyGroup
-    static let autoGroup = "自动选择"
+    static let autoGroup = "自动选择"  // l10n-ignore：内核配置里的名字，界面上用 displayName
     static let providerUserAgent = "clash.meta"
     /// 局域网共享的入口（listener）和它专用的规则组同名。
     static let shareListener = "lan-share"
     /// 本机用别的代理时，共享的流量转发给它：内核里叫这个名字。
-    static let upstreamProxy = "上游代理"
+    static let upstreamProxy = "上游代理"  // l10n-ignore：内核配置里的名字，界面上用 displayName
+
+    /// 内核配置里的名字（「节点」「自动选择」「上游代理」「前置·…」）在界面上的写法；别的名字（订阅里的节点、自己建的组）原样。
+    static func displayName(_ name: String) -> String {
+        switch name {
+        case RuleConverter.proxyGroup: return L("节点")
+        case autoGroup: return L("自动选择")
+        case upstreamProxy: return L("上游代理")
+        default:
+            let prefix = "前置·"  // l10n-ignore
+            if name.hasPrefix(prefix) { return L("前置·%@", String(name.dropFirst(prefix.count))) }
+            return name
+        }
+    }
     /// 服务检测：一个隐藏的手动选择组和只走它的本机入口，测某个节点时只切这个组，不影响正在用的节点。
     static let probeGroup = "ps-probe"
     /// 网关模式下局域网设备的流量专用的规则组（本机不用内置代理时，设备跟着本机的上游走）。
@@ -50,7 +63,7 @@ enum CoreConfigBuilder {
         guard !patch.isEmpty else { return (base, nil, []) }
         do {
             let merged = try ConfigPatch.apply(patch, to: base)
-            return ("# 由 Proxi 生成，改动会被覆盖；已合并配置补丁。\n" + merged.text, nil, merged.notes)
+            return ("# 由 Proxi 生成，改动会被覆盖；已合并配置补丁。\n" + merged.text, nil, merged.notes)  // l10n-ignore：内核配置
         } catch {
             return (base, error.localizedDescription, [])
         }
@@ -63,7 +76,7 @@ enum CoreConfigBuilder {
         let manual = engine.wantsCore ? engine.activeManualNodes : []
         let providerNames = engine.wantsCore ? engine.providerNames : []
         var lines: [String] = []
-        lines.append("# 由 Proxi 生成，改动会被覆盖。")
+        lines.append("# 由 Proxi 生成，改动会被覆盖。")  // l10n-ignore：内核配置
         lines.append("mixed-port: \(engine.wantsCore ? engine.mixedPort : 0)")
         lines.append("allow-lan: false")
         lines.append("bind-address: \"127.0.0.1\"")

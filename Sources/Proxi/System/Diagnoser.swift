@@ -11,8 +11,8 @@ struct DiagnoseTarget: Equatable {
 
         var title: String {
             switch self {
-            case .mac: return "这台 Mac"
-            case .device: return "局域网设备（PS5 等）"
+            case .mac: return L("这台 Mac")
+            case .device: return L("局域网设备（PS5 等）")
             }
         }
     }
@@ -64,12 +64,12 @@ struct ProbeResult: Equatable {
 
         var text: String {
             switch self {
-            case .timeout: return "超时，没有响应"
-            case .refused: return "连接被拒绝"
-            case .reset: return "连接被中断（常见于被屏蔽）"
-            case .dns: return "域名解析失败"
-            case .tls: return "TLS 握手失败（可能被劫持或屏蔽）"
-            case .offline: return "没有网络连接"
+            case .timeout: return L("超时，没有响应")
+            case .refused: return L("连接被拒绝")
+            case .reset: return L("连接被中断（常见于被屏蔽）")
+            case .dns: return L("域名解析失败")
+            case .tls: return L("TLS 握手失败（可能被劫持或屏蔽）")
+            case .offline: return L("没有网络连接")
             case .other(let text): return text
             }
         }
@@ -82,9 +82,9 @@ struct ProbeResult: Equatable {
 
     var summary: String {
         if ok {
-            return "HTTP \(status ?? 0)" + (latencyMs.map { "，\($0) ms" } ?? "")
+            return "HTTP \(status ?? 0)" + (latencyMs.map { L("，%@ ms", $0) } ?? "")
         }
-        return failure?.text ?? "失败"
+        return failure?.text ?? L("失败")
     }
 
     /// 访问一次。proxy 为 nil 跟随系统代理，空字典是直连，否则用给的代理设置。
@@ -168,7 +168,7 @@ struct RouteTrace: Equatable {
         // 「doesn't match any rule」里也含有「 match 」，先认它。
         if let none = middle.range(of: " doesn't match any rule") {
             target = middle[..<none.lowerBound]
-            rule = "没有命中任何规则"
+            rule = L("没有命中任何规则")
         } else if let match = middle.range(of: " match ") {
             target = middle[..<match.lowerBound]
             rule = String(middle[match.upperBound...])
@@ -299,13 +299,13 @@ struct Verdict: Equatable {
 
         var title: String {
             switch self {
-            case .turnOnEngine: return "开启节点代理"
-            case .pinToProxy(let host): return "让 \(host) 走节点"
-            case .autoSelect: return "自动选择节点"
-            case .testNodes: return "测速全部节点"
-            case .openNodes: return "去节点页"
-            case .openShare: return "去共享页"
-            case .copyReport: return "复制诊断报告"
+            case .turnOnEngine: return L("开启节点代理")
+            case .pinToProxy(let host): return L("让 %@ 走节点", host)
+            case .autoSelect: return L("自动选择节点")
+            case .testNodes: return L("测速全部节点")
+            case .openNodes: return L("去节点页")
+            case .openShare: return L("去共享页")
+            case .copyReport: return L("复制诊断报告")
             }
         }
     }
@@ -317,52 +317,52 @@ struct Verdict: Equatable {
     static func make(_ f: DiagnoseFacts) -> Verdict {
         let host = f.host
         if f.perspective == .device && !f.shareListening {
-            return Verdict(headline: "共享入口没在监听", explanation: "设备是经这台 Mac 的共享入口上网的，入口没起来设备就连不上。到「局域网共享」页看状态和报错（常见是没开、端口被占用，或者内核没启动）。", actions: [.openShare])
+            return Verdict(headline: L("共享入口没在监听"), explanation: L("设备是经这台 Mac 的共享入口上网的，入口没起来设备就连不上。到「局域网共享」页看状态和报错（常见是没开、端口被占用，或者内核没启动）。"), actions: [.openShare])
         }
         guard let proxied = f.proxied else {
             // 没有经代理访问：本机没开代理。
             if let direct = f.direct, direct.ok {
-                return Verdict(headline: "直连正常，本机没开代理", explanation: "这个网站直连就能打开（\(direct.summary)）。如果浏览器里仍然打不开，多半是网站本身或浏览器的问题，和代理无关。", actions: [.copyReport])
+                return Verdict(headline: L("直连正常，本机没开代理"), explanation: L("这个网站直连就能打开（%@）。如果浏览器里仍然打不开，多半是网站本身或浏览器的问题，和代理无关。", direct.summary), actions: [.copyReport])
             }
-            let reason = f.direct?.summary ?? "没有测"
+            let reason = f.direct?.summary ?? L("没有测")
             if f.engineHasNodes {
-                return Verdict(headline: "本机没开代理，直连又打不开", explanation: "直连：\(reason)。这个网站直连访问不了，开启节点代理后再试。", actions: [.turnOnEngine, .copyReport])
+                return Verdict(headline: L("本机没开代理，直连又打不开"), explanation: L("直连：%@。这个网站直连访问不了，开启节点代理后再试。", reason), actions: [.turnOnEngine, .copyReport])
             }
-            return Verdict(headline: "本机没开代理，直连又打不开", explanation: "直连：\(reason)。还没有可用的节点，先在「节点与订阅」页添加订阅，或者在「代理配置」里选一个代理。", actions: [.openNodes, .copyReport])
+            return Verdict(headline: L("本机没开代理，直连又打不开"), explanation: L("直连：%@。还没有可用的节点，先在「节点与订阅」页添加订阅，或者在「代理配置」里选一个代理。", reason), actions: [.openNodes, .copyReport])
         }
         if proxied.ok {
-            var explanation = "经 \(f.proxiedVia) 访问成功：\(proxied.summary)。"
+            var explanation = L("经 %@ 访问成功：%@。", f.proxiedVia, proxied.summary)
             if let trace = f.trace {
-                explanation += trace.rule.isEmpty ? "内核让它走了 \(trace.chain)。" : "命中规则 \(trace.rule)，走 \(trace.chain)。"
+                explanation += trace.rule.isEmpty ? L("内核让它走了 %@。", trace.chain) : L("命中规则 %@，走 %@。", trace.rule, trace.chain)
             }
             if f.perspective == .device, f.deviceRecentConnections == 0 {
-                return Verdict(headline: "从这台 Mac 看链路是通的，但设备最近没有对它的连接", explanation: explanation + "设备上打开那个应用时「最近的连接」里没有出现这个域名，说明应用没走 PS5 的代理设置——PS5 的代理只对系统流量和浏览器生效，不少应用只用自己的网络栈。用设备的浏览器打开同一个网站可以对照；要让所有应用都走 Mac，需要网关模式。", actions: [.openShare, .copyReport])
+                return Verdict(headline: L("从这台 Mac 看链路是通的，但设备最近没有对它的连接"), explanation: explanation + L("设备上打开那个应用时「最近的连接」里没有出现这个域名，说明应用没走 PS5 的代理设置——PS5 的代理只对系统流量和浏览器生效，不少应用只用自己的网络栈。用设备的浏览器打开同一个网站可以对照；要让所有应用都走 Mac，需要网关模式。"), actions: [.openShare, .copyReport])
             }
-            return Verdict(headline: "链路正常", explanation: explanation + "如果设备上仍然打不开，多半是那个应用自己的问题。", actions: [.copyReport])
+            return Verdict(headline: L("链路正常"), explanation: explanation + L("如果设备上仍然打不开，多半是那个应用自己的问题。"), actions: [.copyReport])
         }
         // 经代理访问失败。
         if let trace = f.trace {
             if trace.isDirect {
-                let directText = f.direct.map { $0.ok ? "但直接访问是通的（\($0.summary)），可能是内核解析到了不同的地址" : "直接访问也不通（\($0.summary)）" } ?? ""
-                var explanation = "命中规则 \(trace.rule.isEmpty ? "（模式）" : trace.rule)，内核把它分到了直连，\(directText)。"
+                let directText = f.direct.map { $0.ok ? L("但直接访问是通的（%@），可能是内核解析到了不同的地址", $0.summary) : L("直接访问也不通（%@）", $0.summary) } ?? ""
+                var explanation = L("命中规则 %@，内核把它分到了直连，%@。", trace.rule.isEmpty ? L("（模式）") : trace.rule, directText)
                 if let error = trace.error {
-                    explanation += "内核报错：\(error)。"
+                    explanation += L("内核报错：%@。", error)
                 }
-                explanation += "常见原因是这个网站在国内访问不了，或者 DNS 被污染给了国内地址；让它固定走节点就好。"
-                return Verdict(headline: "规则把它分到了直连，但直连不通", explanation: explanation, actions: f.engineHasNodes ? [.pinToProxy(host), .copyReport] : [.turnOnEngine, .copyReport])
+                explanation += L("常见原因是这个网站在国内访问不了，或者 DNS 被污染给了国内地址；让它固定走节点就好。")
+                return Verdict(headline: L("规则把它分到了直连，但直连不通"), explanation: explanation, actions: f.engineHasNodes ? [.pinToProxy(host), .copyReport] : [.turnOnEngine, .copyReport])
             }
             if trace.outbound == CoreConfigBuilder.upstreamProxy {
-                return Verdict(headline: "转发给上游代理失败", explanation: "本机用的是别的代理，共享的流量转发给它时失败：\(trace.error ?? proxied.summary)。检查那个代理现在能不能用（面板里可以测速）。", actions: [.copyReport])
+                return Verdict(headline: L("转发给上游代理失败"), explanation: L("本机用的是别的代理，共享的流量转发给它时失败：%@。检查那个代理现在能不能用（面板里可以测速）。", trace.error ?? proxied.summary), actions: [.copyReport])
             }
             if f.nodeDelay == 0 {
-                return Verdict(headline: "当前节点连不上", explanation: "它走的是节点 \(trace.outbound)，但这个节点现在测不通：\(trace.error ?? proxied.summary)。换一个节点或者让程序自动选延迟最低的。", actions: [.autoSelect, .testNodes, .copyReport])
+                return Verdict(headline: L("当前节点连不上"), explanation: L("它走的是节点 %@，但这个节点现在测不通：%@。换一个节点或者让程序自动选延迟最低的。", trace.outbound, trace.error ?? proxied.summary), actions: [.autoSelect, .testNodes, .copyReport])
             }
-            return Verdict(headline: "节点能通，但这个网站经它打不开", explanation: "走的是节点 \(trace.outbound)（延迟 \(f.nodeDelay.map { "\($0) ms" } ?? "未测")），访问结果：\(trace.error ?? proxied.summary)。可能是这个节点被目标网站屏蔽了，或者网站本身有问题；换个节点试试。", actions: [.openNodes, .copyReport])
+            return Verdict(headline: L("节点能通，但这个网站经它打不开"), explanation: L("走的是节点 %@（延迟 %@），访问结果：%@。可能是这个节点被目标网站屏蔽了，或者网站本身有问题；换个节点试试。", trace.outbound, f.nodeDelay.map { "\($0) ms" } ?? L("未测"), trace.error ?? proxied.summary), actions: [.openNodes, .copyReport])
         }
         if f.macRoute == .engine || f.perspective == .device {
-            return Verdict(headline: "经代理访问失败", explanation: "结果：\(proxied.summary)。内核没有记录到这次连接的判定，可能是内核这时候重启了；再测一次。", actions: [.copyReport])
+            return Verdict(headline: L("经代理访问失败"), explanation: L("结果：%@。内核没有记录到这次连接的判定，可能是内核这时候重启了；再测一次。", proxied.summary), actions: [.copyReport])
         }
-        return Verdict(headline: "经 \(f.proxiedVia) 访问失败", explanation: "结果：\(proxied.summary)。检查那个代理现在能不能用（面板里可以测速），或者换成节点代理。", actions: f.engineHasNodes ? [.turnOnEngine, .copyReport] : [.copyReport])
+        return Verdict(headline: L("经 %@ 访问失败", f.proxiedVia), explanation: L("结果：%@。检查那个代理现在能不能用（面板里可以测速），或者换成节点代理。", proxied.summary), actions: f.engineHasNodes ? [.turnOnEngine, .copyReport] : [.copyReport])
     }
 }
 
@@ -391,14 +391,14 @@ final class Diagnoser: ObservableObject {
         facts = nil
         running = true
         rows = [
-            CheckRow(id: "status", title: target.perspective == .device ? "共享状态" : "本机代理"),
-            CheckRow(id: "dns", title: "域名解析"),
-            CheckRow(id: "direct", title: "直接访问"),
-            CheckRow(id: "proxied", title: "经代理访问"),
-            CheckRow(id: "node", title: "节点"),
+            CheckRow(id: "status", title: target.perspective == .device ? L("共享状态") : L("本机代理")),
+            CheckRow(id: "dns", title: L("域名解析")),
+            CheckRow(id: "direct", title: L("直接访问")),
+            CheckRow(id: "proxied", title: L("经代理访问")),
+            CheckRow(id: "node", title: L("节点")),
         ]
         if target.perspective == .device {
-            rows.append(CheckRow(id: "device", title: "设备的连接"))
+            rows.append(CheckRow(id: "device", title: L("设备的连接")))
         }
         task = Task { @MainActor [weak self] in
             guard let self else { return }
@@ -428,7 +428,7 @@ final class Diagnoser: ObservableObject {
     /// 可以复制给别人看的文字报告。
     var reportText: String {
         guard let target else { return "" }
-        var lines = ["Proxi 网址诊断：\(target.url.absoluteString)（\(target.perspective.title)）"]
+        var lines = [L("Proxi 网址诊断：%@（%@）", target.url.absoluteString, target.perspective.title)]
         for row in rows {
             let mark: String
             switch row.outcome {
@@ -436,12 +436,12 @@ final class Diagnoser: ObservableObject {
             case .warn: mark = "!"
             case .fail: mark = "✗"
             case .skipped: mark = "–"
-            case .pending, .running: mark = "…"
+            case .pending, .running: mark = L("…")
             }
-            lines.append("\(mark) \(row.title)：\(row.summary)" + (row.detail.isEmpty ? "" : "（\(row.detail)）"))
+            lines.append(L("%@ %@：%@", mark, row.title, row.summary) + (row.detail.isEmpty ? "" : L("（%@）", row.detail)))
         }
         if let verdict {
-            lines.append("结论：\(verdict.headline)")
+            lines.append(L("结论：%@", verdict.headline))
             lines.append(verdict.explanation)
         }
         return lines.joined(separator: "\n")
@@ -462,12 +462,12 @@ final class Diagnoser: ObservableObject {
         let mixedPort = state.config.engine.mixedPort
 
         // 1. 本机 / 共享的状态。
-        set("status", .running, "正在看…")
+        set("status", .running, L("正在看…"))
         switch state.status {
         case .off:
             facts.macRoute = .off
         case .on(let profile):
-            facts.macRoute = profile.engine ? .engine : .profile("\(profile.name)（\(profile.summary)）")
+            facts.macRoute = profile.engine ? .engine : .profile(L("%@（%@）", profile.name, profile.summary))
         case .external(let description):
             facts.macRoute = .external(description)
         }
@@ -477,41 +477,41 @@ final class Diagnoser: ObservableObject {
         facts.shareUpstream = state.shareUpstream
         if target.perspective == .device {
             if facts.shareListening {
-                set("status", .pass, "共享入口在监听端口 \(state.share.port)，\(state.shareUpstream.summary)")
+                set("status", .pass, L("共享入口在监听端口 %@，%@", state.share.port, state.shareUpstream.summary))
             } else {
-                set("status", .fail, state.share.enabled ? "共享入口没在监听" : "局域网共享没有开启")
+                set("status", .fail, state.share.enabled ? L("共享入口没在监听") : L("局域网共享没有开启"))
             }
         } else {
             switch facts.macRoute {
-            case .off: set("status", .warn, "本机没开代理，浏览器直连")
-            case .engine: set("status", .pass, "用的是节点代理（\(state.config.engine.mode.title)）" + (engine.effectiveNode.map { "，当前节点 \($0)" } ?? ""))
-            case .profile(let text): set("status", .pass, "用的是 \(text)")
-            case .external(let text): set("status", .warn, "系统代理由别的程序设置：\(text)")
+            case .off: set("status", .warn, L("本机没开代理，浏览器直连"))
+            case .engine: set("status", .pass, L("用的是节点代理（%@）", state.config.engine.mode.title) + (engine.effectiveNode.map { L("，当前节点 %@", $0) } ?? ""))
+            case .profile(let text): set("status", .pass, L("用的是 %@", text))
+            case .external(let text): set("status", .warn, L("系统代理由别的程序设置：%@", text))
             }
         }
         if Task.isCancelled { return facts }
 
         // 2. DNS：系统解析，以及经内核到境外的解析作对照。
-        set("dns", .running, "正在解析…")
+        set("dns", .running, L("正在解析…"))
         if IPPrefix.normalize(target.host) != nil {
-            set("dns", .skipped, "填的是 IP，不用解析")
+            set("dns", .skipped, L("填的是 IP，不用解析"))
         } else {
             facts.systemAddresses = await DNSProbe.system(target.host)
             if engine.isRunning, state.config.engine.wantsCore {
                 facts.remoteAddresses = await DNSProbe.remote(target.host, viaPort: mixedPort)
             }
             if facts.systemAddresses.isEmpty {
-                set("dns", .fail, "本机解析不到这个域名", detail: facts.remoteAddresses.map { $0.isEmpty ? "境外也解析不到" : "境外解析：\($0.joined(separator: "、"))" } ?? "")
+                set("dns", .fail, L("本机解析不到这个域名"), detail: facts.remoteAddresses.map { $0.isEmpty ? L("境外也解析不到") : L("境外解析：%@", $0.joined(separator: L("、"))) } ?? "")
             } else {
-                var summary = "本机解析：\(facts.systemAddresses.prefix(3).joined(separator: "、"))"
+                var summary = L("本机解析：%@", facts.systemAddresses.prefix(3).joined(separator: L("、")))
                 var detail = ""
                 if let remote = facts.remoteAddresses {
                     if remote.isEmpty {
-                        detail = "境外解析失败"
+                        detail = L("境外解析失败")
                     } else {
-                        summary += "；境外解析：\(remote.prefix(3).joined(separator: "、"))"
+                        summary += L("；境外解析：%@", remote.prefix(3).joined(separator: L("、")))
                         if Set(remote).isDisjoint(with: facts.systemAddresses) {
-                            detail = "两边结果不同：CDN 常按地区给不同地址，不一定是污染；直连不通时才要怀疑"
+                            detail = L("两边结果不同：CDN 常按地区给不同地址，不一定是污染；直连不通时才要怀疑")
                         }
                     }
                 }
@@ -521,28 +521,28 @@ final class Diagnoser: ObservableObject {
         if Task.isCancelled { return facts }
 
         // 3. 直连。
-        set("direct", .running, "正在访问…")
+        set("direct", .running, L("正在访问…"))
         let direct = await ProbeResult.probe(url: target.url, proxy: [:])
         facts.direct = direct
-        set("direct", direct.ok ? .pass : .fail, direct.ok ? "可以访问：\(direct.summary)" : "不通：\(direct.summary)")
+        set("direct", direct.ok ? .pass : .fail, direct.ok ? L("可以访问：%@", direct.summary) : L("不通：%@", direct.summary))
         if Task.isCancelled { return facts }
 
         // 4. 经代理访问，能经内核的顺便抓判定。
-        set("proxied", .running, "正在访问…")
+        set("proxied", .running, L("正在访问…"))
         var proxied: ProbeResult?
         var trace: RouteTrace?
         switch (target.perspective, facts.macRoute) {
         case (.device, _):
             if facts.shareListening {
-                facts.proxiedVia = "共享入口"
+                facts.proxiedVia = L("共享入口")
                 let result = await engine.traceConnection(url: target.url, host: target.host, port: target.port, viaPort: state.share.port)
                 proxied = result.probe
                 trace = result.trace
             } else {
-                set("proxied", .skipped, "共享入口没在监听，没法测")
+                set("proxied", .skipped, L("共享入口没在监听，没法测"))
             }
         case (.mac, .engine):
-            facts.proxiedVia = "节点代理"
+            facts.proxiedVia = L("节点代理")
             let result = await engine.traceConnection(url: target.url, host: target.host, port: target.port, viaPort: mixedPort)
             proxied = result.probe
             trace = result.trace
@@ -552,38 +552,38 @@ final class Diagnoser: ObservableObject {
                 proxied = await ProbeResult.probe(url: target.url, proxy: ProxyTester.proxyDictionary(for: profile))
             }
         case (.mac, .external(let text)):
-            facts.proxiedVia = "系统代理 \(text)"
+            facts.proxiedVia = L("系统代理 %@", text)
             proxied = await ProbeResult.probe(url: target.url, proxy: nil)
         case (.mac, .off):
-            set("proxied", .skipped, "本机没开代理")
+            set("proxied", .skipped, L("本机没开代理"))
         }
         facts.proxied = proxied
         facts.trace = trace
         if let proxied {
-            var summary = proxied.ok ? "可以访问：\(proxied.summary)" : "不通：\(proxied.summary)"
+            var summary = proxied.ok ? L("可以访问：%@", proxied.summary) : L("不通：%@", proxied.summary)
             var detail = ""
             if let trace {
-                summary = (trace.rule.isEmpty ? "" : "命中 \(trace.rule)，") + "走 \(trace.chain)：" + proxied.summary
-                if let error = trace.error { detail = "内核：\(error)" }
+                summary = (trace.rule.isEmpty ? "" : L("命中 %@，", trace.rule)) + L("走 %@：", trace.chain) + proxied.summary
+                if let error = trace.error { detail = L("内核：%@", error) }
             } else if facts.macRoute == .engine || target.perspective == .device {
-                detail = "内核没有记录到这次连接的判定"
+                detail = L("内核没有记录到这次连接的判定")
             }
             set("proxied", proxied.ok ? .pass : .fail, summary, detail: detail)
         }
         if Task.isCancelled { return facts }
 
         // 5. 节点：走内核时看当前节点通不通。
-        set("node", .running, "正在测…")
+        set("node", .running, L("正在测…"))
         let usesEngine = (target.perspective == .mac && facts.macRoute == .engine) || (target.perspective == .device && facts.shareUpstream == .engine)
         if usesEngine, engine.isRunning, let node = engine.effectiveNode {
             facts.nodeName = node
             let delay = await engine.delay(of: node)
             facts.nodeDelay = delay
-            set("node", delay > 0 ? .pass : .fail, delay > 0 ? "\(node)：\(delay) ms" : "\(node) 连不上")
+            set("node", delay > 0 ? .pass : .fail, delay > 0 ? L("%@：%@ ms", node, delay) : L("%@ 连不上", node))
         } else if usesEngine {
-            set("node", .warn, engine.isRunning ? "还没有选中的节点" : "内核没有运行")
+            set("node", .warn, engine.isRunning ? L("还没有选中的节点") : L("内核没有运行"))
         } else {
-            set("node", .skipped, "这条链路不经节点")
+            set("node", .skipped, L("这条链路不经节点"))
         }
         if Task.isCancelled { return facts }
 
@@ -592,7 +592,7 @@ final class Diagnoser: ObservableObject {
             let suffix = target.host.lowercased()
             let count = engine.shareConnections.filter { $0.host.lowercased() == suffix || $0.host.lowercased().hasSuffix("." + suffix) }.count
             facts.deviceRecentConnections = count
-            set("device", count > 0 ? .pass : .warn, count > 0 ? "最近有 \(count) 条设备对它的连接" : "最近没有设备对这个域名的连接（在设备上打开它，再看「最近的连接」）")
+            set("device", count > 0 ? .pass : .warn, count > 0 ? L("最近有 %@ 条设备对它的连接", count) : L("最近没有设备对这个域名的连接（在设备上打开它，再看「最近的连接」）"))
         }
         return facts
     }

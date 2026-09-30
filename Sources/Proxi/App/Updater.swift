@@ -65,14 +65,14 @@ final class Updater: ObservableObject {
 
     /// 没法在程序里更新的原因：只有不是从 .app 运行（开发时 swift run）才会这样。
     var installProblem: String? {
-        plan == nil ? "不是从 Proxi.app 运行的，没法在程序里更新" : nil
+        plan == nil ? L("不是从 Proxi.app 运行的，没法在程序里更新") : nil
     }
 
     /// 从下载文件夹这类临时位置运行时，更新会装进「应用程序」。
     var relocationNote: String? {
         guard let plan, plan.relocating else { return nil }
         let folder = InstallLocation.displayName(of: plan.target.deletingLastPathComponent())
-        return "现在是从下载文件夹这类临时位置运行的，这次会装进\(folder)" + (plan.trashAfter == nil ? "" : "，旧的那份移到废纸篓")
+        return L("现在是从下载文件夹这类临时位置运行的，这次会装进%@", folder) + (plan.trashAfter == nil ? "" : L("，旧的那份移到废纸篓"))
     }
 
     private func routes(for url: URL) -> [NetworkRoute] {
@@ -126,14 +126,14 @@ final class Updater: ObservableObject {
             phase = .available(latest)
             if !manual, UserDefaults.standard.string(forKey: Self.notifiedKey) != latest.version {
                 UserDefaults.standard.set(latest.version, forKey: Self.notifiedKey)
-                notify?("Proxi 有新版本 \(latest.version)", "点「立即更新」自动下载安装并重新启动，点通知本身查看更新内容")
+                notify?(L("Proxi 有新版本 %@", latest.version), L("点「立即更新」自动下载安装并重新启动，点通知本身查看更新内容"))
             }
             return latest
         } catch {
             Log.error("检查更新失败：\(error.localizedDescription)")
             phase = previous
             if manual {
-                checkError = "检查更新失败：\(error.localizedDescription)"
+                checkError = L("检查更新失败：%@", error.localizedDescription)
             }
             return nil
         }

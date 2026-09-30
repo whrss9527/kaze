@@ -124,9 +124,9 @@ enum ExitIPError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .unavailable: return "查不到出口 IP"
-        case .status(let code): return "查询出口 IP 的接口返回 \(code)"
-        case .unreadable: return "读不懂查询出口 IP 的结果"
+        case .unavailable: return L("查不到出口 IP")
+        case .status(let code): return L("查询出口 IP 的接口返回 %@", code)
+        case .unreadable: return L("读不懂查询出口 IP 的结果")
         }
     }
 }

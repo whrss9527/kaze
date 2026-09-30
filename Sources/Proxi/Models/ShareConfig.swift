@@ -61,11 +61,11 @@ struct ShareConfig: Codable, Equatable {
     /// 校验，返回问题；没问题返回 nil。
     func validate() -> String? {
         if port < 1024 || port > 65535 {
-            return "端口需要是 1024~65535 之间的数字"
+            return L("端口需要是 1024~65535 之间的数字")
         }
         let invalid = ShareConfig.parseClients(allowedClients).invalid
         if !invalid.isEmpty {
-            return "认不出这些地址：\(invalid.joined(separator: "、"))"
+            return L("认不出这些地址：%@", invalid.joined(separator: L("、")))
         }
         return nil
     }
@@ -123,13 +123,13 @@ enum ShareUpstream: Equatable {
                 case .http, .socks5:
                     self = .proxy(kind: profile.kind, host: profile.host, port: profile.port)
                 case .pac:
-                    self = .unsupported("本机用的是 PAC 脚本，没法转发给其他设备，共享的设备暂时直连")
+                    self = .unsupported(L("本机用的是 PAC 脚本，没法转发给其他设备，共享的设备暂时直连"))
                 }
             }
         case .external:
             // 别的程序设置的系统代理：PAC 优先于手动代理，和浏览器一致。
             if snapshot.pacActive {
-                self = .unsupported("系统代理是 PAC 脚本，没法转发给其他设备，共享的设备暂时直连")
+                self = .unsupported(L("系统代理是 PAC 脚本，没法转发给其他设备，共享的设备暂时直连"))
             } else if snapshot.httpActive {
                 self = .proxy(kind: .http, host: snapshot.httpHost, port: snapshot.httpPort)
             } else if snapshot.httpsActive {
@@ -145,20 +145,20 @@ enum ShareUpstream: Equatable {
     /// 设置页里「现在转发到」的文字。
     var title: String {
         switch self {
-        case .direct: return "直接连接（本机没开代理）"
-        case .engine: return "内置代理（和本机一样的节点和分流规则）"
+        case .direct: return L("直接连接（本机没开代理）")
+        case .engine: return L("内置代理（和本机一样的节点和分流规则）")
         case .proxy(let kind, let host, let port): return kind == .socks5 ? "socks5://\(host):\(port)" : "\(host):\(port)"
-        case .unsupported: return "直接连接（PAC 没法转发）"
+        case .unsupported: return L("直接连接（PAC 没法转发）")
         }
     }
 
     /// 面板里的一句话。
     var summary: String {
         switch self {
-        case .direct: return "设备经这台 Mac 直连"
-        case .engine: return "设备和本机一样走节点"
-        case .proxy(let kind, let host, let port): return "设备的流量转发到 \(kind == .socks5 ? "socks5://" : "")\(host):\(port)"
-        case .unsupported: return "PAC 没法转发，设备暂时直连"
+        case .direct: return L("设备经这台 Mac 直连")
+        case .engine: return L("设备和本机一样走节点")
+        case .proxy(let kind, let host, let port): return L("设备的流量转发到 %@%@:%@", kind == .socks5 ? "socks5://" : "", host, port)
+        case .unsupported: return L("PAC 没法转发，设备暂时直连")
         }
     }
 

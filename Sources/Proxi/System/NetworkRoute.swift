@@ -9,9 +9,9 @@ enum NetworkRoute: Equatable {
 
     var title: String {
         switch self {
-        case .core: return "内置代理"
-        case .system: return "系统代理"
-        case .direct: return "直连"
+        case .core: return L("内置代理")
+        case .system: return L("系统代理")
+        case .direct: return L("直连")
         }
     }
 

@@ -141,6 +141,13 @@ struct TrafficEntry: Identifiable, Equatable {
     var traffic: TrafficTotal
 
     var id: String { name }
+
+    /// 显示用的名字：内核里的组名、「本机其他」「设备 IP」这类统计的键换成界面语言。
+    var displayName: String {
+        if name == "本机其他" { return L("本机其他") }  // l10n-ignore
+        if name.hasPrefix("设备 ") { return L("设备 %@", String(name.dropFirst(3))) }  // l10n-ignore
+        return CoreConfigBuilder.displayName(name)
+    }
 }
 
 /// 把 /connections 的一次次快照变成每个出口新增的字节数：记住每条连接上次的累计值，只算差。

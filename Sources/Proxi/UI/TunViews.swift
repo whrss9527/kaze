@@ -8,7 +8,7 @@ struct HelperRow: View {
     @ObservedObject var helper: HelperManager
 
     var body: some View {
-        LabeledContent("特权助手") {
+        LabeledContent(L("特权助手")) {
             HStack(spacing: 8) {
                 if helper.busy {
                     ProgressView()
@@ -19,15 +19,15 @@ struct HelperRow: View {
                 case .unknown:
                     EmptyView()
                 case .notInstalled:
-                    Button("安装…") { Task { await helper.install() } }
+                    Button(L("安装…")) { Task { await helper.install() } }
                         .disabled(helper.busy)
                 case .notRunning, .outdated:
-                    Button("重新安装…") { Task { await helper.install() } }
+                    Button(L("重新安装…")) { Task { await helper.install() } }
                         .disabled(helper.busy)
                 case .ready:
-                    Menu("管理") {
-                        Button("重新安装（更新内核）…") { Task { await helper.install() } }
-                        Button("卸载…", role: .destructive) { Task { await helper.uninstall() } }
+                    Menu(L("管理")) {
+                        Button(L("重新安装（更新内核）…")) { Task { await helper.install() } }
+                        Button(L("卸载…"), role: .destructive) { Task { await helper.uninstall() } }
                     }
                     .fixedSize()
                     .disabled(helper.busy)
@@ -68,13 +68,13 @@ struct TunSection: View {
     @ObservedObject var helper: HelperManager
 
     var body: some View {
-        Section("增强模式（虚拟网卡）") {
-            Toggle("所有程序的流量都经过内置代理", isOn: Binding(get: { state.tun.enabled }, set: { state.setTunEnabled($0) }))
+        Section(L("增强模式（虚拟网卡）")) {
+            Toggle(L("所有程序的流量都经过内置代理"), isOn: Binding(get: { state.tun.enabled }, set: { state.setTunEnabled($0) }))
             HelperRow(helper: helper)
             if state.tun.enabled || state.tun.gateway {
-                LabeledContent("状态") { TunStatusView(state: state, engine: engine, helper: helper) }
+                LabeledContent(L("状态")) { TunStatusView(state: state, engine: engine, helper: helper) }
             }
-            Picker("协议栈", selection: Binding(get: { state.tun.stack }, set: { value in
+            Picker(L("协议栈"), selection: Binding(get: { state.tun.stack }, set: { value in
                 var tun = state.tun
                 tun.stack = value
                 state.setTun(tun)
@@ -92,10 +92,10 @@ struct TunSection: View {
                     Text(mode.title).tag(mode)
                 }
             }
-            Text("系统代理只管认它的程序；终端里的命令、游戏和一些应用不认，照样直连。增强模式开一块虚拟网卡接管这台 Mac 的全部流量（DNS 查询也交给内核），按同样的规则和节点走。只在本机开着内置代理时生效，关掉代理或者换成别的配置就自动停。")
+            Text(L("系统代理只管认它的程序；终端里的命令、游戏和一些应用不认，照样直连。增强模式开一块虚拟网卡接管这台 Mac 的全部流量（DNS 查询也交给内核），按同样的规则和节点走。只在本机开着内置代理时生效，关掉代理或者换成别的配置就自动停。"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            Text("虚拟网卡要管理员权限：第一次用时装一个特权助手（输一次密码），它只听你这个账户的话，只运行自己那份内核。「虚拟 IP」模式下 DNS 先回一个 198.18 开头的地址、连接时再按域名分流，不受本地 DNS 污染；个别程序不适应时换成「真实 IP」。")
+            Text(L("虚拟网卡要管理员权限：第一次用时装一个特权助手（输一次密码），它只听你这个账户的话，只运行自己那份内核。「虚拟 IP」模式下 DNS 先回一个 198.18 开头的地址、连接时再按域名分流，不受本地 DNS 污染；个别程序不适应时换成「真实 IP」。"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -143,23 +143,23 @@ struct GatewaySection: View {
     @State private var copied = false
 
     var body: some View {
-        Section("网关模式") {
-            Toggle("让设备把这台 Mac 当路由器", isOn: Binding(get: { state.tun.gateway }, set: { state.setGatewayEnabled($0) }))
+        Section(L("网关模式")) {
+            Toggle(L("让设备把这台 Mac 当路由器"), isOn: Binding(get: { state.tun.gateway }, set: { state.setGatewayEnabled($0) }))
             HelperRow(helper: helper)
             if state.tun.gateway {
-                LabeledContent("状态") { TunStatusView(state: state, engine: engine, helper: helper) }
+                LabeledContent(L("状态")) { TunStatusView(state: state, engine: engine, helper: helper) }
                 if let address = state.lanAddress {
-                    LabeledContent("路由器（网关）") { addressView(address.ip) }
+                    LabeledContent(L("路由器（网关）")) { addressView(address.ip) }
                     LabeledContent("DNS") { addressView(address.ip) }
                 } else {
-                    Text("这台 Mac 现在没有局域网地址")
+                    Text(L("这台 Mac 现在没有局域网地址"))
                         .foregroundStyle(.orange)
                 }
             }
-            Text("电视、游戏机、智能设备这类不能填代理、或者填了也有程序不走的设备，在网络设置里把 IP 改成手动（同一网段里一个空闲的地址，子网掩码和原来一样），「路由器」和 DNS 都填上面的地址，就经这台 Mac 上网。")
+            Text(L("电视、游戏机、智能设备这类不能填代理、或者填了也有程序不走的设备，在网络设置里把 IP 改成手动（同一网段里一个空闲的地址，子网掩码和原来一样），「路由器」和 DNS 都填上面的地址，就经这台 Mac 上网。"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            Text("设备跟着本机走：本机开着内置代理就用同样的节点和分流规则，本机用别的代理就转发给它，没开代理就直接上网；设备规则同样生效。这台 Mac 的地址最好在路由器里固定下来；开着 macOS 防火墙时要允许内核接受传入连接。要用到特权助手，和增强模式是同一个。")
+            Text(L("设备跟着本机走：本机开着内置代理就用同样的节点和分流规则，本机用别的代理就转发给它，没开代理就直接上网；设备规则同样生效。这台 Mac 的地址最好在路由器里固定下来；开着 macOS 防火墙时要允许内核接受传入连接。要用到特权助手，和增强模式是同一个。"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -178,7 +178,7 @@ struct GatewaySection: View {
                 Image(systemName: copied ? "checkmark" : "doc.on.doc")
             }
             .buttonStyle(.borderless)
-            .help("复制")
+            .help(L("复制"))
         }
     }
 }

@@ -83,7 +83,7 @@ struct ServiceCheckResult: Identifiable, Equatable {
     var summary: String {
         var parts: [String] = []
         switch status {
-        case .available: parts.append("可用")
+        case .available: parts.append(L("可用"))
         case .limited(let text): parts.append(text)
         case .blocked(let text): parts.append(text)
         case .failed(let text): parts.append(text)
@@ -106,39 +106,39 @@ enum ServiceClassifier {
             ServiceCheckResult(service: service, status: status, region: region, latency: latency ?? responses.first??.latency)
         }
         guard let first = responses.first ?? nil else {
-            return result(.failed("连不上"), latency: nil)
+            return result(.failed(L("连不上")), latency: nil)
         }
         switch service {
         case .google, .github, .telegram:
-            return (200..<400).contains(first.status) ? result(.available) : result(.failed("返回 \(first.status)"))
+            return (200..<400).contains(first.status) ? result(.available) : result(.failed(L("返回 %@", first.status)))
         case .youtube:
             let body = first.body
-            if body.contains("Premium is not available in your country") || body.contains("YouTube Premium 在您所在的国家/地区尚未推出") {
-                return result(.blocked("所在地区没有 Premium"), region: youtubeRegion(body))
+            if body.contains("Premium is not available in your country") || body.contains("YouTube Premium 在您所在的国家/地区尚未推出") {  // l10n-ignore：YouTube 返回的中文页面
+                return result(.blocked(L("所在地区没有 Premium")), region: youtubeRegion(body))
             }
-            guard first.status == 200 else { return result(.failed("返回 \(first.status)")) }
+            guard first.status == 200 else { return result(.failed(L("返回 %@", first.status))) }
             return result(.available, region: youtubeRegion(body))
         case .netflix:
             let licensed = first
             let original = responses.count > 1 ? responses[1] : nil
             let region = netflixRegion(licensed) ?? original.flatMap(netflixRegion)
             if licensed.status == 200 { return result(.available, region: region) }
-            if original?.status == 200 { return result(.limited("仅自制剧"), region: region) }
-            if licensed.status == 403 || original?.status == 403 { return result(.blocked("不提供服务")) }
-            return result(.failed("返回 \(licensed.status)"))
+            if original?.status == 200 { return result(.limited(L("仅自制剧")), region: region) }
+            if licensed.status == 403 || original?.status == 403 { return result(.blocked(L("不提供服务"))) }
+            return result(.failed(L("返回 %@", licensed.status)))
         case .chatgpt:
             let region = responses.count > 2 ? responses[2].flatMap { traceLocation($0.body) } : nil
-            if first.body.contains("unsupported_country") { return result(.blocked("地区不支持"), region: region) }
-            if responses.count > 1, let ios = responses[1], ios.body.contains("VPN") { return result(.blocked("识别为代理"), region: region) }
+            if first.body.contains("unsupported_country") { return result(.blocked(L("地区不支持")), region: region) }
+            if responses.count > 1, let ios = responses[1], ios.body.contains("VPN") { return result(.blocked(L("识别为代理")), region: region) }
             return result(.available, region: region)
         case .claude:
             let region = responses.count > 1 ? responses[1].flatMap { traceLocation($0.body) } : nil
-            if first.url.contains("app-unavailable-in-region") || first.url.contains("unavailable") { return result(.blocked("地区不支持"), region: region) }
-            if first.status == 403 { return result(.blocked("拒绝访问"), region: region) }
-            return (200..<400).contains(first.status) ? result(.available, region: region) : result(.failed("返回 \(first.status)"), region: region)
+            if first.url.contains("app-unavailable-in-region") || first.url.contains("unavailable") { return result(.blocked(L("地区不支持")), region: region) }
+            if first.status == 403 { return result(.blocked(L("拒绝访问")), region: region) }
+            return (200..<400).contains(first.status) ? result(.available, region: region) : result(.failed(L("返回 %@", first.status)), region: region)
         case .gemini:
-            if !first.url.contains("gemini.google.com") || first.url.contains("/faq") { return result(.blocked("地区不支持")) }
-            return first.status == 200 ? result(.available) : result(.failed("返回 \(first.status)"))
+            if !first.url.contains("gemini.google.com") || first.url.contains("/faq") { return result(.blocked(L("地区不支持"))) }
+            return first.status == 200 ? result(.available) : result(.failed(L("返回 %@", first.status)))
         }
     }
 

@@ -1,0 +1,3 @@
+/* 英文界面里 Info.plist 的文字（和 Info.plist 里写的一样）。 */
+"NSLocationUsageDescription" = "Switching by network needs to read the name of the connected Wi‑Fi, which macOS treats as location information. Proxi doesn't read or store your location.";
+"NSLocationWhenInUseUsageDescription" = "Switching by network needs to read the name of the connected Wi‑Fi, which macOS treats as location information. Proxi doesn't read or store your location.";

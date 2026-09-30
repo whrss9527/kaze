@@ -349,14 +349,14 @@ final class Engine: ObservableObject {
     /// 开启内置配置前确保内核在跑，而且加载了订阅（只为共享而跑的内核没有代理端口）。
     func ensureRunning() async throws {
         guard engineConfig.wantsCore else {
-            throw CoreRunnerError.notReady(engineConfig.enabled ? "还没有添加订阅" : "内置代理已停用")
+            throw CoreRunnerError.notReady(engineConfig.enabled ? L("还没有添加订阅") : L("内置代理已停用"))
         }
         if isRunning, coreProcessRunning, loadedMixedPort == engineConfig.mixedPort { return }
         reconcileTask?.cancel()
         await reconcile()
         guard isRunning else {
             if case .failed(let message) = status { throw CoreRunnerError.notReady(message) }
-            throw CoreRunnerError.notReady("内核没有启动")
+            throw CoreRunnerError.notReady(L("内核没有启动"))
         }
     }
 
@@ -412,12 +412,12 @@ final class Engine: ObservableObject {
             let tail = logTail.split(separator: "\n").suffix(3).joined(separator: " ")
             stopProcess()
             self.api = nil
-            throw CoreRunnerError.notReady(tail.isEmpty ? "没有响应" : tail)
+            throw CoreRunnerError.notReady(tail.isEmpty ? L("没有响应") : tail)
         }
         lastConfigText = text
         restartAttempts = 0
         status = .running(version)
-        let purpose = engineConfig.wantsCore ? "代理端口 \(engineConfig.mixedPort)" : (effectiveTun?.gateway == true ? "只用于网关模式" : "只用于局域网共享")
+        let purpose = engineConfig.wantsCore ? L("代理端口 %@", engineConfig.mixedPort) : (effectiveTun?.gateway == true ? L("只用于网关模式") : L("只用于局域网共享"))
         Log.info("内核已启动，版本 \(version)，" + purpose + (runningViaHelper ? "，经特权助手开着虚拟网卡" : ""))
         await syncForwarding()
         if let selected = engineConfig.selectedNode {
@@ -483,7 +483,7 @@ final class Engine: ObservableObject {
                 await self?.reconcile()
             }
         } else {
-            status = .failed("内核退出了（状态 \(code)）：\(logTail.split(separator: "\n").suffix(2).joined(separator: " "))")
+            status = .failed(L("内核退出了（状态 %@）：%@", code, logTail.split(separator: "\n").suffix(2).joined(separator: " ")))
             if shareInputs != nil, case .failed(let message) = status {
                 shareStatus = .failed(message)
             }
@@ -655,7 +655,7 @@ final class Engine: ObservableObject {
             Log.info(wanted ? "网关模式：已打开 IP 转发" : "网关模式：已关闭 IP 转发")
         } catch {
             Log.error("网关模式：\(error.localizedDescription)")
-            tunStatus = .failed("打不开 IP 转发：\(error.localizedDescription)")
+            tunStatus = .failed(L("打不开 IP 转发：%@", error.localizedDescription))
         }
     }
 
@@ -755,7 +755,7 @@ final class Engine: ObservableObject {
             }
             shareStatus = .listening(share.port)
         } else {
-            var detail = "可能被别的程序占用了"
+            var detail = L("可能被别的程序占用了")
             if let line = logTail.split(separator: "\n").last(where: { $0.contains(CoreConfigBuilder.shareListener) && $0.contains("err") }) {
                 var text = String(line)
                 if let range = text.range(of: "msg=") {
@@ -763,7 +763,7 @@ final class Engine: ObservableObject {
                 }
                 detail = text
             }
-            let message = "端口 \(share.port) 没有监听起来：\(detail)"
+            let message = L("端口 %@ 没有监听起来：%@", share.port, detail)
             shareStatus = .failed(message)
             Log.error("局域网共享出错：\(message)")
         }
@@ -875,7 +875,7 @@ final class Engine: ObservableObject {
             try await api.closeConnection(id)
             connections.removeAll { $0.id == id }
         } catch {
-            lastError = "断开连接失败：\(error.localizedDescription)"
+            lastError = L("断开连接失败：%@", error.localizedDescription)
         }
     }
 
@@ -887,7 +887,7 @@ final class Engine: ObservableObject {
             connections = []
             Log.info("已断开全部连接")
         } catch {
-            lastError = "断开连接失败：\(error.localizedDescription)"
+            lastError = L("断开连接失败：%@", error.localizedDescription)
         }
     }
 
@@ -982,7 +982,7 @@ final class Engine: ObservableObject {
         missingReferences = []
         switch engine.mode {
         case .global:
-            rulesInfo = "全局代理：除局域网和自定义规则外全部走节点"
+            rulesInfo = L("全局代理：除局域网和自定义规则外全部走节点")
             return (RuleConverter.globalRules, [])
         case .rule:
             var rules: [String] = []
@@ -1020,11 +1020,11 @@ final class Engine: ObservableObject {
             }
             let final = engine.finalPolicy?.resolved(groups: groups) ?? fileFinal ?? RuleConverter.proxyGroup
             rules.append("MATCH,\(final)")
-            var info = active.isEmpty ? "没有启用的规则集" : "\(active.count) 个规则集"
-            if !providers.isEmpty { info += "，\(providers.count) 个由内核加载" }
-            if inlineCount > 0 { info += "，\(inlineCount) 条已转换" }
-            info += "；其余流量\(RuleTarget.title(forCorePolicy: final))"
-            if !pending.isEmpty { info += "。「\(pending.joined(separator: "」「"))」还没下载下来，先跳过，下好了自动生效" }
+            var info = active.isEmpty ? L("没有启用的规则集") : L("%@ 个规则集", active.count)
+            if !providers.isEmpty { info += L("，%@ 个由内核加载", providers.count) }
+            if inlineCount > 0 { info += L("，%@ 条已转换", inlineCount) }
+            info += L("；其余流量%@", RuleTarget.title(forCorePolicy: final))
+            if !pending.isEmpty { info += L("。「%@」还没下载下来，先跳过，下好了自动生效", pending.joined(separator: L("」「"))) }
             rulesInfo = info
             return (rules, providers)
         }
@@ -1053,7 +1053,7 @@ final class Engine: ObservableObject {
             setProblem(nil, for: set.id)
             return file
         } catch {
-            setProblem("读不了本机文件：\(error.localizedDescription)", for: set.id)
+            setProblem(L("读不了本机文件：%@", error.localizedDescription), for: set.id)
             return nil
         }
     }
@@ -1081,7 +1081,7 @@ final class Engine: ObservableObject {
             return true
         } catch {
             lastDownloadFailure[set.url] = Date()
-            setProblem("下载失败：\(error.localizedDescription)", for: set.id)
+            setProblem(L("下载失败：%@", error.localizedDescription), for: set.id)
             Log.error("下载规则「\(set.name)」失败：\(error.localizedDescription)")
             return false
         }
@@ -1161,7 +1161,7 @@ final class Engine: ObservableObject {
         }
         var warnings: [String] = []
         if converted.skipped > 0 {
-            warnings.append("跳过了 \(converted.skipped) 条内核不支持的规则")
+            warnings.append(L("跳过了 %@ 条内核不支持的规则", converted.skipped))
         }
         var ruleSetRules: [String: [String]] = [:]
         var pendingReferences = 0
@@ -1175,7 +1175,7 @@ final class Engine: ObservableObject {
             }
         }
         if pendingReferences > 0 {
-            warnings.append("\(pendingReferences) 个引用的规则集还没下载下来")
+            warnings.append(L("%@ 个引用的规则集还没下载下来", pendingReferences))
         }
         let merged = RuleConverter.merge(converted, ruleSetRules: ruleSetRules)
         let final = merged.last(where: { $0.hasPrefix("MATCH,") }).map { String($0.dropFirst("MATCH,".count)) }
@@ -1187,8 +1187,8 @@ final class Engine: ObservableObject {
         var entry = ruleSetStatus[set.id] ?? RuleSetStatus()
         entry.count = result.rules.count
         entry.updatedAt = RuleStore.modificationDate(of: file)
-        if entry.problem == nil || entry.problem?.hasPrefix("下载失败") == false {
-            entry.problem = warnings.isEmpty ? nil : warnings.joined(separator: "，")
+        if entry.problem == nil || entry.problem?.hasPrefix(L("下载失败")) == false {
+            entry.problem = warnings.isEmpty ? nil : warnings.joined(separator: L("，"))
         }
         ruleSetStatus[set.id] = entry
         return result
@@ -1290,7 +1290,7 @@ final class Engine: ObservableObject {
             if !engine.activeManualNodes.isEmpty {
                 let manual = providers[ManualNode.providerName]?.proxies ?? []
                 for proxy in manual {
-                    list.append(Node(name: proxy.name, type: proxy.type, delay: proxy.lastDelay, subscription: "手动节点", source: ManualNode.sourceID, provider: ManualNode.providerName))
+                    list.append(Node(name: proxy.name, type: proxy.type, delay: proxy.lastDelay, subscription: L("手动节点"), source: ManualNode.sourceID, provider: ManualNode.providerName))
                 }
                 if manualNodeCount != manual.count {
                     manualNodeCount = manual.count
@@ -1344,7 +1344,7 @@ final class Engine: ObservableObject {
             await refresh()
             Log.info("已切换到节点：\(target)")
         } catch {
-            lastError = "切换节点失败：\(error.localizedDescription)"
+            lastError = L("切换节点失败：%@", error.localizedDescription)
         }
     }
 
@@ -1356,7 +1356,7 @@ final class Engine: ObservableObject {
             await refresh()
             Log.info("策略组「\(group)」切换到：\(member)")
         } catch {
-            lastError = "切换策略组失败：\(error.localizedDescription)"
+            lastError = L("切换策略组失败：%@", error.localizedDescription)
         }
     }
 
@@ -1469,7 +1469,7 @@ final class Engine: ObservableObject {
         let group = Self.cleaned(draft)
         if let problem = PolicyGroup.validateAdvanced(group, all: engine.groups + [group]) { return problem }
         if nodes.contains(where: { $0.name.caseInsensitiveCompare(group.name) == .orderedSame }) {
-            return "有个节点也叫「\(group.name)」，换一个名字"
+            return L("有个节点也叫「%@」，换一个名字", group.name)
         }
         engine.groups.append(group)
         writeEngine?(engine)
@@ -1499,7 +1499,7 @@ final class Engine: ObservableObject {
     @discardableResult
     func saveGroup(_ group: PolicyGroup) -> String? {
         var engine = engineConfig
-        guard let index = engine.groups.firstIndex(where: { $0.id == group.id }) else { return "这个策略组已经不存在了" }
+        guard let index = engine.groups.firstIndex(where: { $0.id == group.id }) else { return L("这个策略组已经不存在了") }
         let others = engine.groups.filter { $0.id != group.id }
         if let problem = PolicyGroup.validate(name: group.name, filter: group.filter, others: others) { return problem }
         let old = engine.groups[index]
@@ -1513,7 +1513,7 @@ final class Engine: ObservableObject {
         }
         if let problem = PolicyGroup.validateAdvanced(renamedMembers[index], all: renamedMembers) { return problem }
         if old.name != updated.name, nodes.contains(where: { $0.name.caseInsensitiveCompare(updated.name) == .orderedSame }) {
-            return "有个节点也叫「\(updated.name)」，换一个名字"
+            return L("有个节点也叫「%@」，换一个名字", updated.name)
         }
         engine.groups[index] = renamedMembers[index]
         if old.name != updated.name {
@@ -1550,7 +1550,7 @@ final class Engine: ObservableObject {
         let trimmedURL = url.trimmingCharacters(in: .whitespacesAndNewlines)
         if let problem = RuleSet.validate(url: trimmedURL) { return problem }
         var engine = engineConfig
-        if engine.ruleSets.contains(where: { $0.url == trimmedURL }) { return "这个规则已经在列表里了" }
+        if engine.ruleSets.contains(where: { $0.url == trimmedURL }) { return L("这个规则已经在列表里了") }
         let set: RuleSet
         if trimmedURL == RuleSet.chinaDirectURL {
             set = RuleSet.chinaDirect()
@@ -1653,7 +1653,7 @@ final class Engine: ObservableObject {
         if let problem = Subscription.validate(url: url) { return problem }
         var engine = engineConfig
         let trimmedName = name.trimmingCharacters(in: .whitespaces)
-        engine.subscriptions.append(Subscription(name: trimmedName.isEmpty ? "订阅 \(engine.subscriptions.count + 1)" : trimmedName, url: url.trimmingCharacters(in: .whitespacesAndNewlines)))
+        engine.subscriptions.append(Subscription(name: trimmedName.isEmpty ? L("订阅 %@", engine.subscriptions.count + 1) : trimmedName, url: url.trimmingCharacters(in: .whitespacesAndNewlines)))
         writeEngine?(engine)
         return nil
     }
@@ -1684,7 +1684,7 @@ final class Engine: ObservableObject {
             await refresh()
             Log.info("订阅「\(subscription.name)」已更新")
         } catch {
-            lastError = "更新订阅「\(subscription.name)」失败：\(error.localizedDescription)"
+            lastError = L("更新订阅「%@」失败：%@", subscription.name, error.localizedDescription)
         }
         updatingSubscription = nil
     }
@@ -1708,7 +1708,7 @@ final class Engine: ObservableObject {
         let dialer = subscription.dialer?.trimmingCharacters(in: .whitespaces)
         if let dialer, !dialer.isEmpty, let problem = validateDialer(dialer, provider: subscription.providerName) { return problem }
         var engine = engineConfig
-        guard let index = engine.subscriptions.firstIndex(where: { $0.id == subscription.id }) else { return "这条订阅已经不存在了" }
+        guard let index = engine.subscriptions.firstIndex(where: { $0.id == subscription.id }) else { return L("这条订阅已经不存在了") }
         var updated = engine.subscriptions[index]
         let name = subscription.name.trimmingCharacters(in: .whitespaces)
         if !name.isEmpty {
@@ -1729,17 +1729,17 @@ final class Engine: ObservableObject {
     func validateDialer(_ reference: String, provider: String) -> String? {
         let engine = engineConfig
         if let id = DialerReference.profileID(reference) {
-            guard let profile = readConfig().profiles.first(where: { $0.id == id }) else { return "这个代理配置已经不存在了" }
-            return DialerReference.usable(profile) ? nil : "只有 HTTP 或 SOCKS5 代理能当前置"
+            guard let profile = readConfig().profiles.first(where: { $0.id == id }) else { return L("这个代理配置已经不存在了") }
+            return DialerReference.usable(profile) ? nil : L("只有 HTTP 或 SOCKS5 代理能当前置")
         }
         if CoreConfigBuilder.dialerLoops(reference, provider: provider, engine: engine) {
-            return "「\(reference)」里有这个来源自己的节点，会绕回自己：选只用别的订阅的自动类策略组、别的订阅里的节点，或者配置列表里的代理"
+            return L("「%@」里有这个来源自己的节点，会绕回自己：选只用别的订阅的自动类策略组、别的订阅里的节点，或者配置列表里的代理", reference)
         }
         if engine.groups.contains(where: { $0.name == reference }) { return nil }
         if let node = nodes.first(where: { $0.name == reference }) {
-            return node.provider == provider ? "不能用这个来源自己的节点当前置" : nil
+            return node.provider == provider ? L("不能用这个来源自己的节点当前置") : nil
         }
-        return nodes.isEmpty ? nil : "没有叫「\(reference)」的节点或策略组"
+        return nodes.isEmpty ? nil : L("没有叫「%@」的节点或策略组", reference)
     }
 
     /// 前置代理的候选：配置列表里的 HTTP / SOCKS5 代理、不会绕回的策略组、别的来源的节点。
@@ -1747,13 +1747,13 @@ final class Engine: ObservableObject {
         let engine = engineConfig
         var result: [DialerCandidate] = []
         for profile in readConfig().profiles where DialerReference.usable(profile) {
-            result.append(DialerCandidate(value: DialerReference.profile(profile.id), title: "代理「\(profile.name)」 \(profile.summary)"))
+            result.append(DialerCandidate(value: DialerReference.profile(profile.id), title: L("代理「%@」 %@", profile.name, profile.summary)))
         }
         for group in engine.groups where !CoreConfigBuilder.dialerLoops(group.name, provider: provider, engine: engine) {
-            result.append(DialerCandidate(value: group.name, title: "策略组「\(group.name)」"))
+            result.append(DialerCandidate(value: group.name, title: L("策略组「%@」", group.name)))
         }
         for node in nodes where node.provider != provider {
-            result.append(DialerCandidate(value: node.name, title: "节点 \(node.name)（\(node.subscription)）"))
+            result.append(DialerCandidate(value: node.name, title: L("节点 %@（%@）", node.name, node.subscription)))
         }
         return result
     }
@@ -1765,7 +1765,7 @@ final class Engine: ObservableObject {
     func addManualNodes(from text: String) -> (added: Int, problem: String?) {
         let links = NodeLink.extract(text)
         guard !links.isEmpty else {
-            return (0, "没有认出节点链接：支持 ss://、ssr://、vmess://、vless://、trojan://、hysteria2://、tuic://、anytls:// 和带账号的 http:// / socks5://")
+            return (0, L("没有认出节点链接：支持 ss://、ssr://、vmess://、vless://、trojan://、hysteria2://、tuic://、anytls:// 和带账号的 http:// / socks5://"))
         }
         var engine = engineConfig
         var added = 0
@@ -1773,7 +1773,7 @@ final class Engine: ObservableObject {
             engine.manualNodes.append(ManualNode(link: link))
             added += 1
         }
-        guard added > 0 else { return (0, "这些节点已经加过了") }
+        guard added > 0 else { return (0, L("这些节点已经加过了")) }
         writeEngine?(engine)
         Log.info("添加了 \(added) 个手动节点")
         return (added, nil)
@@ -1844,9 +1844,9 @@ final class Engine: ObservableObject {
             let composed = composeRules(engine)
             let input = CoreConfigBuilder.Input(engine: engine, secret: secret, directory: Self.directory, testURL: config.testURL, rules: composed.rules, share: shareInputs, ruleProviders: composed.providers, profiles: config.profiles, probePort: probePort)
             let built = CoreConfigBuilder.build(input)
-            if let problem = built.patchProblem { return "补丁有问题：\(problem)" }
+            if let problem = built.patchProblem { return L("补丁有问题：%@", problem) }
             try? prepareDirectory()
-            if let problem = await Self.testConfig(built.text) { return "内核不认合并后的配置：\(problem)" }
+            if let problem = await Self.testConfig(built.text) { return L("内核不认合并后的配置：%@", problem) }
             checkedPatch = (built.text, nil)
         }
         writeEngine?(engine)
@@ -1895,7 +1895,7 @@ final class Engine: ObservableObject {
                 try await api.select(group: CoreConfigBuilder.probeGroup, node: node)
                 port = probePort
             } catch {
-                lastError = "切换检测用的节点失败：\(error.localizedDescription)"
+                lastError = L("切换检测用的节点失败：%@", error.localizedDescription)
                 return
             }
         }
@@ -1982,7 +1982,7 @@ final class Engine: ObservableObject {
 
     nonisolated static func relative(_ date: Date) -> String {
         let formatter = RelativeDateTimeFormatter()
-        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.locale = AppLanguage.locale
         formatter.unitsStyle = .short
         return formatter.localizedString(for: date, relativeTo: Date())
     }
@@ -1995,8 +1995,8 @@ final class Engine: ObservableObject {
     nonisolated static func durationText(since date: Date?) -> String {
         guard let date else { return "" }
         let seconds = Int(Date().timeIntervalSince(date))
-        if seconds < 60 { return "\(max(0, seconds)) 秒" }
-        if seconds < 3600 { return "\(seconds / 60) 分钟" }
-        return "\(seconds / 3600) 小时 \(seconds % 3600 / 60) 分"
+        if seconds < 60 { return L("%@ 秒", max(0, seconds)) }
+        if seconds < 3600 { return L("%@ 分钟", seconds / 60) }
+        return L("%@ 小时 %@ 分", seconds / 3600, seconds % 3600 / 60)
     }
 }

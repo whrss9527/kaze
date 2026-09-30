@@ -20,7 +20,7 @@ struct ConvertedRules: Equatable {
 /// 支持 [Rule] 段、Clash 的 rules: / payload: 列表，以及 Surge 的 .list 规则集（没有策略字段，用默认策略）。
 enum RuleConverter {
     /// 所有「走代理」的策略都指到这个组。
-    static let proxyGroup = "节点"
+    static let proxyGroup = "节点"  // l10n-ignore：内核配置里的名字，界面上用 displayName
 
     /// 内置规则集展开成的规则；不是内置地址返回 nil。
     static func builtinRules(url: String, policy: String) -> [String]? {
@@ -362,9 +362,9 @@ enum RuleConverter {
             return group
         }
         switch trimmed.uppercased() {
-        case "DIRECT", "直连", "直接连接":
+        case "DIRECT", "直连", "直接连接":  // l10n-ignore：配置文件里的写法
             return "DIRECT"
-        case "REJECT", "REJECT-DROP", "REJECT-NO-DROP", "REJECT-TINYGIF", "REJECT-IMG", "REJECT-DICT", "REJECT-ARRAY", "REJECT-200", "BLOCK", "拒绝", "广告", "AD", "ADBLOCK":
+        case "REJECT", "REJECT-DROP", "REJECT-NO-DROP", "REJECT-TINYGIF", "REJECT-IMG", "REJECT-DICT", "REJECT-ARRAY", "REJECT-200", "BLOCK", "拒绝", "广告", "AD", "ADBLOCK":  // l10n-ignore：配置文件里的写法
             return "REJECT"
         default:
             return proxyGroup

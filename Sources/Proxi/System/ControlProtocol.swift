@@ -46,129 +46,132 @@ struct ControlTool {
 
 /// 全部的工具。
 enum ControlCatalog {
-    static let policyHelp = "去向：proxy（走节点）、direct（直连）、reject（拦截），或者策略组的名字"
+    static let policyHelp = L("去向：proxy（走节点）、direct（直连）、reject（拦截），或者策略组的名字")
 
     static let tools: [ControlTool] = [
         // 查看
-        ControlTool(name: "get_status", title: "查看状态", description: "查看代理现在的状态：开没开、用的哪个配置、内置代理的节点和模式、局域网共享、出口 IP。做任何操作前先看一下。", permission: .readOnly),
-        ControlTool(name: "list_profiles", title: "代理配置", description: "列出所有代理配置（内置代理、公司代理、别的代理软件等），开启时用配置名。", permission: .readOnly),
-        ControlTool(name: "list_nodes", title: "节点", description: "列出内置代理的节点和延迟（毫秒，0 是超时），收藏的在前。", permission: .readOnly, parameters: [
-            ControlParameter(name: "filter", kind: .string, description: "只列出名字里有这个词的节点"),
-            ControlParameter(name: "limit", kind: .integer, description: "最多列出多少个，默认 200"),
+        ControlTool(name: "get_status", title: L("查看状态"), description: L("查看代理现在的状态：开没开、用的哪个配置、内置代理的节点和模式、局域网共享、出口 IP。做任何操作前先看一下。"), permission: .readOnly),
+        ControlTool(name: "list_profiles", title: L("代理配置"), description: L("列出所有代理配置（内置代理、公司代理、别的代理软件等），开启时用配置名。"), permission: .readOnly),
+        ControlTool(name: "list_nodes", title: L("节点‖列表"), description: L("列出内置代理的节点和延迟（毫秒，0 是超时），收藏的在前。"), permission: .readOnly, parameters: [
+            ControlParameter(name: "filter", kind: .string, description: L("只列出名字里有这个词的节点")),
+            ControlParameter(name: "limit", kind: .integer, description: L("最多列出多少个，默认 200")),
         ]),
-        ControlTool(name: "list_groups", title: "策略组", description: "列出策略组、它们现在用的成员和全部候选。", permission: .readOnly),
-        ControlTool(name: "list_rules", title: "分流规则", description: "列出自定义规则、规则集和其余流量的去向。规则的匹配顺序：局域网直连 → 自定义规则 → 规则集（按顺序）→ 其余流量。", permission: .readOnly),
-        ControlTool(name: "list_subscriptions", title: "订阅", description: "列出订阅、手动节点和它们的节点数、流量、到期时间。", permission: .readOnly),
-        ControlTool(name: "list_connections", title: "连接", description: "列出现在开着的和最近的连接：谁访问了什么、走了哪个节点、命中了哪条规则。", permission: .readOnly, parameters: [
-            ControlParameter(name: "filter", kind: .string, description: "按域名、程序、规则或节点筛选"),
-            ControlParameter(name: "limit", kind: .integer, description: "最多列出多少条，默认 50"),
+        ControlTool(name: "list_groups", title: L("策略组"), description: L("列出策略组、它们现在用的成员和全部候选。"), permission: .readOnly),
+        ControlTool(name: "list_rules", title: L("分流规则"), description: L("列出自定义规则、规则集和其余流量的去向。规则的匹配顺序：局域网直连 → 自定义规则 → 规则集（按顺序）→ 其余流量。"), permission: .readOnly),
+        ControlTool(name: "list_subscriptions", title: L("订阅‖列表"), description: L("列出订阅、手动节点和它们的节点数、流量、到期时间。"), permission: .readOnly),
+        ControlTool(name: "list_connections", title: L("连接"), description: L("列出现在开着的和最近的连接：谁访问了什么、走了哪个节点、命中了哪条规则。"), permission: .readOnly, parameters: [
+            ControlParameter(name: "filter", kind: .string, description: L("按域名、程序、规则或节点筛选")),
+            ControlParameter(name: "limit", kind: .integer, description: L("最多列出多少条，默认 50")),
         ]),
-        ControlTool(name: "get_traffic", title: "流量统计", description: "按节点、按程序和设备、按天累计的流量。", permission: .readOnly),
-        ControlTool(name: "get_logs", title: "日志", description: "Proxi 和内核最近的日志，排查问题用。", permission: .readOnly, parameters: [
-            ControlParameter(name: "lines", kind: .integer, description: "多少行，默认 80"),
+        ControlTool(name: "get_traffic", title: L("流量统计"), description: L("按节点、按程序和设备、按天累计的流量。"), permission: .readOnly),
+        ControlTool(name: "get_logs", title: L("日志"), description: L("Proxi 和内核最近的日志，排查问题用。"), permission: .readOnly, parameters: [
+            ControlParameter(name: "lines", kind: .integer, description: L("多少行，默认 80")),
         ]),
-        ControlTool(name: "diagnose_url", title: "网址诊断", description: "诊断一个网址为什么打不开：经内核访问一次，看命中了哪条规则、走了哪个出口、有没有出错，并给出结论。", permission: .readOnly, parameters: [
-            ControlParameter(name: "url", kind: .string, description: "网址或域名，比如 https://www.youtube.com", required: true),
+        ControlTool(name: "diagnose_url", title: L("网址诊断"), description: L("诊断一个网址为什么打不开：经内核访问一次，看命中了哪条规则、走了哪个出口、有没有出错，并给出结论。"), permission: .readOnly, parameters: [
+            ControlParameter(name: "url", kind: .string, description: L("网址或域名，比如 https://www.youtube.com"), required: true),
         ]),
-        ControlTool(name: "export_config", title: "导出配置", description: "导出配置：describe 是 Proxi 的配置描述（JSON，可以改了再用 import_config 导入）；backup 是完整备份；core 是生成的内核配置（YAML，去掉了密钥）。", permission: .readOnly, parameters: [
-            ControlParameter(name: "format", kind: .string, description: "导出的格式，默认 describe", choices: ["describe", "backup", "core"]),
+        ControlTool(name: "export_config", title: L("导出配置"), description: L("导出配置：describe 是 Proxi 的配置描述（JSON，可以改了再用 import_config 导入）；backup 是完整备份；core 是生成的内核配置（YAML，去掉了密钥）。"), permission: .readOnly, parameters: [
+            ControlParameter(name: "format", kind: .string, description: L("导出的格式，默认 describe"), choices: ["describe", "backup", "core"]),
         ]),
-        ControlTool(name: "preview_import", title: "预览导入", description: "预览导入会改动什么，不会真的改。内容可以是 Proxi 的配置描述（JSON）、Clash / mihomo 的 YAML、Surge / 小火箭 / Quantumult X 的配置、节点链接或规则列表；也可以给网址。", permission: .readOnly, parameters: [
-            ControlParameter(name: "content", kind: .string, description: "配置内容"),
-            ControlParameter(name: "url", kind: .string, description: "配置的网址（给了 content 就不用）"),
+        ControlTool(name: "preview_import", title: L("预览导入"), description: L("预览导入会改动什么，不会真的改。内容可以是 Proxi 的配置描述（JSON）、Clash / mihomo 的 YAML、Surge / 小火箭 / Quantumult X 的配置、节点链接或规则列表；也可以给网址。"), permission: .readOnly, parameters: [
+            ControlParameter(name: "content", kind: .string, description: L("配置内容")),
+            ControlParameter(name: "url", kind: .string, description: L("配置的网址（给了 content 就不用）")),
         ]),
-        ControlTool(name: "list_changes", title: "操作记录", description: "经这个接口做过的操作，最新的在前；能撤销的会标出来。", permission: .readOnly),
+        ControlTool(name: "list_changes", title: L("操作记录"), description: L("经这个接口做过的操作，最新的在前；能撤销的会标出来。"), permission: .readOnly),
         // 日常操作
-        ControlTool(name: "turn_on", title: "开启代理", description: "开启代理。不写配置名时开上次用的配置。", permission: .operate, parameters: [
-            ControlParameter(name: "profile", kind: .string, description: "配置名，比如「节点代理」"),
+        ControlTool(name: "turn_on", title: L("开启代理"), description: L("开启代理。不写配置名时开上次用的配置。"), permission: .operate, parameters: [
+            ControlParameter(name: "profile", kind: .string, description: L("配置名，比如「节点代理」")),
         ]),
-        ControlTool(name: "turn_off", title: "关闭代理", description: "关闭代理。", permission: .operate),
-        ControlTool(name: "toggle", title: "开关代理", description: "开着就关，关着就开。", permission: .operate),
-        ControlTool(name: "select_node", title: "切换节点", description: "给「节点」组选一个节点；auto 表示自动选择延迟最低的。", permission: .operate, parameters: [
-            ControlParameter(name: "name", kind: .string, description: "节点名（可以只写一部分，唯一匹配时生效），或者 auto", required: true),
+        ControlTool(name: "turn_off", title: L("关闭代理"), description: L("关闭代理。"), permission: .operate),
+        ControlTool(name: "toggle", title: L("开关代理"), description: L("开着就关，关着就开。"), permission: .operate),
+        ControlTool(name: "select_node", title: L("切换节点"), description: L("给「节点」组选一个节点；auto 表示自动选择延迟最低的。"), permission: .operate, parameters: [
+            ControlParameter(name: "name", kind: .string, description: L("节点名（可以只写一部分，唯一匹配时生效），或者 auto"), required: true),
         ]),
-        ControlTool(name: "select_group", title: "切换策略组", description: "给某个策略组选成员。", permission: .operate, parameters: [
-            ControlParameter(name: "group", kind: .string, description: "策略组名", required: true),
-            ControlParameter(name: "member", kind: .string, description: "成员名：节点、「节点」「自动选择」、DIRECT 或别的组", required: true),
+        ControlTool(name: "select_group", title: L("切换策略组"), description: L("给某个策略组选成员。"), permission: .operate, parameters: [
+            ControlParameter(name: "group", kind: .string, description: L("策略组名"), required: true),
+            ControlParameter(name: "member", kind: .string, description: L("成员名：节点、「节点」「自动选择」、DIRECT 或别的组"), required: true),
         ]),
-        ControlTool(name: "set_mode", title: "切换模式", description: "规则分流（rule）或全局代理（global）。", permission: .operate, parameters: [
-            ControlParameter(name: "mode", kind: .string, description: "模式", required: true, choices: ["rule", "global"]),
+        ControlTool(name: "set_mode", title: L("切换模式"), description: L("规则分流（rule）或全局代理（global）。"), permission: .operate, parameters: [
+            ControlParameter(name: "mode", kind: .string, description: L("模式"), required: true, choices: ["rule", "global"]),
         ]),
-        ControlTool(name: "test_nodes", title: "测速", description: "测节点的延迟，返回每个节点的毫秒数（0 是超时）。", permission: .operate, parameters: [
-            ControlParameter(name: "filter", kind: .string, description: "只测名字里有这个词的节点；不写就测全部"),
+        ControlTool(name: "test_nodes", title: L("测速"), description: L("测节点的延迟，返回每个节点的毫秒数（0 是超时）。"), permission: .operate, parameters: [
+            ControlParameter(name: "filter", kind: .string, description: L("只测名字里有这个词的节点；不写就测全部")),
         ]),
-        ControlTool(name: "check_services", title: "服务检测", description: "检测 Google、YouTube Premium、Netflix、ChatGPT、Claude、Gemini、GitHub、Telegram 经节点能不能用、服务看到的地区。不写节点时用现在的节点；写了节点时临时经它检测，不影响正在用的。", permission: .operate, parameters: [
-            ControlParameter(name: "node", kind: .string, description: "节点名"),
+        ControlTool(name: "check_services", title: L("服务检测"), description: L("检测 Google、YouTube Premium、Netflix、ChatGPT、Claude、Gemini、GitHub、Telegram 经节点能不能用、服务看到的地区。不写节点时用现在的节点；写了节点时临时经它检测，不影响正在用的。"), permission: .operate, parameters: [
+            ControlParameter(name: "node", kind: .string, description: L("节点名")),
         ]),
-        ControlTool(name: "update_subscriptions", title: "更新订阅", description: "重新下载全部订阅。", permission: .operate),
-        ControlTool(name: "update_rule_sets", title: "更新规则", description: "重新下载全部规则集。", permission: .operate),
-        ControlTool(name: "close_connections", title: "断开连接", description: "断开一条连接（给 id）或者全部连接。", permission: .operate, parameters: [
-            ControlParameter(name: "id", kind: .string, description: "连接的 id；不写就断开全部"),
+        ControlTool(name: "update_subscriptions", title: L("更新订阅"), description: L("重新下载全部订阅。"), permission: .operate),
+        ControlTool(name: "update_rule_sets", title: L("更新规则"), description: L("重新下载全部规则集。"), permission: .operate),
+        ControlTool(name: "close_connections", title: L("断开连接"), description: L("断开一条连接（给 id）或者全部连接。"), permission: .operate, parameters: [
+            ControlParameter(name: "id", kind: .string, description: L("连接的 id；不写就断开全部")),
         ]),
-        ControlTool(name: "set_share", title: "局域网共享", description: "开关局域网共享（让 PS5、手机等设备把这台 Mac 当代理）。", permission: .operate, parameters: [
-            ControlParameter(name: "enabled", kind: .boolean, description: "开还是关", required: true),
+        ControlTool(name: "set_share", title: L("局域网共享"), description: L("开关局域网共享（让 PS5、手机等设备把这台 Mac 当代理）。"), permission: .operate, parameters: [
+            ControlParameter(name: "enabled", kind: .boolean, description: L("开还是关"), required: true),
         ]),
-        ControlTool(name: "set_tun", title: "增强模式", description: "开关增强模式（虚拟网卡）：本机开着内置代理时，不认系统代理的程序（终端、游戏、部分应用）的流量也经过内核，DNS 也交给内核。要先在设置的「高级」页装特权助手（要管理员密码，只能由用户自己装）。", permission: .operate, parameters: [
-            ControlParameter(name: "enabled", kind: .boolean, description: "开还是关", required: true),
+        ControlTool(name: "set_tun", title: L("增强模式"), description: L("开关增强模式（虚拟网卡）：本机开着内置代理时，不认系统代理的程序（终端、游戏、部分应用）的流量也经过内核，DNS 也交给内核。要先在设置的「高级」页装特权助手（要管理员密码，只能由用户自己装）。"), permission: .operate, parameters: [
+            ControlParameter(name: "enabled", kind: .boolean, description: L("开还是关"), required: true),
         ]),
-        ControlTool(name: "set_gateway", title: "网关模式", description: "开关网关模式：局域网设备把「路由器」和 DNS 设成这台 Mac，就能用上和本机一样的网络，不用在设备上填代理。要先装特权助手。", permission: .operate, parameters: [
-            ControlParameter(name: "enabled", kind: .boolean, description: "开还是关", required: true),
+        ControlTool(name: "set_gateway", title: L("网关模式"), description: L("开关网关模式：局域网设备把「路由器」和 DNS 设成这台 Mac，就能用上和本机一样的网络，不用在设备上填代理。要先装特权助手。"), permission: .operate, parameters: [
+            ControlParameter(name: "enabled", kind: .boolean, description: L("开还是关"), required: true),
         ]),
         // 改配置
-        ControlTool(name: "add_rule", title: "加规则", description: "加一条自定义规则（最先匹配）。同样的规则已经有了就改它的去向。", permission: .full, parameters: [
-            ControlParameter(name: "value", kind: .string, description: "匹配的内容：域名、IP、应用路径、设备 IP、端口……", required: true),
+        ControlTool(name: "add_rule", title: L("加规则"), description: L("加一条自定义规则（最先匹配）。同样的规则已经有了就改它的去向。"), permission: .full, parameters: [
+            ControlParameter(name: "value", kind: .string, description: L("匹配的内容：域名、IP、应用路径、设备 IP、端口……"), required: true),
             ControlParameter(name: "policy", kind: .string, description: policyHelp, required: true),
-            ControlParameter(name: "type", kind: .string, description: "类型，默认 auto（域名或 IP 自动判断）", choices: CustomRuleKind.allCases.map(\.rawValue)),
+            ControlParameter(name: "type", kind: .string, description: L("类型，默认 auto（域名或 IP 自动判断）"), choices: CustomRuleKind.allCases.map(\.rawValue)),
         ]),
-        ControlTool(name: "remove_rule", title: "删规则", description: "删掉自定义规则：按内容匹配（或者给 id）。", permission: .full, parameters: [
-            ControlParameter(name: "value", kind: .string, description: "规则的内容"),
-            ControlParameter(name: "id", kind: .string, description: "规则的 id"),
+        ControlTool(name: "remove_rule", title: L("删规则"), description: L("删掉自定义规则：按内容匹配（或者给 id）。"), permission: .full, parameters: [
+            ControlParameter(name: "value", kind: .string, description: L("规则的内容")),
+            ControlParameter(name: "id", kind: .string, description: L("规则的 id")),
         ]),
-        ControlTool(name: "set_final", title: "其余流量", description: "没被任何规则命中的流量往哪走；follow 表示跟随规则文件。", permission: .full, parameters: [
-            ControlParameter(name: "policy", kind: .string, description: policyHelp + "，或者 follow", required: true),
+        ControlTool(name: "set_final", title: L("其余流量"), description: L("没被任何规则命中的流量往哪走；follow 表示跟随规则文件。"), permission: .full, parameters: [
+            ControlParameter(name: "policy", kind: .string, description: policyHelp + L("，或者 follow"), required: true),
         ]),
-        ControlTool(name: "add_subscription", title: "加订阅", description: "加一条机场订阅。", permission: .full, parameters: [
-            ControlParameter(name: "url", kind: .string, description: "订阅地址", required: true),
-            ControlParameter(name: "name", kind: .string, description: "名字"),
+        ControlTool(name: "add_subscription", title: L("加订阅"), description: L("加一条机场订阅。"), permission: .full, parameters: [
+            ControlParameter(name: "url", kind: .string, description: L("订阅地址"), required: true),
+            ControlParameter(name: "name", kind: .string, description: L("名字")),
         ]),
-        ControlTool(name: "remove_subscription", title: "删订阅", description: "删掉一条订阅（按名字或地址）。", permission: .full, parameters: [
-            ControlParameter(name: "name", kind: .string, description: "订阅的名字或地址", required: true),
+        ControlTool(name: "remove_subscription", title: L("删订阅"), description: L("删掉一条订阅（按名字或地址）。"), permission: .full, parameters: [
+            ControlParameter(name: "name", kind: .string, description: L("订阅的名字或地址"), required: true),
         ]),
-        ControlTool(name: "add_nodes", title: "加节点", description: "加手动节点：分享链接（ss://、vmess://、vless://、trojan://、hysteria2://、tuic:// 等），一行一条，或者整段 base64。", permission: .full, parameters: [
-            ControlParameter(name: "links", kind: .string, description: "节点链接", required: true),
+        ControlTool(name: "add_nodes", title: L("加节点"), description: L("加手动节点：分享链接（ss://、vmess://、vless://、trojan://、hysteria2://、tuic:// 等），一行一条，或者整段 base64。"), permission: .full, parameters: [
+            ControlParameter(name: "links", kind: .string, description: L("节点链接"), required: true),
         ]),
-        ControlTool(name: "add_rule_set", title: "加规则集", description: "加一个规则集：给网址，或者给规则库里的名字（比如「广告拦截」「Netflix」「OpenAI」）。", permission: .full, parameters: [
-            ControlParameter(name: "url", kind: .string, description: "规则列表的网址"),
-            ControlParameter(name: "library", kind: .string, description: "规则库里的名字"),
+        ControlTool(name: "add_rule_set", title: L("加规则集"), description: L("加一个规则集：给网址，或者给规则库里的名字（比如「广告拦截」「Netflix」「OpenAI」）。"), permission: .full, parameters: [
+            ControlParameter(name: "url", kind: .string, description: L("规则列表的网址")),
+            ControlParameter(name: "library", kind: .string, description: L("规则库里的名字")),
             ControlParameter(name: "policy", kind: .string, description: policyHelp),
-            ControlParameter(name: "name", kind: .string, description: "名字"),
+            ControlParameter(name: "name", kind: .string, description: L("名字")),
         ]),
-        ControlTool(name: "remove_rule_set", title: "删规则集", description: "删掉一个规则集（按名字或网址）。", permission: .full, parameters: [
-            ControlParameter(name: "name", kind: .string, description: "规则集的名字或网址", required: true),
+        ControlTool(name: "remove_rule_set", title: L("删规则集"), description: L("删掉一个规则集（按名字或网址）。"), permission: .full, parameters: [
+            ControlParameter(name: "name", kind: .string, description: L("规则集的名字或网址"), required: true),
         ]),
-        ControlTool(name: "add_group", title: "加策略组", description: "加一个策略组，给某类流量单独选节点；再用 add_rule 把流量指到它。", permission: .full, parameters: [
-            ControlParameter(name: "name", kind: .string, description: "组名", required: true),
-            ControlParameter(name: "type", kind: .string, description: "类型，默认 select", choices: ["select", "url-test", "fallback", "load-balance"]),
-            ControlParameter(name: "filter", kind: .string, description: "节点名筛选（正则，不区分大小写），比如 港|HK"),
-            ControlParameter(name: "exclude", kind: .string, description: "排除的节点（正则）"),
+        ControlTool(name: "add_group", title: L("加策略组"), description: L("加一个策略组，给某类流量单独选节点；再用 add_rule 把流量指到它。"), permission: .full, parameters: [
+            ControlParameter(name: "name", kind: .string, description: L("组名"), required: true),
+            ControlParameter(name: "type", kind: .string, description: L("类型，默认 select"), choices: ["select", "url-test", "fallback", "load-balance"]),
+            ControlParameter(name: "filter", kind: .string, description: L("节点名筛选（正则，不区分大小写），比如 港|HK")),
+            ControlParameter(name: "exclude", kind: .string, description: L("排除的节点（正则）")),
         ]),
-        ControlTool(name: "remove_group", title: "删策略组", description: "删掉一个策略组，指向它的规则改成走节点。", permission: .full, parameters: [
-            ControlParameter(name: "name", kind: .string, description: "组名", required: true),
+        ControlTool(name: "remove_group", title: L("删策略组"), description: L("删掉一个策略组，指向它的规则改成走节点。"), permission: .full, parameters: [
+            ControlParameter(name: "name", kind: .string, description: L("组名"), required: true),
         ]),
-        ControlTool(name: "import_config", title: "导入配置", description: "导入配置并生效（先用 preview_import 看看会改什么）。merge 加进现有设置、同名的更新；replace 用导入的内容替换同类设置。复杂的改动（DNS、Hosts、策略组的高级选项、按网络切换……）都可以写成 Proxi 的配置描述 JSON 导入。", permission: .full, parameters: [
-            ControlParameter(name: "content", kind: .string, description: "配置内容"),
-            ControlParameter(name: "url", kind: .string, description: "配置的网址"),
-            ControlParameter(name: "mode", kind: .string, description: "默认 merge", choices: ["merge", "replace"]),
+        ControlTool(name: "import_config", title: L("导入配置"), description: L("导入配置并生效（先用 preview_import 看看会改什么）。merge 加进现有设置、同名的更新；replace 用导入的内容替换同类设置。复杂的改动（DNS、Hosts、策略组的高级选项、按网络切换……）都可以写成 Proxi 的配置描述 JSON 导入。"), permission: .full, parameters: [
+            ControlParameter(name: "content", kind: .string, description: L("配置内容")),
+            ControlParameter(name: "url", kind: .string, description: L("配置的网址")),
+            ControlParameter(name: "mode", kind: .string, description: L("默认 merge"), choices: ["merge", "replace"]),
         ]),
-        ControlTool(name: "undo", title: "撤销", description: "撤销经这个接口做的最近一次配置改动。", permission: .full),
+        ControlTool(name: "undo", title: L("撤销"), description: L("撤销经这个接口做的最近一次配置改动。"), permission: .full),
     ]
 
     static func tool(named name: String) -> ControlTool? {
         tools.first { $0.name == name }
     }
 
-    /// MCP 初始化时给 AI 助手的使用说明（我们定的规则）。
-    static let instructions = """
+    /// MCP 初始化时给 AI 助手的使用说明（我们定的规则），跟着界面语言。
+    static var instructions: String { AppLanguage.isEnglish ? instructionsEnglish : instructionsChinese }
+
+    // l10n-ignore：中文界面的说明，英文的在 instructionsEnglish。
+    static let instructionsChinese = """
     Proxi 是 macOS 上的代理开关，内置 mihomo 内核。用这些工具时请遵守：
     1. 先用 get_status 看现在的状态，再决定做什么。
     2. 只做用户要求的事；开关代理、切节点这类操作会立刻影响整台电脑的网络，做之前说清楚。
@@ -177,6 +180,17 @@ enum ControlCatalog {
     5. 网站打不开时先用 diagnose_url 看命中了哪条规则、走了哪个出口，再决定加规则还是换节点。
     6. 规则的去向写 proxy（走节点）、direct（直连）、reject（拦截）或者策略组的名字。
     7. 节点名可以只写一部分，但要能唯一确定是哪个；不确定时先 list_nodes。
+    """
+
+    static let instructionsEnglish = """
+    Proxi is a proxy switcher for macOS with the mihomo core built in. When using these tools:
+    1. Check the current state with get_status before deciding what to do.
+    2. Only do what the user asked for. Turning the proxy on or off and switching nodes affect the whole computer's network immediately, so say so first.
+    3. Before changing settings (add_*, remove_*, import_config), explain what will change. Preview complex changes with preview_import and apply them with import_config after confirming.
+    4. Every settings change is recorded in the change history, and undo reverts the latest one. If something went wrong, undo first and try again.
+    5. When a website won't open, use diagnose_url to see which rule matched and which exit was used, then decide whether to add a rule or switch nodes.
+    6. A rule target is proxy (through a node), direct, reject (block) or the name of a policy group.
+    7. Node names can be partial as long as they match exactly one node; when unsure, call list_nodes first.
     """
 }
 
@@ -251,7 +265,7 @@ struct ControlParams {
     }
 
     func require(_ name: String) throws -> String {
-        guard let value = string(name) else { throw ControlError.invalid("缺少参数 \(name)") }
+        guard let value = string(name) else { throw ControlError.invalid(L("缺少参数 %@", name)) }
         return value
     }
 
@@ -264,8 +278,8 @@ struct ControlParams {
     func bool(_ name: String) -> Bool? {
         if let number = values[name] as? NSNumber { return number.boolValue }
         if let text = (values[name] as? String)?.lowercased() {
-            if ["true", "yes", "on", "1", "开"].contains(text) { return true }
-            if ["false", "no", "off", "0", "关"].contains(text) { return false }
+            if ["true", "yes", "on", "1", "开"].contains(text) { return true }  // l10n-ignore：参数里的写法
+            if ["false", "no", "off", "0", "关"].contains(text) { return false }  // l10n-ignore：参数里的写法
         }
         return nil
     }

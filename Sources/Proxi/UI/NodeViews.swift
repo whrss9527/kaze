@@ -17,15 +17,15 @@ struct NodeListSection: View {
     private var results: [Engine.Node] { query.apply(engine.nodes, favorites: favorites) }
 
     var body: some View {
-        Section("节点") {
+        Section(L("节点‖列表")) {
             if engine.nodes.isEmpty {
-                Text(engine.isRunning ? "订阅里没有解析出节点" : "内核启动后这里会列出所有节点")
+                Text(engine.isRunning ? L("订阅里没有解析出节点") : L("内核启动后这里会列出所有节点"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
                 filterBar
                 summaryLine
-                nodeRow(name: Engine.autoGroup, subtitle: engine.autoNode.map { "现在用的是 \($0)" } ?? "自动选延迟最低的节点", type: "自动", delay: nil, favorite: false, selected: engine.currentSelection == Engine.autoGroup, node: nil) {
+                nodeRow(name: CoreConfigBuilder.displayName(Engine.autoGroup), subtitle: engine.autoNode.map { L("现在用的是 %@", $0) } ?? L("自动选延迟最低的节点"), type: L("自动"), delay: nil, favorite: false, selected: engine.currentSelection == Engine.autoGroup, node: nil) {
                     Task { await engine.select(nil) }
                 }
                 let list = results
@@ -35,11 +35,11 @@ struct NodeListSection: View {
                     }
                 }
                 if list.count > 300 {
-                    Text("还有 \(list.count - 300) 个没有列出，加个条件缩小范围。")
+                    Text(L("还有 %@ 个没有列出，加个条件缩小范围。", list.count - 300))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                Text("点一行就切换到那个节点；点星星收藏，收藏的排在最前面（面板和菜单里也是）。排序会记住，筛选条件只在这一页有效。")
+                Text(L("点一行就切换到那个节点；点星星收藏，收藏的排在最前面（面板和菜单里也是）。排序会记住，筛选条件只在这一页有效。"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -58,7 +58,7 @@ struct NodeListSection: View {
     private var sources: [DialerCandidate] {
         var result = state.config.engine.subscriptions.filter(\.enabled).map { DialerCandidate(value: $0.id.uuidString, title: $0.name) }
         if !state.config.engine.activeManualNodes.isEmpty {
-            result.append(DialerCandidate(value: ManualNode.sourceID.uuidString, title: "手动节点"))
+            result.append(DialerCandidate(value: ManualNode.sourceID.uuidString, title: L("手动节点")))
         }
         return result
     }
@@ -66,7 +66,7 @@ struct NodeListSection: View {
     private var filterBar: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
-                TextField("", text: $query.text, prompt: Text("搜索节点"))
+                TextField("", text: $query.text, prompt: Text(L("搜索节点")))
                     .labelsHidden()
                 Picker("", selection: $query.sort) {
                     ForEach(NodeSort.allCases) { sort in
@@ -74,8 +74,8 @@ struct NodeListSection: View {
                     }
                 }
                 .labelsHidden()
-                .frame(width: 100)
-                Button(engine.testing || testingFiltered ? "正在测速…" : (query.isFiltering ? "测速这些" : "测速全部")) { test() }
+                .frame(width: AppLanguage.width(100, english: 150))
+                Button(engine.testing || testingFiltered ? L("正在测速…") : (query.isFiltering ? L("测速这些") : L("测速全部"))) { test() }
                     .disabled(engine.testing || testingFiltered || !engine.isRunning)
             }
             // 窗口窄的时候，两个勾选框换到下一行。
@@ -102,7 +102,7 @@ struct NodeListSection: View {
     @ViewBuilder
     private var conditionPickers: some View {
         Picker("", selection: $query.source) {
-            Text("全部来源").tag(UUID?.none)
+            Text(L("全部来源")).tag(UUID?.none)
             ForEach(sources) { source in
                 Text(source.title).tag(UUID(uuidString: source.value))
             }
@@ -110,15 +110,15 @@ struct NodeListSection: View {
         .labelsHidden()
         .frame(width: 130)
         Picker("", selection: $query.region) {
-            Text("全部地区").tag(String?.none)
+            Text(L("全部地区")).tag(String?.none)
             ForEach(NodeQuery.regions(in: engine.nodes)) { item in
-                Text("\(item.region?.title ?? "其他地区") \(item.count)").tag(Optional(item.id))
+                Text("\(item.region?.title ?? L("其他地区")) \(item.count)").tag(Optional(item.id))
             }
         }
         .labelsHidden()
         .frame(width: 130)
         Picker("", selection: $query.type) {
-            Text("全部协议").tag(String?.none)
+            Text(L("全部协议")).tag(String?.none)
             ForEach(NodeQuery.types(in: engine.nodes)) { item in
                 Text("\(NodeQuery.typeTitle(item.type)) \(item.count)").tag(Optional(item.type))
             }
@@ -129,9 +129,9 @@ struct NodeListSection: View {
 
     @ViewBuilder
     private var conditionToggles: some View {
-        Toggle("只看能用的", isOn: $query.onlyAvailable)
+        Toggle(L("只看能用的"), isOn: $query.onlyAvailable)
             .toggleStyle(.checkbox)
-        Toggle("只看收藏", isOn: $query.onlyFavorites)
+        Toggle(L("只看收藏"), isOn: $query.onlyFavorites)
             .toggleStyle(.checkbox)
     }
 
@@ -154,11 +154,11 @@ struct NodeListSection: View {
 
     private var summaryText: some View {
         HStack(spacing: 4) {
-            Text(query.isFiltering ? "筛出 \(results.count) / \(engine.nodes.count) 个节点" : "共 \(engine.nodes.count) 个节点")
+            Text(query.isFiltering ? L("筛出 %@ / %@ 个节点", results.count, engine.nodes.count) : L("共 %@ 个节点", engine.nodes.count))
                 .font(.caption)
                 .foregroundStyle(.secondary)
             if query.onlyAvailable && !engine.nodes.contains(where: { $0.delay != nil }) {
-                Text("（还没测过速，先测一下）")
+                Text(L("（还没测过速，先测一下）"))
                     .font(.caption)
                     .foregroundStyle(.orange)
             }
@@ -168,9 +168,9 @@ struct NodeListSection: View {
     @ViewBuilder
     private var filterActions: some View {
         if query.isFiltering {
-            Button("清除条件") { query.reset() }
+            Button(L("清除条件")) { query.reset() }
                 .controlSize(.small)
-            Button("按这些条件建策略组…") { showGroupSheet = true }
+            Button(L("按这些条件建策略组…")) { showGroupSheet = true }
                 .controlSize(.small)
                 .disabled(results.isEmpty)
         }
@@ -222,7 +222,7 @@ struct NodeListSection: View {
                         .padding(.horizontal, 5)
                         .padding(.vertical, 1)
                         .background(Capsule().fill(Color.primary.opacity(0.08)))
-                    Text(delay.map { $0 > 0 ? "\($0) ms" : "超时" } ?? "")
+                    Text(delay.map { $0 > 0 ? "\($0) ms" : L("超时") } ?? "")
                         .font(.system(size: 11, weight: .medium, design: .rounded))
                         .foregroundStyle(delayColor(delay))
                         .frame(width: 60, alignment: .trailing)
@@ -239,7 +239,7 @@ struct NodeListSection: View {
                         .foregroundStyle(favorite ? Color.yellow : Color.secondary.opacity(0.6))
                 }
                 .buttonStyle(.plain)
-                .help(favorite ? "取消收藏" : "收藏")
+                .help(favorite ? L("取消收藏") : L("收藏"))
             } else {
                 Image(systemName: "star")
                     .opacity(0)
@@ -247,13 +247,13 @@ struct NodeListSection: View {
         }
         .contextMenu {
             if let node {
-                Button(favorite ? "取消收藏" : "收藏") { engine.toggleFavorite(node.name) }
-                Button("测速") { Task { await engine.test(node: node.name) } }
-                Button("检测服务（ChatGPT、Netflix……）") {
+                Button(favorite ? L("取消收藏") : L("收藏")) { engine.toggleFavorite(node.name) }
+                Button(L("测速")) { Task { await engine.test(node: node.name) } }
+                Button(L("检测服务（ChatGPT、Netflix……）")) {
                     Task { await engine.checkServices(node: node.name) }
                     SettingsWindowController.shared.show(page: .connections)
                 }
-                Button("复制名字") { TerminalCommands.copy(node.name) }
+                Button(L("复制名字")) { TerminalCommands.copy(node.name) }
             }
         }
     }
@@ -283,10 +283,10 @@ struct GroupFromQuerySheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("按条件建策略组")
+            Text(L("按条件建策略组"))
                 .font(.system(size: 16, weight: .semibold))
             HStack {
-                TextField("", text: $name, prompt: Text("组名"))
+                TextField("", text: $name, prompt: Text(L("组名")))
                     .frame(width: 180)
                 Picker("", selection: $kind) {
                     ForEach(PolicyGroupKind.allCases) { kind in
@@ -303,17 +303,17 @@ struct GroupFromQuerySheet: View {
             let matched = matchedNodes(group)
             VStack(alignment: .leading, spacing: 4) {
                 if let source = group.sources.first {
-                    Text("只用来源：\(sourceName(source))")
+                    Text(L("只用来源：%@", sourceName(source)))
                         .font(.caption)
                 }
                 if !group.filter.isEmpty {
-                    Text("节点名筛选：\(group.filter)")
+                    Text(L("节点名筛选：%@", group.filter))
                         .font(.system(size: 10, design: .monospaced))
                         .foregroundStyle(.secondary)
                         .lineLimit(3)
                         .textSelection(.enabled)
                 }
-                Text("现在能匹配到 \(matched.count) 个节点：\(matched.prefix(5).joined(separator: "、"))\(matched.count > 5 ? "…" : "")")
+                Text(L("现在能匹配到 %@ 个节点：%@%@", matched.count, matched.prefix(5).joined(separator: L("、")), matched.count > 5 ? L("…") : ""))
                     .font(.caption)
                 ForEach(query.groupNotes, id: \.self) { note in
                     Text(note)
@@ -321,7 +321,7 @@ struct GroupFromQuerySheet: View {
                         .foregroundStyle(.orange)
                 }
             }
-            Text("建好后在「分流规则」里把某类流量指到这个组；以后订阅里新出现的符合条件的节点会自动进来。")
+            Text(L("建好后在「分流规则」里把某类流量指到这个组；以后订阅里新出现的符合条件的节点会自动进来。"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
             if let problem {
@@ -331,9 +331,9 @@ struct GroupFromQuerySheet: View {
             }
             HStack {
                 Spacer()
-                Button("取消") { dismiss() }
+                Button(L("取消")) { dismiss() }
                     .keyboardShortcut(.cancelAction)
-                Button("建组") {
+                Button(L("建组")) {
                     problem = engine.addGroup(draft)
                     if problem == nil { dismiss() }
                 }
@@ -350,8 +350,8 @@ struct GroupFromQuerySheet: View {
     }
 
     private func sourceName(_ id: UUID) -> String {
-        if id == ManualNode.sourceID { return "手动节点" }
-        return state.config.engine.subscriptions.first { $0.id == id }?.name ?? "已删除的订阅"
+        if id == ManualNode.sourceID { return L("手动节点") }
+        return state.config.engine.subscriptions.first { $0.id == id }?.name ?? L("已删除的订阅")
     }
 
     private func matchedNodes(_ group: PolicyGroup) -> [String] {
@@ -374,9 +374,9 @@ struct ManualNodesSection: View {
     private var nodes: [ManualNode] { state.config.engine.manualNodes }
 
     var body: some View {
-        Section("手动节点") {
+        Section(L("手动节点")) {
             if nodes.isEmpty {
-                Text("没有订阅也能用：把 ss://、vmess://、vless://、trojan://、hysteria2://、tuic:// 这样的节点链接粘到下面，或者扫一下二维码。")
+                Text(L("没有订阅也能用：把 ss://、vmess://、vless://、trojan://、hysteria2://、tuic:// 这样的节点链接粘到下面，或者扫一下二维码。"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -401,9 +401,9 @@ struct ManualNodesSection: View {
                         .padding(.vertical, 1)
                         .background(Capsule().fill(Color.primary.opacity(0.08)))
                     Menu {
-                        Button("复制链接") { TerminalCommands.copy(node.link) }
+                        Button(L("复制链接")) { TerminalCommands.copy(node.link) }
                         Divider()
-                        Button("删除", role: .destructive) { engine.removeManualNode(node.id) }
+                        Button(L("删除"), role: .destructive) { engine.removeManualNode(node.id) }
                     } label: {
                         Image(systemName: "ellipsis.circle")
                     }
@@ -413,27 +413,27 @@ struct ManualNodesSection: View {
                 }
             }
             if let count = engine.manualNodeCount, count < state.config.engine.activeManualNodes.count {
-                Label("内核只认出了 \(count) 个，有的链接可能写错了（内核日志里有原因）", systemImage: "exclamationmark.triangle")
+                Label(L("内核只认出了 %@ 个，有的链接可能写错了（内核日志里有原因）", count), systemImage: "exclamationmark.triangle")
                     .font(.caption)
                     .foregroundStyle(.orange)
             }
             HStack {
-                TextField("", text: $text, prompt: Text("粘贴节点链接，一行一条，或者整段 base64"), axis: .vertical)
+                TextField("", text: $text, prompt: Text(L("粘贴节点链接，一行一条，或者整段 base64")), axis: .vertical)
                     .lineLimit(1...4)
                     .labelsHidden()
-                Button("添加") { add(text) }
+                Button(L("添加")) { add(text) }
                     .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
             HStack(spacing: 8) {
-                Button("从剪贴板添加") { fromPasteboard() }
-                Button(scanning ? "正在扫描…" : "扫描屏幕上的二维码") { scanScreen() }
+                Button(L("从剪贴板添加")) { fromPasteboard() }
+                Button(scanning ? L("正在扫描…") : L("扫描屏幕上的二维码")) { scanScreen() }
                     .disabled(scanning)
-                Button("选择二维码图片…") { chooseImage() }
+                Button(L("选择二维码图片…")) { chooseImage() }
                 Spacer()
             }
             .controlSize(.small)
             if !nodes.isEmpty {
-                DialerPicker(title: "前置代理", selection: Binding(get: { state.config.engine.manualDialer }, set: { value in
+                DialerPicker(title: L("前置代理"), selection: Binding(get: { state.config.engine.manualDialer }, set: { value in
                     problem = engine.setManualDialer(value)
                 }), candidates: engine.dialerCandidates(for: ManualNode.providerName), profiles: state.config.profiles)
             }
@@ -447,7 +447,7 @@ struct ManualNodesSection: View {
                     .font(.caption)
                     .foregroundStyle(.red)
             }
-            Text("手动节点和订阅的节点一起出现在节点列表和策略组里。扫描屏幕要「屏幕录制」权限，第一次会弹出系统询问；二维码里是订阅地址时会加成订阅。")
+            Text(L("手动节点和订阅的节点一起出现在节点列表和策略组里。扫描屏幕要「屏幕录制」权限，第一次会弹出系统询问；二维码里是订阅地址时会加成订阅。"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -460,7 +460,7 @@ struct ManualNodesSection: View {
         if !trimmed.contains(where: \.isNewline), NodeLink.extract(trimmed).isEmpty, Subscription.validate(url: trimmed) == nil, trimmed.lowercased().hasPrefix("http") {
             problem = engine.addSubscription(name: "", url: trimmed)
             if problem == nil {
-                message = "这是订阅地址，已经加到订阅里"
+                message = L("这是订阅地址，已经加到订阅里")
                 text = ""
                 state.selectEngineProfile()
             }
@@ -469,7 +469,7 @@ struct ManualNodesSection: View {
         let result = engine.addManualNodes(from: content)
         problem = result.problem
         if result.added > 0 {
-            message = "加了 \(result.added) 个节点"
+            message = L("加了 %@ 个节点", result.added)
             text = ""
             state.selectEngineProfile()
         }
@@ -482,7 +482,7 @@ struct ManualNodesSection: View {
         }
         let codes = QRScanner.fromPasteboard()
         if codes.isEmpty {
-            problem = "剪贴板里没有节点链接，也没有二维码图片"
+            problem = L("剪贴板里没有节点链接，也没有二维码图片")
         } else {
             add(codes.joined(separator: "\n"))
         }
@@ -496,12 +496,12 @@ struct ManualNodesSection: View {
             do {
                 let codes = try await QRScanner.scanScreens()
                 if codes.isEmpty {
-                    problem = "屏幕上没有找到二维码：把二维码放大一点、不要被挡住再试"
+                    problem = L("屏幕上没有找到二维码：把二维码放大一点、不要被挡住再试")
                 } else {
                     add(codes.joined(separator: "\n"))
                 }
             } catch {
-                problem = "扫描屏幕失败：\(error.localizedDescription)。在「系统设置 → 隐私与安全性 → 屏幕录制」里允许 Proxi 后再试。"
+                problem = L("扫描屏幕失败：%@。在「系统设置 → 隐私与安全性 → 屏幕录制」里允许 Proxi 后再试。", error.localizedDescription)
             }
             scanning = false
         }
@@ -510,11 +510,11 @@ struct ManualNodesSection: View {
     private func chooseImage() {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.image]
-        panel.message = "选择节点二维码的图片"
+        panel.message = L("选择节点二维码的图片")
         guard panel.runModal() == .OK, let url = panel.url else { return }
         let codes = QRScanner.fromFile(url)
         if codes.isEmpty {
-            problem = "图片里没有认出二维码"
+            problem = L("图片里没有认出二维码")
         } else {
             add(codes.joined(separator: "\n"))
         }
@@ -530,7 +530,7 @@ struct DialerPicker: View {
 
     var body: some View {
         Picker(title, selection: $selection) {
-            Text("不用（直接连节点）").tag(String?.none)
+            Text(L("不用（直接连节点）")).tag(String?.none)
             ForEach(candidates) { candidate in
                 Text(candidate.title).tag(Optional(candidate.value))
             }
@@ -561,21 +561,21 @@ struct SubscriptionEditor: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("订阅设置")
+            Text(L("订阅设置"))
                 .font(.system(size: 16, weight: .semibold))
             Form {
-                TextField("名字", text: $draft.name)
-                TextField("地址", text: $draft.url)
-                TextField("只保留", text: $draft.filter, prompt: Text("节点名的正则，比如 港|日|新；空为全部"))
-                TextField("去掉", text: $draft.exclude, prompt: Text("比如 过期|剩余|官网"))
-                TextField("名字前缀", text: $draft.prefix, prompt: Text("比如「甲 」，几个机场的节点同名时好区分"))
-                DialerPicker(title: "前置代理", selection: $draft.dialer, candidates: engine.dialerCandidates(for: subscription.providerName), profiles: state.config.profiles)
+                TextField(L("名字"), text: $draft.name)
+                TextField(L("地址"), text: $draft.url)
+                TextField(L("只保留"), text: $draft.filter, prompt: Text(L("节点名的正则，比如 港|日|新；空为全部")))
+                TextField(L("去掉"), text: $draft.exclude, prompt: Text(L("比如 过期|剩余|官网")))
+                TextField(L("名字前缀"), text: $draft.prefix, prompt: Text(L("比如「甲 」，几个机场的节点同名时好区分")))
+                DialerPicker(title: L("前置代理"), selection: $draft.dialer, candidates: engine.dialerCandidates(for: subscription.providerName), profiles: state.config.profiles)
             }
             .formStyle(.grouped)
             Text(preview)
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            Text("筛选和排除按机场给的原始名字匹配（不区分大小写），加前缀之前。前置代理：这个订阅的节点先经它再连出去（链式代理），比如先经公司的代理，或者先经另一个机场的节点；不能选含这个订阅自己节点的组。")
+            Text(L("筛选和排除按机场给的原始名字匹配（不区分大小写），加前缀之前。前置代理：这个订阅的节点先经它再连出去（链式代理），比如先经公司的代理，或者先经另一个机场的节点；不能选含这个订阅自己节点的组。"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -586,9 +586,9 @@ struct SubscriptionEditor: View {
             }
             HStack {
                 Spacer()
-                Button("取消") { dismiss() }
+                Button(L("取消")) { dismiss() }
                     .keyboardShortcut(.cancelAction)
-                Button("保存") {
+                Button(L("保存")) {
                     problem = engine.saveSubscription(draft)
                     if problem == nil { dismiss() }
                 }
@@ -605,11 +605,11 @@ struct SubscriptionEditor: View {
         let names = engine.nodes.filter { $0.source == subscription.id }.map { name -> String in
             subscription.prefix.isEmpty ? name.name : String(name.name.dropFirst(subscription.prefix.count))
         }
-        guard !names.isEmpty else { return "保存后内核重新加载，节点列表里就能看到结果。" }
+        guard !names.isEmpty else { return L("保存后内核重新加载，节点列表里就能看到结果。") }
         var group = PolicyGroup(name: "x", filter: draft.filter)
         group.exclude = draft.exclude
         let kept = group.matches(names)
-        return "现在的 \(names.count) 个节点里会留下 \(kept.count) 个（之前被筛掉的看不到，保存后以内核为准）。"
+        return L("现在的 %@ 个节点里会留下 %@ 个（之前被筛掉的看不到，保存后以内核为准）。", names.count, kept.count)
     }
 }
 
@@ -641,26 +641,26 @@ struct GroupEditor: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("策略组「\(group.name)」")
+            Text(L("策略组「%@」", group.name))
                 .font(.system(size: 16, weight: .semibold))
             Form {
-                Section("成员") {
-                    TextField("节点名筛选", text: $draft.filter, prompt: Text("正则，比如 港|HK；空为全部"))
-                    TextField("排除", text: $draft.exclude, prompt: Text("正则，比如 过期|0\\.1倍"))
+                Section(L("成员")) {
+                    TextField(L("节点名筛选"), text: $draft.filter, prompt: Text(L("正则，比如 港|HK；空为全部")))
+                    TextField(L("排除"), text: $draft.exclude, prompt: Text(L("正则，比如 过期|0\\.1倍")))
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("只用这些来源的节点（都不选就是全部）")
+                        Text(L("只用这些来源的节点（都不选就是全部）"))
                             .font(.system(size: 12))
                         ForEach(state.config.engine.subscriptions) { subscription in
                             Toggle(subscription.name, isOn: sourceBinding(subscription.id))
                                 .toggleStyle(.checkbox)
                         }
                         if !state.config.engine.manualNodes.isEmpty {
-                            Toggle("手动节点", isOn: sourceBinding(ManualNode.sourceID))
+                            Toggle(L("手动节点"), isOn: sourceBinding(ManualNode.sourceID))
                                 .toggleStyle(.checkbox)
                         }
                     }
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("也放进来的策略组")
+                        Text(L("也放进来的策略组"))
                             .font(.system(size: 12))
                         ForEach(otherGroups, id: \.self) { name in
                             Toggle(name, isOn: memberBinding(name))
@@ -672,14 +672,14 @@ struct GroupEditor: View {
                         .foregroundStyle(.secondary)
                 }
                 if draft.kind != .select {
-                    Section("测速") {
-                        TextField("测速地址", text: $draft.testURL, prompt: Text("空为通用设置里的：\(state.config.testURL)"))
-                        TextField("间隔（秒）", text: $intervalText, prompt: Text("默认 \(PolicyGroup.defaultInterval)"))
+                    Section(L("测速")) {
+                        TextField(L("测速地址"), text: $draft.testURL, prompt: Text(L("空为通用设置里的：%@", state.config.testURL)))
+                        TextField(L("间隔（秒）"), text: $intervalText, prompt: Text(L("默认 %@", PolicyGroup.defaultInterval)))
                         if draft.kind == .urlTest {
-                            TextField("容差（毫秒）", text: $toleranceText, prompt: Text("默认 \(PolicyGroup.defaultTolerance)：比现在用的快这么多以上才换"))
+                            TextField(L("容差（毫秒）"), text: $toleranceText, prompt: Text(L("默认 %@：比现在用的快这么多以上才换", PolicyGroup.defaultTolerance)))
                         }
                         if draft.kind == .loadBalance {
-                            Picker("分配方式", selection: $draft.strategy) {
+                            Picker(L("分配方式"), selection: $draft.strategy) {
                                 ForEach(LoadBalanceStrategy.allCases) { strategy in
                                     Text(strategy.title).tag(strategy)
                                 }
@@ -697,9 +697,9 @@ struct GroupEditor: View {
             }
             HStack {
                 Spacer()
-                Button("取消") { dismiss() }
+                Button(L("取消")) { dismiss() }
                     .keyboardShortcut(.cancelAction)
-                Button("保存") { save() }
+                Button(L("保存")) { save() }
                     .keyboardShortcut(.defaultAction)
             }
         }
@@ -731,9 +731,9 @@ struct GroupEditor: View {
         if let issue = PolicyGroup.validateFilter(draft.filter) ?? PolicyGroup.validateFilter(draft.exclude) { return issue }
         let candidates = engine.nodes.filter { draft.sources.isEmpty || draft.sources.contains($0.source ?? UUID()) }
         let matched = draft.matches(candidates.map(\.name))
-        var text = engine.nodes.isEmpty ? "内核启动后能预览匹配到的节点" : "匹配到 \(matched.count) 个节点"
+        var text = engine.nodes.isEmpty ? L("内核启动后能预览匹配到的节点") : L("匹配到 %@ 个节点", matched.count)
         if !draft.includeGroups.isEmpty {
-            text += "，另外包含 \(draft.includeGroups.joined(separator: "、"))"
+            text += L("，另外包含 %@", draft.includeGroups.joined(separator: L("、")))
         }
         return text
     }

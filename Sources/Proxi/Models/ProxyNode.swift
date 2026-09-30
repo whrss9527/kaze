@@ -17,7 +17,7 @@ struct ProxyNode: Identifiable, Equatable, Hashable {
 
     var delayText: String {
         guard let delay else { return "" }
-        return delay > 0 ? "\(delay) ms" : "超时"
+        return delay > 0 ? "\(delay) ms" : L("超时")
     }
 
     /// 从名字认出来的地区。
@@ -59,29 +59,29 @@ struct NodeRegion: Identifiable, Hashable {
 
     /// 常见的地区；顺序就是认的顺序。
     static let all: [NodeRegion] = [
-        make("HK", "香港", ["香港", "Hong ?Kong", "港"], codes: ["HK", "HKG"]),
-        make("MO", "澳门", ["澳门", "澳門", "Macao", "Macau"], codes: ["MO"]),
-        make("TW", "台湾", ["台湾", "臺灣", "台北", "新北", "彰化", "Taiwan"], codes: ["TW", "TWN"]),
-        make("JP", "日本", ["日本", "东京", "東京", "大阪", "埼玉", "Japan", "Tokyo", "Osaka"], codes: ["JP", "JPN"]),
-        make("KR", "韩国", ["韩国", "韓國", "首尔", "首爾", "春川", "Korea", "Seoul"], codes: ["KR", "KOR"]),
-        make("SG", "新加坡", ["新加坡", "狮城", "獅城", "Singapore"], codes: ["SG", "SGP"]),
-        make("US", "美国", ["美国", "美國", "美西", "美东", "洛杉矶", "硅谷", "圣何塞", "纽约", "西雅图", "芝加哥", "达拉斯", "凤凰城", "United States", "America", "Los Angeles", "San Jose", "Seattle"], codes: ["US", "USA"]),
-        make("CA", "加拿大", ["加拿大", "多伦多", "温哥华", "Canada", "Toronto"], codes: ["CA", "CAN"]),
-        make("GB", "英国", ["英国", "英國", "伦敦", "倫敦", "United Kingdom", "Britain", "England", "London"], codes: ["UK", "GB", "GBR"]),
-        make("DE", "德国", ["德国", "德國", "法兰克福", "Germany", "Frankfurt"], codes: ["DE", "DEU"]),
-        make("FR", "法国", ["法国", "法國", "巴黎", "France", "Paris"], codes: ["FR", "FRA"]),
-        make("NL", "荷兰", ["荷兰", "荷蘭", "阿姆斯特丹", "Netherlands", "Amsterdam"], codes: ["NL", "NLD"]),
-        make("RU", "俄罗斯", ["俄罗斯", "俄羅斯", "莫斯科", "Russia", "Moscow"], codes: ["RU", "RUS"]),
-        make("TR", "土耳其", ["土耳其", "伊斯坦布尔", "Turkey", "Türkiye", "Istanbul"], codes: ["TR", "TUR"]),
-        make("IN", "印度", ["印度", "孟买", "India", "Mumbai"], codes: ["IN", "IND"]),
-        make("AU", "澳大利亚", ["澳大利亚", "澳洲", "悉尼", "墨尔本", "Australia", "Sydney"], codes: ["AU", "AUS"]),
-        make("MY", "马来西亚", ["马来西亚", "馬來西亞", "吉隆坡", "Malaysia"], codes: ["MY", "MYS"]),
-        make("TH", "泰国", ["泰国", "泰國", "曼谷", "Thailand", "Bangkok"], codes: ["TH", "THA"]),
-        make("VN", "越南", ["越南", "胡志明", "Vietnam", "Viet Nam"], codes: ["VN", "VNM"]),
-        make("PH", "菲律宾", ["菲律宾", "菲律賓", "马尼拉", "Philippines", "Manila"], codes: ["PH", "PHL"]),
-        make("ID", "印尼", ["印尼", "印度尼西亚", "雅加达", "Indonesia", "Jakarta"], codes: ["IDN"]),
-        make("AR", "阿根廷", ["阿根廷", "Argentina"], codes: ["AR", "ARG"]),
-        make("BR", "巴西", ["巴西", "Brazil", "São Paulo"], codes: ["BR", "BRA"]),
+        make("HK", L("香港"), ["香港", "Hong ?Kong", "港"], codes: ["HK", "HKG"]),  // l10n-ignore：匹配节点名的关键词
+        make("MO", L("澳门"), ["澳门", "澳門", "Macao", "Macau"], codes: ["MO"]),  // l10n-ignore：匹配节点名的关键词
+        make("TW", L("台湾"), ["台湾", "臺灣", "台北", "新北", "彰化", "Taiwan"], codes: ["TW", "TWN"]),  // l10n-ignore：匹配节点名的关键词
+        make("JP", L("日本"), ["日本", "东京", "東京", "大阪", "埼玉", "Japan", "Tokyo", "Osaka"], codes: ["JP", "JPN"]),  // l10n-ignore：匹配节点名的关键词
+        make("KR", L("韩国"), ["韩国", "韓國", "首尔", "首爾", "春川", "Korea", "Seoul"], codes: ["KR", "KOR"]),  // l10n-ignore：匹配节点名的关键词
+        make("SG", L("新加坡"), ["新加坡", "狮城", "獅城", "Singapore"], codes: ["SG", "SGP"]),  // l10n-ignore：匹配节点名的关键词
+        make("US", L("美国"), ["美国", "美國", "美西", "美东", "洛杉矶", "硅谷", "圣何塞", "纽约", "西雅图", "芝加哥", "达拉斯", "凤凰城", "United States", "America", "Los Angeles", "San Jose", "Seattle"], codes: ["US", "USA"]),  // l10n-ignore：匹配节点名的关键词
+        make("CA", L("加拿大"), ["加拿大", "多伦多", "温哥华", "Canada", "Toronto"], codes: ["CA", "CAN"]),  // l10n-ignore：匹配节点名的关键词
+        make("GB", L("英国"), ["英国", "英國", "伦敦", "倫敦", "United Kingdom", "Britain", "England", "London"], codes: ["UK", "GB", "GBR"]),  // l10n-ignore：匹配节点名的关键词
+        make("DE", L("德国"), ["德国", "德國", "法兰克福", "Germany", "Frankfurt"], codes: ["DE", "DEU"]),  // l10n-ignore：匹配节点名的关键词
+        make("FR", L("法国"), ["法国", "法國", "巴黎", "France", "Paris"], codes: ["FR", "FRA"]),  // l10n-ignore：匹配节点名的关键词
+        make("NL", L("荷兰"), ["荷兰", "荷蘭", "阿姆斯特丹", "Netherlands", "Amsterdam"], codes: ["NL", "NLD"]),  // l10n-ignore：匹配节点名的关键词
+        make("RU", L("俄罗斯"), ["俄罗斯", "俄羅斯", "莫斯科", "Russia", "Moscow"], codes: ["RU", "RUS"]),  // l10n-ignore：匹配节点名的关键词
+        make("TR", L("土耳其"), ["土耳其", "伊斯坦布尔", "Turkey", "Türkiye", "Istanbul"], codes: ["TR", "TUR"]),  // l10n-ignore：匹配节点名的关键词
+        make("IN", L("印度"), ["印度", "孟买", "India", "Mumbai"], codes: ["IN", "IND"]),  // l10n-ignore：匹配节点名的关键词
+        make("AU", L("澳大利亚"), ["澳大利亚", "澳洲", "悉尼", "墨尔本", "Australia", "Sydney"], codes: ["AU", "AUS"]),  // l10n-ignore：匹配节点名的关键词
+        make("MY", L("马来西亚"), ["马来西亚", "馬來西亞", "吉隆坡", "Malaysia"], codes: ["MY", "MYS"]),  // l10n-ignore：匹配节点名的关键词
+        make("TH", L("泰国"), ["泰国", "泰國", "曼谷", "Thailand", "Bangkok"], codes: ["TH", "THA"]),  // l10n-ignore：匹配节点名的关键词
+        make("VN", L("越南"), ["越南", "胡志明", "Vietnam", "Viet Nam"], codes: ["VN", "VNM"]),  // l10n-ignore：匹配节点名的关键词
+        make("PH", L("菲律宾"), ["菲律宾", "菲律賓", "马尼拉", "Philippines", "Manila"], codes: ["PH", "PHL"]),  // l10n-ignore：匹配节点名的关键词
+        make("ID", L("印尼"), ["印尼", "印度尼西亚", "雅加达", "Indonesia", "Jakarta"], codes: ["IDN"]),  // l10n-ignore：匹配节点名的关键词
+        make("AR", L("阿根廷"), ["阿根廷", "Argentina"], codes: ["AR", "ARG"]),  // l10n-ignore：匹配节点名的关键词
+        make("BR", L("巴西"), ["巴西", "Brazil", "São Paulo"], codes: ["BR", "BRA"]),  // l10n-ignore：匹配节点名的关键词
     ]
 
     private static let expressions: [(NodeRegion, NSRegularExpression)] = all.compactMap { region in
@@ -243,7 +243,7 @@ struct NodeQuery: Equatable {
     /// 能不能变成策略组：协议和只看能用的不能带进去（内核的组只按名字筛选；自动选择本来就只用能通的）。
     var groupNotes: [String] {
         var notes: [String] = []
-        if type != nil { notes.append("协议条件不会带进策略组") }
+        if type != nil { notes.append(L("协议条件不会带进策略组")) }
         return notes
     }
 
@@ -288,9 +288,10 @@ struct NodeQuery: Equatable {
         } else if !text.trimmingCharacters(in: .whitespaces).isEmpty {
             name = text.trimmingCharacters(in: .whitespaces)
         } else if onlyFavorites {
-            name = "收藏"
+            name = L("收藏")
         }
-        let base = String((name.isEmpty ? "筛选" : name).prefix(PolicyGroup.maxNameLength - 2))
-        return base + "自动"
+        let suffixLength = L("%@自动", "").count
+        let base = String((name.isEmpty ? L("筛选") : name).prefix(PolicyGroup.maxNameLength - suffixLength))
+        return L("%@自动", base)
     }
 }

@@ -8,7 +8,7 @@ struct TestResult: Equatable {
     var message: String
 
     var latencyText: String {
-        guard let latencyMs else { return ok ? "可用" : "失败" }
+        guard let latencyMs else { return ok ? L("可用") : L("失败") }
         return "\(latencyMs) ms"
     }
 }
@@ -17,7 +17,7 @@ struct TestResult: Equatable {
 enum ProxyTester {
     static func test(profile: Profile, testURL: String, timeout: TimeInterval = 8) async -> TestResult {
         guard let url = URL(string: testURL), url.host != nil else {
-            return TestResult(ok: false, latencyMs: nil, message: "测速地址格式不对")
+            return TestResult(ok: false, latencyMs: nil, message: L("测速地址格式不对"))
         }
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = timeout
@@ -33,11 +33,11 @@ enum ProxyTester {
             let (_, response) = try await session.data(for: request)
             let millis = Int(Date().timeIntervalSince(started) * 1000)
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-            let route = profile.kind == .pac ? "按 PAC 脚本" : "经代理"
+            let route = profile.kind == .pac ? L("按 PAC 脚本") : L("经代理")
             if (200..<400).contains(status) {
-                return TestResult(ok: true, latencyMs: millis, message: "\(route)访问成功，HTTP \(status)")
+                return TestResult(ok: true, latencyMs: millis, message: L("%@访问成功，HTTP %@", route, status))
             }
-            return TestResult(ok: false, latencyMs: millis, message: "\(route)访问返回 HTTP \(status)")
+            return TestResult(ok: false, latencyMs: millis, message: L("%@访问返回 HTTP %@", route, status))
         } catch {
             return TestResult(ok: false, latencyMs: nil, message: friendlyError(error))
         }
@@ -72,10 +72,10 @@ enum ProxyTester {
     static func friendlyError(_ error: Error) -> String {
         let nsError = error as NSError
         switch nsError.code {
-        case NSURLErrorTimedOut: return "超时，代理没有响应"
-        case NSURLErrorCannotConnectToHost: return "连不上代理服务器"
-        case NSURLErrorCannotFindHost: return "解析不了主机名"
-        case NSURLErrorNotConnectedToInternet: return "没有网络连接"
+        case NSURLErrorTimedOut: return L("超时，代理没有响应")
+        case NSURLErrorCannotConnectToHost: return L("连不上代理服务器")
+        case NSURLErrorCannotFindHost: return L("解析不了主机名")
+        case NSURLErrorNotConnectedToInternet: return L("没有网络连接")
         default: return nsError.localizedDescription
         }
     }
@@ -121,7 +121,7 @@ struct DetectedProxy: Identifiable, Equatable {
     var latencyMs: Int?
 
     var suggestedName: String {
-        process.isEmpty ? "本机代理 \(port)" : process
+        process.isEmpty ? L("本机代理 %@", port) : process
     }
 }
 

@@ -159,23 +159,23 @@ final class NetworkAutomation: NSObject, ObservableObject, CLLocationManagerDele
             }
             if case .on(let current) = state.status, current.id == profile.id { break }
             state.turnOn(profile)
-            done = "开启「\(profile.name)」"
+            done = L("开启「%@」", profile.name)
         case .off:
             if case .on = state.status {
                 state.turnOff()
-                done = "关闭代理"
+                done = L("关闭代理")
             }
         case .mode(let mode):
             if state.config.engine.mode != mode {
                 state.engine.setMode(mode)
-                done = "切到\(mode.title)"
+                done = L("切到%@", mode.title)
             }
         }
         guard let done else { return }
         let summary = "\(rule.match.title) → \(done)"
         lastSwitch = (summary, Date())
         Log.info("按网络自动切换：\(identity.summary)，\(summary)")
-        state.notify(title: "已按网络自动切换", body: summary, problem: false)
+        state.notify(title: L("已按网络自动切换"), body: summary, problem: false)
     }
 
     /// 用现在的网络做一条规则的条件：有 Wi‑Fi 名字就用它，否则用路由器的 MAC（没有就用 IP）。

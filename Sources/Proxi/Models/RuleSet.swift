@@ -13,9 +13,9 @@ enum RuleSetBehavior: String, Codable, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .classical: return "完整规则"
-        case .domain: return "域名列表"
-        case .ipcidr: return "IP 段列表"
+        case .classical: return L("完整规则")
+        case .domain: return L("域名列表")
+        case .ipcidr: return L("IP 段列表")
         }
     }
 }
@@ -26,7 +26,7 @@ enum RuleSetBehavior: String, Codable, CaseIterable, Identifiable {
 /// 小火箭 / Surge 的完整配置（`.conf` 等）由本程序转换后内联进规则里。
 struct RuleSet: Codable, Identifiable, Equatable, Hashable {
     var id: UUID = UUID()
-    var name: String = "规则"
+    var name: String = L("规则")
     /// http(s) 地址、本机的 file:// 文件，或者内置的 builtin://china-direct。
     var url: String = ""
     /// 去向；nil 表示按规则文件里自己写的策略（只对小火箭 / Surge 完整配置有意义，纯列表按走节点算）。
@@ -51,7 +51,7 @@ struct RuleSet: Codable, Identifiable, Equatable, Hashable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
-        name = try container.decodeIfPresent(String.self, forKey: .name) ?? "规则"
+        name = try container.decodeIfPresent(String.self, forKey: .name) ?? L("规则")
         url = try container.decodeIfPresent(String.self, forKey: .url) ?? ""
         policy = try container.decodeIfPresent(RuleTarget.self, forKey: .policy)
         enabled = try container.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
@@ -79,7 +79,7 @@ struct RuleSet: Codable, Identifiable, Equatable, Hashable {
 
     /// 内置：.cn 域名和国内 IP 直连（GEOIP 数据打包在程序里，不用下载）。
     static func chinaDirect() -> RuleSet {
-        var set = RuleSet(name: "国内直连", url: chinaDirectURL, policy: .direct)
+        var set = RuleSet(name: L("国内直连"), url: chinaDirectURL, policy: .direct)
         set.id = chinaDirectID
         return set
     }
@@ -97,12 +97,12 @@ struct RuleSet: Codable, Identifiable, Equatable, Hashable {
     /// 没填名字时用地址里的文件名，没有文件名就用主机名。
     static func defaultName(for url: String) -> String {
         if let entry = RuleLibrary.entry(for: url) { return entry.name }
-        guard let parsed = URL(string: url.trimmingCharacters(in: .whitespacesAndNewlines)) else { return "规则" }
+        guard let parsed = URL(string: url.trimmingCharacters(in: .whitespacesAndNewlines)) else { return L("规则") }
         let file = parsed.deletingPathExtension().lastPathComponent
         if !file.isEmpty, file != "/", !parsed.path.isEmpty, parsed.path != "/" {
             return file
         }
-        return parsed.host ?? "规则"
+        return parsed.host ?? L("规则")
     }
 
     // MARK: - 种类
@@ -176,16 +176,16 @@ struct RuleSet: Codable, Identifiable, Equatable, Hashable {
     static func validate(url text: String) -> String? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.lowercased().hasPrefix(builtinScheme) {
-            return trimmed == chinaDirectURL ? nil : "没有这个内置规则"
+            return trimmed == chinaDirectURL ? nil : L("没有这个内置规则")
         }
         guard let url = URL(string: trimmed), let scheme = url.scheme?.lowercased() else {
-            return "规则地址要以 http:// 或 https:// 开头"
+            return L("规则地址要以 http:// 或 https:// 开头")
         }
         if scheme == "file" {
-            return url.path.isEmpty ? "文件地址不对" : nil
+            return url.path.isEmpty ? L("文件地址不对") : nil
         }
         guard ["http", "https"].contains(scheme), url.host != nil else {
-            return "规则地址要以 http:// 或 https:// 开头"
+            return L("规则地址要以 http:// 或 https:// 开头")
         }
         return nil
     }
@@ -205,14 +205,14 @@ enum RulePresets {
     static let base = "https://raw.githubusercontent.com/johnshall/Shadowrocket-ADBlock-Rules-Forever/master/"
 
     static let all: [Preset] = [
-        Preset(name: "黑名单", file: "sr_top500_banlist.conf", detail: "被墙的常用网站走节点，其余直连"),
-        Preset(name: "黑名单 + 去广告", file: "sr_top500_banlist_ad.conf", detail: "黑名单，外加拦截广告和跟踪"),
-        Preset(name: "白名单", file: "sr_top500_whitelist.conf", detail: "国内常用网站和国内 IP 直连，其余走节点"),
-        Preset(name: "白名单 + 去广告", file: "sr_top500_whitelist_ad.conf", detail: "白名单，外加拦截广告和跟踪"),
-        Preset(name: "国内 IP 直连", file: "sr_cnip.conf", detail: "只按 IP 归属分流：国内直连，国外走节点"),
-        Preset(name: "国内 IP 直连 + 去广告", file: "sr_cnip_ad.conf", detail: "按 IP 归属分流，外加拦截广告"),
-        Preset(name: "全部直连 + 去广告", file: "sr_direct_banad.conf", detail: "不走节点，只拦广告"),
-        Preset(name: "全部走节点 + 去广告", file: "sr_proxy_banad.conf", detail: "全部走节点，外加拦截广告"),
+        Preset(name: L("黑名单"), file: "sr_top500_banlist.conf", detail: L("被墙的常用网站走节点，其余直连")),
+        Preset(name: L("黑名单 + 去广告"), file: "sr_top500_banlist_ad.conf", detail: L("黑名单，外加拦截广告和跟踪")),
+        Preset(name: L("白名单"), file: "sr_top500_whitelist.conf", detail: L("国内常用网站和国内 IP 直连，其余走节点")),
+        Preset(name: L("白名单 + 去广告"), file: "sr_top500_whitelist_ad.conf", detail: L("白名单，外加拦截广告和跟踪")),
+        Preset(name: L("国内 IP 直连"), file: "sr_cnip.conf", detail: L("只按 IP 归属分流：国内直连，国外走节点")),
+        Preset(name: L("国内 IP 直连 + 去广告"), file: "sr_cnip_ad.conf", detail: L("按 IP 归属分流，外加拦截广告")),
+        Preset(name: L("全部直连 + 去广告"), file: "sr_direct_banad.conf", detail: L("不走节点，只拦广告")),
+        Preset(name: L("全部走节点 + 去广告"), file: "sr_proxy_banad.conf", detail: L("全部走节点，外加拦截广告")),
     ]
 
     static func preset(for url: String) -> Preset? {
@@ -245,31 +245,31 @@ enum RuleLibrary {
     static let metaGeo = "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/"
     static let acl4ssr = "https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/"
 
-    static let basics = "基础"
-    static let ads = "去广告"
-    static let services = "境外服务"
+    static let basics = L("基础")
+    static let ads = L("去广告")
+    static let services = L("境外服务")
     static let ai = "AI"
-    static let streaming = "流媒体"
-    static let social = "社交与游戏"
-    static let shadowrocket = "小火箭完整配置"
+    static let streaming = L("流媒体")
+    static let social = L("社交与游戏")
+    static let shadowrocket = L("小火箭完整配置")
 
     static let all: [RuleLibraryEntry] = curated + RulePresets.all.map { preset in
-        RuleLibraryEntry(name: preset.name, detail: preset.detail + "。完整配置，规则的去向和 FINAL 都按文件里写的", url: preset.url, policy: nil, behavior: nil, category: shadowrocket)
+        RuleLibraryEntry(name: preset.name, detail: preset.detail + L("。完整配置，规则的去向和 FINAL 都按文件里写的"), url: preset.url, policy: nil, behavior: nil, category: shadowrocket)
     }
 
     static let curated: [RuleLibraryEntry] = [
-        RuleLibraryEntry(name: "国内直连", detail: ".cn 域名和国内 IP 直连，内置，不用下载", url: RuleSet.chinaDirectURL, policy: .direct, behavior: nil, category: basics),
-        RuleLibraryEntry(name: "国内域名", detail: "MetaCubeX 整理的国内域名（geosite:cn），比按 .cn 后缀判断全得多", url: metaGeo + "geosite/cn.mrs", policy: .direct, behavior: .domain, category: basics),
-        RuleLibraryEntry(name: "被墙网站", detail: "已知被屏蔽的网站（geosite:gfw）", url: metaGeo + "geosite/gfw.mrs", policy: .proxy, behavior: .domain, category: basics),
-        RuleLibraryEntry(name: "境外常用网站", detail: "geosite:geolocation-!cn，国外常用网站都走节点", url: metaGeo + "geosite/geolocation-!cn.mrs", policy: .proxy, behavior: .domain, category: basics),
-        RuleLibraryEntry(name: "广告与跟踪", detail: "geosite:category-ads-all，体积小、够用", url: metaGeo + "geosite/category-ads-all.mrs", policy: .reject, behavior: .domain, category: ads),
-        RuleLibraryEntry(name: "广告（ACL4SSR）", detail: "常见广告域名", url: acl4ssr + "BanAD.list", policy: .reject, behavior: .classical, category: ads),
-        RuleLibraryEntry(name: "应用内广告（ACL4SSR）", detail: "程序和应用里的广告、统计上报", url: acl4ssr + "BanProgramAD.list", policy: .reject, behavior: .classical, category: ads),
-        RuleLibraryEntry(name: "Apple", detail: "苹果的服务，一般直连更快", url: blackmatrix + "Apple/Apple.list", policy: .direct, behavior: .classical, category: services),
-        RuleLibraryEntry(name: "Microsoft", detail: "微软的服务", url: blackmatrix + "Microsoft/Microsoft.list", policy: .direct, behavior: .classical, category: services),
-        RuleLibraryEntry(name: "Google", detail: "Google 全家", url: blackmatrix + "Google/Google.list", policy: .proxy, behavior: .classical, category: services),
-        RuleLibraryEntry(name: "GitHub", detail: "GitHub 及其静态资源", url: blackmatrix + "GitHub/GitHub.list", policy: .proxy, behavior: .classical, category: services),
-        RuleLibraryEntry(name: "Telegram", detail: "Telegram 的域名和 IP 段", url: blackmatrix + "Telegram/Telegram.list", policy: .proxy, behavior: .classical, category: social),
+        RuleLibraryEntry(name: L("国内直连"), detail: L(".cn 域名和国内 IP 直连，内置，不用下载"), url: RuleSet.chinaDirectURL, policy: .direct, behavior: nil, category: basics),
+        RuleLibraryEntry(name: L("国内域名"), detail: L("MetaCubeX 整理的国内域名（geosite:cn），比按 .cn 后缀判断全得多"), url: metaGeo + "geosite/cn.mrs", policy: .direct, behavior: .domain, category: basics),
+        RuleLibraryEntry(name: L("被墙网站"), detail: L("已知被屏蔽的网站（geosite:gfw）"), url: metaGeo + "geosite/gfw.mrs", policy: .proxy, behavior: .domain, category: basics),
+        RuleLibraryEntry(name: L("境外常用网站"), detail: L("geosite:geolocation-!cn，国外常用网站都走节点"), url: metaGeo + "geosite/geolocation-!cn.mrs", policy: .proxy, behavior: .domain, category: basics),
+        RuleLibraryEntry(name: L("广告与跟踪"), detail: L("geosite:category-ads-all，体积小、够用"), url: metaGeo + "geosite/category-ads-all.mrs", policy: .reject, behavior: .domain, category: ads),
+        RuleLibraryEntry(name: L("广告（ACL4SSR）"), detail: L("常见广告域名"), url: acl4ssr + "BanAD.list", policy: .reject, behavior: .classical, category: ads),
+        RuleLibraryEntry(name: L("应用内广告（ACL4SSR）"), detail: L("程序和应用里的广告、统计上报"), url: acl4ssr + "BanProgramAD.list", policy: .reject, behavior: .classical, category: ads),
+        RuleLibraryEntry(name: "Apple", detail: L("苹果的服务，一般直连更快"), url: blackmatrix + "Apple/Apple.list", policy: .direct, behavior: .classical, category: services),
+        RuleLibraryEntry(name: "Microsoft", detail: L("微软的服务"), url: blackmatrix + "Microsoft/Microsoft.list", policy: .direct, behavior: .classical, category: services),
+        RuleLibraryEntry(name: "Google", detail: L("Google 全家"), url: blackmatrix + "Google/Google.list", policy: .proxy, behavior: .classical, category: services),
+        RuleLibraryEntry(name: "GitHub", detail: L("GitHub 及其静态资源"), url: blackmatrix + "GitHub/GitHub.list", policy: .proxy, behavior: .classical, category: services),
+        RuleLibraryEntry(name: "Telegram", detail: L("Telegram 的域名和 IP 段"), url: blackmatrix + "Telegram/Telegram.list", policy: .proxy, behavior: .classical, category: social),
         RuleLibraryEntry(name: "Twitter / X", detail: "", url: blackmatrix + "Twitter/Twitter.list", policy: .proxy, behavior: .classical, category: social),
         RuleLibraryEntry(name: "PayPal", detail: "", url: blackmatrix + "PayPal/PayPal.list", policy: .proxy, behavior: .classical, category: services),
         RuleLibraryEntry(name: "OpenAI / ChatGPT", detail: "", url: blackmatrix + "OpenAI/OpenAI.list", policy: .proxy, behavior: .classical, category: ai),
@@ -280,8 +280,8 @@ enum RuleLibrary {
         RuleLibraryEntry(name: "Disney+", detail: "", url: blackmatrix + "Disney/Disney.list", policy: .proxy, behavior: .classical, category: streaming),
         RuleLibraryEntry(name: "Spotify", detail: "", url: blackmatrix + "Spotify/Spotify.list", policy: .proxy, behavior: .classical, category: streaming),
         RuleLibraryEntry(name: "TikTok", detail: "", url: blackmatrix + "TikTok/TikTok.list", policy: .proxy, behavior: .classical, category: streaming),
-        RuleLibraryEntry(name: "哔哩哔哩", detail: "国内直连", url: blackmatrix + "BiliBili/BiliBili.list", policy: .direct, behavior: .classical, category: streaming),
-        RuleLibraryEntry(name: "Steam", detail: "商店和下载，一般直连", url: blackmatrix + "Steam/Steam.list", policy: .direct, behavior: .classical, category: social),
+        RuleLibraryEntry(name: L("哔哩哔哩"), detail: L("国内直连"), url: blackmatrix + "BiliBili/BiliBili.list", policy: .direct, behavior: .classical, category: streaming),
+        RuleLibraryEntry(name: "Steam", detail: L("商店和下载，一般直连"), url: blackmatrix + "Steam/Steam.list", policy: .direct, behavior: .classical, category: social),
     ]
 
     /// 分类，按出现顺序。

@@ -7,9 +7,9 @@ enum CoreAPIError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .status(let code, let message): return message.isEmpty ? "内核返回了 \(code)" : "内核返回了 \(code)：\(message)"
-        case .badResponse: return "读不懂内核返回的内容"
-        case .delayFailed: return "测速失败"
+        case .status(let code, let message): return message.isEmpty ? L("内核返回了 %@", code) : L("内核返回了 %@：%@", code, message)
+        case .badResponse: return L("读不懂内核返回的内容")
+        case .delayFailed: return L("测速失败")
         }
     }
 }

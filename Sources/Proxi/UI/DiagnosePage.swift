@@ -27,7 +27,7 @@ struct DiagnosePage: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            PageHeader(title: "网址诊断", subtitle: "某个网站打不开？把链路走一遍，告诉你卡在哪、怎么修")
+            PageHeader(title: L("网址诊断"), subtitle: L("某个网站打不开？把链路走一遍，告诉你卡在哪、怎么修"))
             Form {
                 inputSection
                 resultsSection
@@ -43,18 +43,18 @@ struct DiagnosePage: View {
     // MARK: - 输入
 
     private var inputSection: some View {
-        Section("要检查什么") {
+        Section(L("要检查什么")) {
             HStack {
-                TextField("", text: $urlText, prompt: Text("网址或域名，比如 youtube.com"))
+                TextField("", text: $urlText, prompt: Text(L("网址或域名，比如 youtube.com")))
                     .labelsHidden()
                     .onSubmit { start() }
-                Button(diagnoser.running ? "停止" : "开始诊断") {
+                Button(diagnoser.running ? L("停止") : L("开始诊断")) {
                     if diagnoser.running { diagnoser.cancel() } else { start() }
                 }
                 .keyboardShortcut(.defaultAction)
                 .disabled(!diagnoser.running && urlText.trimmingCharacters(in: .whitespaces).isEmpty)
             }
-            Picker("从谁的视角", selection: $perspective) {
+            Picker(L("从谁的视角"), selection: $perspective) {
                 ForEach(DiagnoseTarget.Perspective.allCases) { item in
                     Text(item.title).tag(item)
                 }
@@ -65,7 +65,7 @@ struct DiagnosePage: View {
                     .font(.caption)
                     .foregroundStyle(.red)
             }
-            Text(perspective == .device ? "从共享入口走一遍，和 PS5 等设备走的路径完全一样：共享入口 → 规则 → 上游。" : "按这台 Mac 现在的代理状态走一遍：直连、经代理、DNS、节点，逐项对比。")
+            Text(perspective == .device ? L("从共享入口走一遍，和 PS5 等设备走的路径完全一样：共享入口 → 规则 → 上游。") : L("按这台 Mac 现在的代理状态走一遍：直连、经代理、DNS、节点，逐项对比。"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -74,9 +74,9 @@ struct DiagnosePage: View {
     // MARK: - 结果
 
     private var resultsSection: some View {
-        Section("检查结果") {
+        Section(L("检查结果")) {
             if diagnoser.rows.isEmpty {
-                Text("填好网址点「开始诊断」。剪贴板里有网址的话会自动填上。")
+                Text(L("填好网址点「开始诊断」。剪贴板里有网址的话会自动填上。"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -127,7 +127,7 @@ struct DiagnosePage: View {
     // MARK: - 结论
 
     private var verdictSection: some View {
-        Section("结论") {
+        Section(L("结论")) {
             if let verdict = diagnoser.verdict {
                 Text(verdict.headline)
                     .font(.system(size: 14, weight: .semibold))
@@ -138,23 +138,23 @@ struct DiagnosePage: View {
                     .textSelection(.enabled)
                 HStack(spacing: 8) {
                     ForEach(Array(verdict.actions.enumerated()), id: \.offset) { item in
-                        Button(item.element == .copyReport && copied ? "已复制" : item.element.title) {
+                        Button(item.element == .copyReport && copied ? L("已复制") : item.element.title) {
                             perform(item.element)
                         }
                     }
-                    Button("再测一次") { start() }
+                    Button(L("再测一次")) { start() }
                         .disabled(diagnoser.running)
                 }
                 .controlSize(.small)
             } else if diagnoser.running {
                 HStack(spacing: 6) {
                     ProgressView().controlSize(.small)
-                    Text("正在检查…")
+                    Text(L("正在检查…"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
             } else {
-                Text("检查完会在这里告诉你原因和怎么修。")
+                Text(L("检查完会在这里告诉你原因和怎么修。"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -181,7 +181,7 @@ struct DiagnosePage: View {
 
     private func start() {
         guard let url = DiagnoseTarget.normalize(urlText) else {
-            problem = "认不出这个网址：填 youtube.com 或者 https://… 这样的地址"
+            problem = L("认不出这个网址：填 youtube.com 或者 https://… 这样的地址")
             return
         }
         problem = nil

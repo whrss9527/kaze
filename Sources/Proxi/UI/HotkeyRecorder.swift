@@ -73,13 +73,13 @@ struct HotkeyRecorder: NSViewRepresentable {
             let text: String
             let color: NSColor
             if recording {
-                text = "按下组合键…"
+                text = L("按下组合键…")
                 color = .controlAccentColor
             } else if let binding {
                 text = binding.display
                 color = .labelColor
             } else {
-                text = "点击设置"
+                text = L("点击设置")
                 color = .secondaryLabelColor
             }
             let paragraph = NSMutableParagraphStyle()

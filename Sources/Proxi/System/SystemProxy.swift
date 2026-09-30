@@ -8,9 +8,9 @@ enum SystemProxyError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .noServices: return "没有找到可用的网络服务"
+        case .noServices: return L("没有找到可用的网络服务")
         case .command(let message): return message
-        case .needsAdmin(let message): return "修改系统代理需要管理员权限：\(message)"
+        case .needsAdmin(let message): return L("修改系统代理需要管理员权限：%@", message)
         }
     }
 }
@@ -52,7 +52,7 @@ enum SystemProxy {
                 if isAdminError(text) {
                     throw SystemProxyError.needsAdmin(text)
                 }
-                throw SystemProxyError.command("networksetup \(arguments[0]) 失败：\(text)")
+                throw SystemProxyError.command(L("networksetup %@ 失败：%@", arguments[0], text))
             }
         }
     }

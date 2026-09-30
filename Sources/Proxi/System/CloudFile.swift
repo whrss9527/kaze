@@ -23,7 +23,7 @@ struct SyncedConfig: Codable, Equatable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         format = try container.decodeIfPresent(Int.self, forKey: .format) ?? SyncedConfig.currentFormat
         updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt) ?? .distantPast
-        device = try container.decodeIfPresent(String.self, forKey: .device) ?? "未知设备"
+        device = try container.decodeIfPresent(String.self, forKey: .device) ?? L("未知设备")
         config = try container.decode(AppConfig.self, forKey: .config)
     }
 }
@@ -33,7 +33,7 @@ enum CloudFileError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .unavailable: return "iCloud 云盘没有开启"
+        case .unavailable: return L("iCloud 云盘没有开启")
         }
     }
 }

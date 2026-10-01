@@ -246,13 +246,13 @@ final class AppState: ObservableObject {
 
     // MARK: - 开关
 
-    func toggle() {
+    func toggle(askForPassword: Bool = true) {
         switch status {
         case .on, .external:
             turnOff()
         case .off(let next):
             if let next {
-                turnOn(next)
+                turnOn(next, askForPassword: askForPassword)
             } else {
                 lastError = L("还没有代理配置，请先在设置里添加一个")
                 SettingsWindowController.shared.show(page: .profiles)
@@ -260,14 +260,15 @@ final class AppState: ObservableObject {
         }
     }
 
-    func turnOn(_ profile: Profile) {
+    /// askForPassword：钥匙串里没有密码时弹窗请用户输入；命令行和 AI 助手调用时不弹窗，直接报错。
+    func turnOn(_ profile: Profile, askForPassword: Bool = true) {
         guard !busy else { return }
         // 要登录的代理：密码从这台 Mac 的钥匙串里取；还没有（比如配置是从别的 Mac 同步来的）就请用户输入一次。
         var password = ""
         if profile.needsPassword {
             if let saved = ProxyKeychain.password(for: profile.id) {
                 password = saved
-            } else if let entered = PasswordPrompt.ask(for: profile), !entered.isEmpty {
+            } else if askForPassword, let entered = PasswordPrompt.ask(for: profile), !entered.isEmpty {
                 do {
                     try ProxyKeychain.set(entered, for: profile.id)
                 } catch {
@@ -276,6 +277,7 @@ final class AppState: ObservableObject {
                 password = entered
             } else {
                 lastError = L("没有「%@」的代理密码，没有开启", profile.name)
+                Log.error("这台 Mac 的钥匙串里没有「\(profile.name)」的代理密码，没有开启")
                 onStatusChanged?()
                 return
             }

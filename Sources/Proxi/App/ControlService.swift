@@ -163,9 +163,9 @@ final class ControlService: ObservableObject {
                 throw ControlError.failed(L("还没有代理配置"))
             }
             await waitForIdle(state)
-            state.turnOn(profile)
+            state.turnOn(profile, askForPassword: false)
             await waitForIdle(state)
-            if let error = state.lastError, !state.status.isOn { throw ControlError.failed(L("开启失败：%@", error)) }
+            if let error = state.lastError, !(state.status.isOn && state.status.profile?.id == profile.id) { throw ControlError.failed(L("开启失败：%@", error)) }
             return ["text": L("已开启「%@」（%@）", profile.name, profile.summary)]
         case "turn_off":
             await waitForIdle(state)
@@ -174,7 +174,7 @@ final class ControlService: ObservableObject {
             return ["text": L("代理已关闭")]
         case "toggle":
             await waitForIdle(state)
-            state.toggle()
+            state.toggle(askForPassword: false)
             await waitForIdle(state)
             return ["text": state.status.isOn ? L("代理已开启：%@", state.status.profile?.name ?? "") : L("代理已关闭")]
         case "test_profiles":

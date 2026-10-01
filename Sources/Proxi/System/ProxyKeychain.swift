@@ -1,8 +1,9 @@
 import Foundation
 import Security
 
-/// 代理配置的密码存在这台 Mac 的钥匙串里：通用密码，服务是程序的标识，账户是配置的 id。
-/// 不允许 iCloud 钥匙串同步；配置文件、iCloud 同步和导出里都只有「有没有密码」这个标记，
+/// 代理配置的密码存在这台 Mac 的登录钥匙串里：通用密码，服务是程序的标识，账户是配置的 id。
+/// 用的是登录钥匙串（文件钥匙串），里面的项目不会经 iCloud 钥匙串同步（同步只针对另一种、标了可同步的项目，
+/// 查询里写 kSecAttrSynchronizable 反而会转到那种钥匙串，没有开发者签名的程序用不了）；配置文件、iCloud 同步和导出里都只有「有没有密码」这个标记，
 /// 别的 Mac 第一次开启这个配置时会请用户输入一次。
 enum ProxyKeychain {
     static let service = "com.whrss9527.proxyswitch"
@@ -12,7 +13,6 @@ enum ProxyKeychain {
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: id.uuidString,
-            kSecAttrSynchronizable as String: false,
         ]
     }
 
@@ -22,7 +22,13 @@ enum ProxyKeychain {
         request[kSecReturnData as String] = true
         request[kSecMatchLimit as String] = kSecMatchLimitOne
         var item: CFTypeRef?
-        guard SecItemCopyMatching(request as CFDictionary, &item) == errSecSuccess, let data = item as? Data else { return nil }
+        let status = SecItemCopyMatching(request as CFDictionary, &item)
+        guard status == errSecSuccess, let data = item as? Data else {
+            if status != errSecItemNotFound {
+                Log.error("读钥匙串失败：\(status)")
+            }
+            return nil
+        }
         return String(data: data, encoding: .utf8)
     }
 

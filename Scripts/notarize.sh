@@ -80,7 +80,25 @@ for zip in "$@"; do
   [ -n "$app" ] || { echo "$name 里没有 .app"; exit 1; }
   xcrun stapler staple "$app"
   xcrun stapler validate "$app"
-  spctl --assess --type execute --verbose=2 "$app"
+  # 刚钉上票据时系统可能还认不出来，隔几秒多试几次；一直不通过就把能看到的信息都打出来再失败。
+  assessed=0
+  for attempt in 1 2 3 4 5 6; do
+    if spctl --assess --type execute --verbose=2 "$app"; then
+      assessed=1
+      break
+    fi
+    echo "  第 $attempt 次检查没通过，10 秒后再试"
+    sleep 10
+  done
+  if [ "$assessed" != 1 ]; then
+    echo "===== 系统不认这个程序（为什么没通过） ====="
+    spctl --assess --type execute -vvv "$app" 2>&1 || true
+    codesign -dvvv "$app" 2>&1 || true
+    codesign --verify --deep --strict --verbose=2 "$app" 2>&1 || true
+    xcrun stapler validate -v "$app" 2>&1 || true
+    xcrun notarytool log "$id" "${auth[@]}" || true
+    exit 1
+  fi
   target="$(cd "$(dirname "$zip")" && pwd)/$name"
   rm -f "$target"
   (cd "$dir" && ditto -c -k --keepParent "$(basename "$app")" "$target")

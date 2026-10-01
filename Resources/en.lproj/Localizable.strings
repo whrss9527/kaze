@@ -530,7 +530,6 @@
 "打开代理引擎" = "Open Proxy Engine";
 "扩展" = "Extensions";
 "扩展没有开启" = "The extension isn't enabled";
-"暂不开启" = "Not Now";
 "本功能仅供学习、研究网络技术及合法的开发调试使用，不得用于任何违反所在国家或地区法律法规的用途。\n\n1. 开发者不提供任何代理服务、服务器或订阅，也不对第三方提供的内容负责；\n2. 使用者应自行确认其使用行为符合当地法律法规，并独立承担因使用本功能产生的全部责任；\n3. 请在下载后 24 小时内自行评估是否继续使用；如不同意上述条款，请勿开启本功能。\n\n开启即表示你已阅读并同意以上条款。" = "This feature is provided only for learning, for research into network technology, and for lawful development and debugging. It must not be used for any purpose that violates the laws or regulations of your country or region.\n\n1. The developer provides no proxy service, servers or subscriptions, and is not responsible for any content provided by third parties.\n2. You are responsible for making sure your use complies with local laws and regulations, and you bear full responsibility for all consequences of using this feature.\n3. Please decide within 24 hours of downloading whether to continue using it. If you do not agree to these terms, do not enable this feature.\n\nEnabling it means you have read and agree to these terms.";
 "正在下载…" = "Downloading…";
 "正在安装…" = "Installing…";
@@ -543,6 +542,5 @@
 "还没有同意扩展的说明" = "The extension's terms haven't been accepted";
 "还没有安装" = "Not installed yet";
 "这个版本的发布里没有 %@" = "This version's release doesn't include %@";
-"这台 Mac 上有以前的版本留下的代理引擎设置，已经原样保留。代理引擎现在是一个可选扩展：开启后单独下载安装，之后和以前一样使用；暂不开启的话设置留着，以后可以在「设置 → 扩展」里开启。" = "This Mac has proxy engine settings from an earlier version, and they've been kept as they were. The proxy engine is now an optional extension: once enabled, it's downloaded and installed separately and works as before. If you don't enable it now, your settings are kept and you can enable it later in Settings → Extensions.";
 "这条配置由扩展「代理引擎」管理：地址是它在本机的端口，跟着它变。在「设置 → 扩展」里关闭扩展时它会一起去掉。" = "This profile is managed by the Proxy Engine extension: its address is the engine's local port and follows it. It's removed when you turn the extension off in Settings → Extensions.";
 "重新下载" = "Download Again";

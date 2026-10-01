@@ -391,7 +391,7 @@ struct RuleSetRow: View {
             parts.append(problem)
         }
         if parts.isEmpty {
-            parts.append(set.isBuiltin ? L("不用下载") : (set.enabled ? L("还没有下载") : L("已停用")))
+            parts.append(set.isBuiltin ? L("按域名后缀和 IP 归属地判断，不用下载") : (set.enabled ? L("还没有下载") : L("已停用")))
         }
         return parts.joined(separator: " · ")
     }

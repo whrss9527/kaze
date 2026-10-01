@@ -109,6 +109,13 @@ final class RulesTests: XCTestCase {
         XCTAssertTrue(builtin.isBuiltin)
         XCTAssertEqual(builtin.policy, .direct)
         XCTAssertEqual(RuleSet.chinaDirect(), RuleSet.chinaDirect())
+        // 旧配置里内置规则集的默认名字（中文、英文界面存的）换成现在的；用户自己改过的名字不动。
+        for legacy in ["国内直连", "China Direct"] {
+            let json = #"{"name":"\#(legacy)","url":"builtin://china-direct","policy":"direct"}"#
+            XCTAssertEqual(try JSONDecoder().decode(RuleSet.self, from: Data(json.utf8)).name, builtin.name)
+        }
+        XCTAssertEqual(try JSONDecoder().decode(RuleSet.self, from: Data(#"{"name":"我的直连","url":"builtin://china-direct","policy":"direct"}"#.utf8)).name, "我的直连")
+        XCTAssertEqual(try JSONDecoder().decode(RuleSet.self, from: Data(#"{"name":"国内直连","url":"https://x/a.list"}"#.utf8)).name, "国内直连")
         XCTAssertEqual(RuleSet(name: "f", url: "file:///Users/me/rules.list", policy: .proxy).filePath, "/Users/me/rules.list")
         XCTAssertNil(list.filePath)
         XCTAssertNil(RuleSet.validate(url: "https://x/a.list"))

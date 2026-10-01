@@ -33,7 +33,7 @@ enum RuleStore {
         (try? FileManager.default.attributesOfItem(atPath: file.path))?[.modificationDate] as? Date
     }
 
-    /// raw.githubusercontent.com 的地址换成 jsDelivr 的镜像（国内也能直接访问）；不是 GitHub 原始地址时返回 nil。
+    /// raw.githubusercontent.com 的地址换成 jsDelivr 的镜像（直连也常能访问）；不是 GitHub 原始地址时返回 nil。
     static func mirrorURL(for text: String) -> String? {
         guard let url = URL(string: text.trimmingCharacters(in: .whitespaces)), url.host?.lowercased() == "raw.githubusercontent.com" else { return nil }
         let parts = url.path.split(separator: "/").map(String.init)

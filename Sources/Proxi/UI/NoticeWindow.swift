@@ -1,50 +1,22 @@
 import AppKit
 import SwiftUI
 
-/// 从以前的版本更新过来后显示一次的提示。用普通窗口而不是模态对话框：不挡住菜单栏图标、命令行和更新。
+/// 从以前的版本更新过来后显示一次的提示（以前装过、现在用不上的后台助手）。用普通窗口而不是模态对话框：不挡住菜单栏图标、命令行和更新。
 @MainActor
 final class NoticeWindowController: NSObject, NSWindowDelegate {
     static let shared = NoticeWindowController()
 
     private var window: NSWindow?
-    /// 用户点关闭按钮关掉窗口时调用（扩展说明：当作暂不开启）；程序退出时不算。
-    private var onClose: (() -> Void)?
 
     /// 以前的版本装过后台助手、扩展没开：提示可以移除。
     func showHelperNotice() {
         let view = HelperNoticeView { [weak self] in
             MainActor.assumeIsolated { self?.window?.close() }
         }
-        show(NSHostingController(rootView: view), title: L("以前版本的后台助手"), onClose: nil)
+        show(NSHostingController(rootView: view), title: L("以前版本的后台助手"))
     }
 
-    /// 从以前的版本更新过来、有代理引擎的数据：问一次要不要开启扩展（说明和扩展页里的一样，要勾选同意）。
-    func showExtensionDisclaimer(migrating: Bool) {
-        let state = AppState.shared
-        let view = ExtensionDisclaimerView(
-            migrating: migrating,
-            restoring: state.persisted.extensionState.restoreActive,
-            onEnable: { [weak self] in
-                MainActor.assumeIsolated {
-                    self?.onClose = nil
-                    state.enableExtension()
-                    self?.window?.close()
-                }
-            },
-            onCancel: { [weak self] in
-                MainActor.assumeIsolated {
-                    self?.onClose = nil
-                    self?.window?.close()
-                    state.declineMigratedExtension()
-                }
-            }
-        )
-        show(NSHostingController(rootView: view), title: L("代理引擎（扩展）"), onClose: {
-            state.declineMigratedExtension()
-        })
-    }
-
-    private func show(_ controller: NSViewController, title: String, onClose: (() -> Void)?) {
+    private func show(_ controller: NSViewController, title: String) {
         window?.close()
         let window = NSWindow(contentViewController: controller)
         window.title = title
@@ -53,24 +25,14 @@ final class NoticeWindowController: NSObject, NSWindowDelegate {
         window.delegate = self
         window.center()
         self.window = window
-        self.onClose = onClose
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
     }
 
-    /// 用户点了窗口的关闭按钮（程序退出时不会走这里）：扩展说明当作「暂不开启」。
-    func windowShouldClose(_ sender: NSWindow) -> Bool {
-        let pending = onClose
-        onClose = nil
-        pending?()
-        return true
-    }
-
     func windowWillClose(_ notification: Notification) {
         guard (notification.object as? NSWindow) === window else { return }
         window = nil
-        onClose = nil
         // 设置窗口没开着时回到只有菜单栏图标。
         if !NSApp.windows.contains(where: { $0.isVisible && $0.title == L("Proxi 设置") }) {
             NSApp.setActivationPolicy(.accessory)

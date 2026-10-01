@@ -158,8 +158,8 @@ final class AppState: ObservableObject {
     // MARK: - 从以前的版本更新过来
 
     /// 第一次启动新版本时：以前版本的代理引擎数据挪到代理引擎的数据目录（一个都不删）；上次开着的是代理引擎那条配置就先把代理关掉
-    /// （不然系统代理指向一个没人监听的本机端口），记下来，等用户同意说明、开启扩展、代理引擎运行起来后再开回来。
-    /// 有代理引擎的数据时问一次要不要开启扩展；没有时什么都不显示（只有以前装过后台助手时提示可以移除）。
+    /// （不然系统代理指向一个没人监听的本机端口），记下来，等用户在「设置 → 扩展」里开启、代理引擎运行起来后再开回来。
+    /// 不弹扩展的说明（只在扩展页里打开开关时显示）；只有以前装过后台助手、又没有代理引擎的数据时提示可以移除。
     private func finishLegacyMigration() {
         legacyHelperInstalled = LegacyCleanup.helperInstalled
         var ext = persisted.extensionState
@@ -173,14 +173,15 @@ final class AppState: ObservableObject {
                     profile.engine = true
                     ext.profile = profile
                 }
-                if legacy.hasEngineData && !ext.enabled {
-                    ext.pendingMigration = true
-                }
                 if legacy.activeBuiltIn != nil {
                     ext.restoreActive = true
                 }
                 // 去掉以前版本的设置后写回去（代理引擎的设置已经在它自己的目录里了）。
                 Store.save(config)
+            }
+            if legacy.hasEngineData {
+                // 有代理引擎的数据：以后开启扩展还要用以前的后台助手，不弹移除的提示（「设置 → 通用」里照样能移除）。
+                persisted.noticeShown = true
             }
             persisted.extensionState = ext
             Store.save(persisted)
@@ -219,17 +220,6 @@ final class AppState: ObservableObject {
                 }
             }
         }
-        if persisted.extensionState.pendingMigration {
-            // 只问一次：不管用户点了什么（包括直接关掉窗口），下次启动都不再弹。
-            persisted.extensionState.pendingMigration = false
-            Store.save(persisted)
-            Task { @MainActor in
-                try? await Task.sleep(for: .seconds(1))
-                NoticeWindowController.shared.showExtensionDisclaimer(migrating: true)
-            }
-            Log.info("已显示扩展说明（以前的版本里有代理引擎的数据）")
-            return
-        }
         guard !persisted.noticeShown, legacyHelperInstalled, !persisted.extensionState.enabled else { return }
         persisted.noticeShown = true
         Store.save(persisted)
@@ -240,20 +230,13 @@ final class AppState: ObservableObject {
         Log.info("已显示后台助手的提示")
     }
 
-    /// 从以前的版本更新过来时的说明里，用户没有开启扩展：数据留着，以前开着的配置不再恢复；以前装过后台助手就提示可以移除。
-    func declineMigratedExtension() {
-        persisted.extensionState.restoreActive = false
-        Store.save(persisted)
-        Log.info("用户没有开启扩展，代理引擎的数据留在 \(ExtensionManager.dataDirectory.path)")
-        if legacyHelperInstalled && !persisted.noticeShown {
-            persisted.noticeShown = true
-            Store.save(persisted)
-            NoticeWindowController.shared.showHelperNotice()
-            Log.info("已显示后台助手的提示")
-        }
-    }
-
     // MARK: - 扩展「代理引擎」
+
+    /// 从以前的版本更新过来时开着的是代理引擎那条配置、现在代理关着：开启扩展、代理引擎运行起来后把它开回来（扩展页的说明里会提到）。
+    var willRestoreEngineProfile: Bool {
+        guard persisted.extensionState.restoreActive, case .off = status else { return false }
+        return true
+    }
 
     /// 用户勾选同意说明并点了开启。
     func enableExtension() {
@@ -274,17 +257,22 @@ final class AppState: ObservableObject {
         reconcileEngineProfile()
     }
 
-    /// 代理引擎开了、停了、换了端口：调整配置列表里的「代理引擎」；从以前的版本过来、以前开着它的，内核起来后开回来。
+    /// 代理引擎开了、停了、换了端口：调整配置列表里的「代理引擎」；从以前的版本过来、以前开着它的，内核起来后开回来
+    /// （这时用户已经开着别的配置就不动它）。
     private func extensionChanged() {
         reconcileEngineProfile()
         if persisted.extensionState.enabled, persisted.extensionState.restoreActive, extensions.status?.coreRunning != true {
             Log.info("扩展：等代理引擎的内核起来后开回以前开着的配置")
         }
         guard persisted.extensionState.enabled, persisted.extensionState.restoreActive,
-              let status = extensions.status, status.coreRunning,
+              let engineStatus = extensions.status, engineStatus.coreRunning,
               let profile = config.profiles.first(where: { $0.engine }) else { return }
         persisted.extensionState.restoreActive = false
         Store.save(persisted)
+        guard case .off = status else {
+            Log.info("代理引擎运行起来了，现在开着别的配置，不开回以前开着的「\(profile.name)」")
+            return
+        }
         Log.info("代理引擎运行起来了，开回以前开着的「\(profile.name)」")
         turnOn(profile)
     }

@@ -165,7 +165,7 @@ jobs:
           grep -q "应用了来自 另一台 Mac 的配置" "$support/proxi.log" || { echo "没有从假 iCloud 拉到配置"; exit 1; }
           grep -q '界面语言 english=false setting=simplifiedChinese sample="设置…"' "$support/proxi.log" || { echo "界面选了简体中文，应该是中文"; exit 1; }
           grep -q "iCloud 来的" "$support/config.json" || { echo "拉到的配置没有写到本机"; cat "$support/config.json"; exit 1; }
-          grep -q "已显示扩展说明\|已显示后台助手的提示" "$support/proxi.log" && { echo "新装的配置不该显示提示"; exit 1; }
+          grep -q "已显示后台助手的提示" "$support/proxi.log" && { echo "新装的配置不该显示提示"; exit 1; }
           grep -q "扩展：代理引擎没有开启" "$support/proxi.log" || { echo "扩展默认应该关着"; exit 1; }
           # 命令行、MCP 和 URL 命令：经本机控制接口操作正在运行的程序。
           cli=dist/Proxi.app/Contents/MacOS/Proxi
@@ -247,7 +247,7 @@ jobs:
           security delete-keychain "$kc" || true
           ls -la screenshots
           echo "冒烟测试通过"
-      - name: 从 0.12 更新过来的配置（代理引擎的数据原样保留，问一次要不要开启扩展）
+      - name: 从 0.12 更新过来的配置（代理引擎的数据原样保留，不弹扩展的说明）
         run: |
           exec > >(tee "$RUNNER_TEMP/migration.log") 2>&1
           support="$HOME/Library/Application Support/Proxi"
@@ -285,11 +285,12 @@ jobs:
           sudo touch /Library/PrivilegedHelperTools/com.whrss9527.proxyswitch.helper
           : > "$support/proxi.log"
           dist/Proxi.app/Contents/MacOS/Proxi >/dev/null 2>&1 &
-          for i in $(seq 1 30); do grep -q "已显示扩展说明" "$support/proxi.log" && grep -q "已关闭以前版本开着的代理引擎配置" "$support/proxi.log" && break; sleep 1; done
+          for i in $(seq 1 30); do grep -q "已关闭以前版本开着的代理引擎配置" "$support/proxi.log" && break; sleep 1; done
           sleep 3
-          screencapture -x screenshots/upgrade-notice.png || true
+          # 更新后不弹任何窗口：扩展的说明只在「设置 → 扩展」里打开开关时显示；有代理引擎的数据时，开启扩展还要用以前的后台助手，也不提示移除。
+          screencapture -x screenshots/upgrade.png || true
           echo "===== 程序日志 ====="; cat "$support/proxi.log"
-          grep -q "已显示扩展说明" "$support/proxi.log" || { echo "有代理引擎的数据，应该问一次要不要开启扩展"; exit 1; }
+          grep -q "已显示后台助手的提示" "$support/proxi.log" && { echo "有代理引擎的数据时更新后不该弹后台助手的提示"; exit 1; }
           grep -q "以前版本的代理引擎数据已放到" "$support/proxi.log" || { echo "没有迁移代理引擎的数据"; exit 1; }
           grep -q "已关闭以前版本开着的代理引擎配置" "$support/proxi.log" || { echo "没有先关掉以前开着的代理引擎配置"; exit 1; }
           grep -q "以前版本的后台助手还在，扩展没开" "$support/proxi.log" || { echo "没有认出以前版本的后台助手"; exit 1; }
@@ -311,7 +312,8 @@ jobs:
           assert [p["name"] for p in config["profiles"]] == ["公司代理"], config["profiles"]
           assert config["speedDisplay"] == "system" and config["automation"]["permission"] == "operate", config
           ext = state["extension"]
-          assert ext["enabled"] is False and ext["pendingMigration"] is False and ext["restoreActive"] is True and ext["migrationChecked"] is True, ext
+          assert ext["enabled"] is False and "pendingMigration" not in ext and ext["restoreActive"] is True and ext["migrationChecked"] is True, ext
+          assert state["noticeShown"] is True, "有代理引擎的数据时后台助手的提示记为不用再显示"
           assert ext["profile"]["id"] == "6D2F2A1E-0000-4000-8000-0000000000AA" and ext["profile"]["targets"] == ["git"], ext
           assert state["enabledByUs"] is False, state
           print("配置迁移正确")
@@ -323,16 +325,16 @@ jobs:
           pgrep -x ProxiEngine && { echo "没同意说明前代理引擎不该在运行"; exit 1; }
           pkill -x Proxi || true
           sleep 3
-          # 第二次启动不再问。
+          # 第二次启动也不弹窗。
           : > "$support/proxi.log"
           dist/Proxi.app/Contents/MacOS/Proxi >/dev/null 2>&1 &
           for i in $(seq 1 30); do grep -q "界面语言 english=" "$support/proxi.log" && break; sleep 1; done
           sleep 3
-          grep -q "已显示扩展说明" "$support/proxi.log" && { echo "说明显示了不止一次"; exit 1; }
+          grep -q "已显示后台助手的提示" "$support/proxi.log" && { echo "第二次启动不该弹后台助手的提示"; exit 1; }
           grep -q "扩展网络请求" "$support/proxi.log" && { echo "没同意说明前不该有扩展的网络请求"; exit 1; }
           pkill -x Proxi || true
           sleep 2
-          # 退出程序不算「暂不开启」：以前开着的配置还记着，开启扩展后开回来。
+          # 以前开着的配置还记着，在扩展页里开启扩展后开回来。
           python3 -c "import json,sys; e=json.load(open(sys.argv[1]))['extension']; assert e['restoreActive'] and not e['enabled'], e" "$support/state.json" || { echo "退出后扩展的状态不对"; exit 1; }
           sudo rm -f /Library/PrivilegedHelperTools/com.whrss9527.proxyswitch.helper
           git config --global --unset-all https.proxy || true
@@ -711,7 +713,6 @@ jobs:
           [ ! -e "$support/imports" ] || { echo "以前版本留下的 imports 没有删掉"; exit 1; }
           [ -f "$support/engine/imports/local.txt" ] || { echo "以前版本的 imports 没有原样挪到 engine/ 里"; ls -laR "$support"; exit 1; }
           grep -q '"engine"' "$support/engine/config-0.12-backup.json" || { echo "以前版本的配置没有备份"; exit 1; }
-          grep -q "已显示扩展说明" "$support/proxi.log" && { echo "没有代理引擎的数据时不该问要不要开启扩展"; exit 1; }
           pgrep -f "$new_app/Contents/MacOS/Proxi" >/dev/null || { echo "没有从 Proxi.app 重新打开"; exit 1; }
           # 改名前的命令行工具改好了，还多了一个 proxi。
           for i in $(seq 1 20); do grep -q "$new_app/Contents/MacOS/Proxi" /usr/local/bin/proxyswitch && break; sleep 0.5; done
@@ -848,7 +849,7 @@ jobs:
             sips -Z 560 -s format jpeg -s formatOptions 65 en-panel-crop.png --out en-panel.jpg >/dev/null
           fi
           # 设置窗口居中，裁到窗口附近再缩小，日志里放得下、看得清。
-          for name in settings sync general extensions upgrade-notice ext-page ext-profiles engine-settings about about-after about-relocate en-profiles en-general en-automation en-sync en-extensions en-about; do
+          for name in settings sync general extensions upgrade ext-page ext-profiles engine-settings about about-after about-relocate en-profiles en-general en-automation en-sync en-extensions en-about; do
             [ -f "$name.png" ] || continue
             width=$(sips -g pixelWidth "$name.png" | awk '/pixelWidth/{print $2}')
             height=$(sips -g pixelHeight "$name.png" | awk '/pixelHeight/{print $2}')
@@ -858,7 +859,7 @@ jobs:
             fi
             sips -Z 1000 -s format jpeg -s formatOptions 60 "$name-crop.png" --out "$name.jpg" >/dev/null
           done
-          for name in settings sync general extensions upgrade-notice ext-page ext-profiles engine-settings about-after panel panel-on ext-panel about panel-update about-relocate en-panel en-profiles en-general en-automation en-sync en-extensions en-about; do
+          for name in settings sync general extensions upgrade ext-page ext-profiles engine-settings about-after panel panel-on ext-panel about panel-update about-relocate en-panel en-profiles en-general en-automation en-sync en-extensions en-about; do
             [ -f "$name.jpg" ] || continue
             echo "=====BEGIN $name.jpg====="
             base64 -b 76 -i "$name.jpg"

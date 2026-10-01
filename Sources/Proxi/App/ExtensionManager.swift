@@ -10,9 +10,7 @@ struct ExtensionState: Codable, Equatable {
     var acceptedAt: Date?
     /// 配置列表里「代理引擎」那条配置（id、名字、颜色、生效范围），开启扩展时加回来、关闭时去掉。
     var profile: Profile?
-    /// 从以前的版本更新过来、有代理引擎的数据，还没问过用户要不要开启扩展。
-    var pendingMigration = false
-    /// 以前开着的就是代理引擎：用户同意、代理引擎运行起来后重新开启它。
+    /// 以前开着的就是代理引擎：用户开启扩展、代理引擎运行起来后重新开启它（那时代理关着才开）。
     var restoreActive = false
     /// 已经检查过以前版本的数据（只在第一次启动新版本时检查一次）。
     var migrationChecked = false
@@ -20,7 +18,7 @@ struct ExtensionState: Codable, Equatable {
     init() {}
 
     private enum CodingKeys: String, CodingKey {
-        case enabled, acceptedVersion, acceptedAt, profile, pendingMigration, restoreActive, migrationChecked
+        case enabled, acceptedVersion, acceptedAt, profile, restoreActive, migrationChecked
     }
 
     init(from decoder: Decoder) throws {
@@ -29,7 +27,6 @@ struct ExtensionState: Codable, Equatable {
         acceptedVersion = try? container.decodeIfPresent(Int.self, forKey: .acceptedVersion)
         acceptedAt = try? container.decodeIfPresent(Date.self, forKey: .acceptedAt)
         profile = try? container.decodeIfPresent(Profile.self, forKey: .profile)
-        pendingMigration = (try? container.decodeIfPresent(Bool.self, forKey: .pendingMigration)) ?? false
         restoreActive = (try? container.decodeIfPresent(Bool.self, forKey: .restoreActive)) ?? false
         migrationChecked = (try? container.decodeIfPresent(Bool.self, forKey: .migrationChecked)) ?? false
     }
@@ -164,13 +161,12 @@ final class ExtensionManager: ObservableObject {
         prepareAndLaunch()
     }
 
-    /// 用户同意说明并开启（扩展页里的对话框、从以前的版本更新过来时的提示）。
+    /// 用户在扩展页里勾选同意说明并开启。
     func accept() {
         var current = state
         current.enabled = true
         current.acceptedVersion = Self.disclaimerVersion
         current.acceptedAt = Date()
-        current.pendingMigration = false
         writeState?(current)
         Log.info("扩展：用户同意了说明（第 \(Self.disclaimerVersion) 版），开启代理引擎")
         onChange?()

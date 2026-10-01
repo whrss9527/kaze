@@ -57,6 +57,9 @@ struct RuleSet: Codable, Identifiable, Equatable, Hashable {
         enabled = try container.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
         behavior = try container.decodeIfPresent(RuleSetBehavior.self, forKey: .behavior)
         converted = try container.decodeIfPresent(Bool.self, forKey: .converted)
+        if url == Self.chinaDirectURL, Self.legacyBuiltinNames.contains(name) {
+            name = L("智能分流")
+        }
     }
 
     func encode(to encoder: Encoder) throws {
@@ -77,9 +80,12 @@ struct RuleSet: Codable, Identifiable, Equatable, Hashable {
     /// 内置规则集用固定的 id：默认配置里就有它，两台 Mac 上也是同一条。
     static let chinaDirectID = UUID(uuidString: "0B1E6C7A-0000-4000-8000-00000000C0DE")!
 
-    /// 内置：.cn 域名和 GEOIP 为 CN 的地址直连（以前版本的默认规则，旧配置里还有；新配置不再默认加）。
+    /// 内置的规则集以前版本用过的默认名字（中文界面和英文界面的）：读旧配置时换成现在的名字，用户自己改过的不动。
+    static let legacyBuiltinNames: Set<String> = ["国内直连", "China Direct"] // l10n-ignore
+
+    /// 内置的「智能分流」：.cn 域名和 GEOIP 为 CN 的地址，默认直连（以前版本的默认规则，旧配置里还有；新配置不再默认加）。
     static func chinaDirect() -> RuleSet {
-        var set = RuleSet(name: L("国内直连"), url: chinaDirectURL, policy: .direct)
+        var set = RuleSet(name: L("智能分流"), url: chinaDirectURL, policy: .direct)
         set.id = chinaDirectID
         return set
     }

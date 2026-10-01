@@ -102,7 +102,7 @@ enum EngineMode: String, Codable, CaseIterable, Identifiable {
 
 /// 0.6 及以前的分流规则来源：只有一个。现在只用来读旧配置，迁移成规则集列表。
 enum RuleSource: Equatable, Codable {
-    /// 内置：局域网和国内 IP 直连，其余走节点。
+    /// 内置的「智能分流」：.cn 域名和 GEOIP 为 CN 的地址直连，其余走节点。
     case chinaDirect
     /// 小火箭 / Surge / Clash 格式的规则地址。
     case url(String)

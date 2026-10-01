@@ -15,16 +15,17 @@ enum Log {
     static var fileURL: URL { Store.directory.appendingPathComponent(fileName) }
 
     static func info(_ message: String) {
-        logger.info("\(message, privacy: .public)")
+        logger.info("\(Redact.secrets(message), privacy: .public)")
         append("INFO", message)
     }
 
     static func error(_ message: String) {
-        logger.error("\(message, privacy: .public)")
+        logger.error("\(Redact.secrets(message), privacy: .public)")
         append("ERROR", message)
     }
 
     private static func append(_ level: String, _ message: String) {
+        let message = Redact.secrets(message)
         let line = "\(formatter.string(from: Date())) \(level) \(message)\n"
         queue.async {
             let url = fileURL
@@ -120,7 +121,7 @@ extension Store {
         migrate(from: legacyDirectory, to: directory)
     }
 
-    /// 挪目录，再把里面指向旧位置的东西改过来：日志改名，配置里导入的节点和规则文件、操作记录里的路径换成新目录。
+    /// 挪目录，日志改名。
     static func migrate(from legacy: URL, to current: URL) -> Bool {
         let fm = FileManager.default
         guard fm.fileExists(atPath: legacy.path), !fm.fileExists(atPath: current.path) else { return false }
@@ -134,18 +135,6 @@ extension Store {
         let newLog = current.appendingPathComponent(Log.fileName)
         if fm.fileExists(atPath: oldLog.path) && !fm.fileExists(atPath: newLog.path) {
             try? fm.moveItem(at: oldLog, to: newLog)
-        }
-        let configURL = current.appendingPathComponent("config.json")
-        if var config = load(AppConfig.self, from: configURL),
-           config.engine.relocateFiles(from: directoryURLString(legacy), to: directoryURLString(current)) {
-            save(config, to: configURL)
-        }
-        let journal = current.appendingPathComponent("journal.json")
-        if let text = try? String(contentsOf: journal, encoding: .utf8) {
-            let relocated = relocatePaths(in: text, from: legacy, to: current)
-            if relocated != text {
-                try? relocated.write(to: journal, atomically: true, encoding: .utf8)
-            }
         }
         return true
     }

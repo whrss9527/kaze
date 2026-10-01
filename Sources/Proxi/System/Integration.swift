@@ -107,9 +107,8 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     }
 }
 
-/// proxi:// 命令（改名前的 proxyswitch:// 也认）：on、off、toggle、use?name=配置名、settings（可带 ?page=about 等）、panel、update、share、tun、gateway（可带 /on、/off，不带就是切换）、
-/// node?name=节点名、mode?value=rule|global、group?name=组名&member=成员、import?url=配置地址（先预览再确认）、
-/// run?tool=工具名&参数=值（只能用查看和日常操作类的工具，改配置要走导入）。
+/// proxi:// 命令（改名前的 proxyswitch:// 也认）：on、off、toggle、use?name=配置名、settings（可带 ?page=about 等）、panel、update、
+/// run?tool=工具名&参数=值（只能用查看和日常操作类的工具）。
 /// 可以在终端里 open "proxi://toggle"，也能接快捷指令。
 enum URLCommand: Equatable {
     case turnOn
@@ -120,22 +119,6 @@ enum URLCommand: Equatable {
     case panel
     /// 检查更新，有新版本就直接下载安装。
     case update
-    /// 局域网共享：开、关，nil 是切换。
-    case share(Bool?)
-    /// 增强模式（虚拟网卡）：开、关，nil 是切换。
-    case tun(Bool?)
-    /// 网关模式：开、关，nil 是切换。
-    case gateway(Bool?)
-    /// 网址诊断：url 可以为空（只打开页面），device 表示从局域网设备的视角。
-    case diagnose(url: String?, device: Bool)
-    /// 切换节点；auto 是自动选择。
-    case node(String)
-    /// 切换模式。
-    case mode(EngineMode)
-    /// 切换策略组。
-    case group(name: String, member: String)
-    /// 导入配置：打开设置里的导入，预览后由用户确认。
-    case importConfig(String)
     /// 执行一个控制接口的工具（只允许查看和日常操作）。
     case tool(name: String, params: [String: String])
 
@@ -155,34 +138,12 @@ enum URLCommand: Equatable {
             return .settings(page)
         case "panel", "menu": return .panel
         case "update", "upgrade": return .update
-        case "share", "lan":
-            return .share(switchValue(url, query))
-        case "tun", "enhanced":
-            return .tun(switchValue(url, query))
-        case "gateway":
-            return .gateway(switchValue(url, query))
-        case "diagnose", "check":
-            let target = query.first { $0.name == "url" }?.value
-            let device = (query.first { $0.name == "from" }?.value ?? "").lowercased() == "device"
-            return .diagnose(url: target?.isEmpty == false ? target : nil, device: device)
         case "use", "switch":
             var name = query.first { $0.name == "name" }?.value ?? ""
             if name.isEmpty {
                 name = url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/")).removingPercentEncoding ?? ""
             }
             return name.isEmpty ? nil : .use(name)
-        case "node":
-            let name = value(query, "name") ?? pathValue(url)
-            return name.isEmpty ? nil : .node(name)
-        case "mode":
-            let text = (value(query, "value") ?? value(query, "mode") ?? pathValue(url)).lowercased()
-            return EngineMode(rawValue: text).map { .mode($0) }
-        case "group":
-            guard let name = value(query, "name"), let member = value(query, "member") else { return nil }
-            return .group(name: name, member: member)
-        case "import", "install-config", "add":
-            guard let target = value(query, "url") ?? value(query, "config") else { return nil }
-            return .importConfig(target)
         case "run", "tool":
             guard let name = value(query, "tool") ?? value(query, "name") else { return nil }
             var params: [String: String] = [:]
@@ -194,23 +155,9 @@ enum URLCommand: Equatable {
         }
     }
 
-    /// 开关类命令的参数：/on、/off、?state=on、?value=off，不写就是切换。
-    private static func switchValue(_ url: URL, _ query: [URLQueryItem]) -> Bool? {
-        let argument = (value(query, "state") ?? value(query, "value") ?? pathValue(url)).lowercased()
-        switch argument {
-        case "on", "enable", "1", "true": return true
-        case "off", "disable", "0", "false": return false
-        default: return nil
-        }
-    }
-
     private static func value(_ query: [URLQueryItem], _ name: String) -> String? {
         guard let value = query.first(where: { $0.name == name })?.value, !value.isEmpty else { return nil }
         return value
-    }
-
-    private static func pathValue(_ url: URL) -> String {
-        url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/")).removingPercentEncoding ?? ""
     }
 }
 
@@ -223,7 +170,7 @@ enum TerminalCommands {
     /// zsh / bash 的 export 命令，大小写两种都设置。
     static func export(proxyURL: String, noProxy: String) -> String {
         let noProxyValue = noProxy.isEmpty ? Profile.defaultNoProxy : noProxy
-        let pairs = [("http_proxy", proxyURL), ("https_proxy", proxyURL), ("no_proxy", noProxyValue)]
+        let pairs = [("http_proxy", proxyURL), ("https_proxy", proxyURL), ("all_proxy", proxyURL), ("no_proxy", noProxyValue)]
         let lower = pairs.map { "\($0.0)=\(shellQuote($0.1))" }
         let upper = pairs.map { "\($0.0.uppercased())=\(shellQuote($0.1))" }
         return "export " + (lower + upper).joined(separator: " ")
@@ -232,7 +179,7 @@ enum TerminalCommands {
     /// fish 的 set -gx 命令。
     static func fish(proxyURL: String, noProxy: String) -> String {
         let noProxyValue = noProxy.isEmpty ? Profile.defaultNoProxy : noProxy
-        let pairs = [("http_proxy", proxyURL), ("https_proxy", proxyURL), ("no_proxy", noProxyValue)]
+        let pairs = [("http_proxy", proxyURL), ("https_proxy", proxyURL), ("all_proxy", proxyURL), ("no_proxy", noProxyValue)]
         return pairs.flatMap { ["set -gx \($0.0) \(shellQuote($0.1))", "set -gx \($0.0.uppercased()) \(shellQuote($0.1))"] }.joined(separator: "; ")
     }
 

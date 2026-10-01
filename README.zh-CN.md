@@ -1,8 +1,8 @@
 <div align="center">
   <img src="docs/icon.png" width="128" height="128" alt="Proxi 图标">
   <h1>Proxi</h1>
-  <p><strong>一个开关，管好所有代理</strong></p>
-  <p>住在 macOS 菜单栏里的代理开关。原生 Swift，玻璃质感，开源免费。</p>
+  <p><strong>开发者的代理开关</strong></p>
+  <p>住在 macOS 菜单栏里：一键把系统代理、终端、git 和 npm 指向你自己的代理服务器。原生 Swift，玻璃质感，开源免费。</p>
   <p>
     <a href="https://github.com/whrss9527/proxi/releases/latest"><img alt="最新版本" src="https://img.shields.io/github/v/release/whrss9527/proxi?include_prereleases&label=release&color=2F6BEA"></a>
     <img alt="macOS 14+" src="https://img.shields.io/badge/macOS-14%2B-111827?logo=apple&logoColor=white">
@@ -26,19 +26,16 @@
 
 少一个“为什么”，多一个“我”。
 
-代理不应该只是一个复杂的网络工具，而应该是一个真正交到你手里的遥控器：怎么连、走哪里、什么时候开关，都由你自己决定。
+写代码的时候，代理往往要在好几个地方各设一遍：系统设置、终端、git、npm……换个网络、开个抓包工具，又得挨个改回来。Proxi 把它们收进菜单栏里的一个开关：指向你自己的代理服务器，点一下全部设好，再点一下全部恢复。
 
-**Proxi**，就是属于你的代理。
-
-<p align="center"><img src="docs/hero.png" width="1000" alt="设置窗口、菜单栏面板和菜单栏里的网速"></p>
+Proxi 只负责切换设置，自己不提供代理服务，也不转发流量。
 
 ## 特性
 
-- **一键切换**：系统代理、环境变量、git、npm 一起开关；配好几套，点一下就换。
-- **订阅直接用**：填上机场的订阅地址，选节点、测速、按规则分流，面板里都能搞定。
-- **整台 Mac，连同游戏机**：增强模式让终端和游戏也走代理；局域网共享和网关模式让 PS5、Switch、手机跟着这台 Mac 走。
-- **每条连接都看得见**：哪个程序连了哪里、命中哪条规则、走了哪个节点，一清二楚；网站打不开时，一键诊断。
-- **交给脚本和 AI**：命令行、MCP、URL 命令都能控制，还能按 Wi‑Fi 自动切换配置。
+- **一键切换**：系统代理、终端环境变量（`http_proxy`、`https_proxy`、`all_proxy`、`no_proxy`）、git、npm / pnpm / yarn 一起开关；配好几套，点一下就换。
+- **指向你自己的代理**：公司代理、内网网关，或者本机的 Charles、Proxyman、mitmproxy 这类调试代理；HTTP、SOCKS5、PAC 都行，要登录的代理可以填用户名和密码（密码只存在这台 Mac 的钥匙串里，不同步），每套配置有自己的例外列表。
+- **随手可用**：菜单栏面板、全局快捷键（默认 ⌃⌥P）、通知、连接测试、自动检测本机的调试代理，复制一行命令就能让已经打开的终端也用上代理。
+- **交给脚本和 AI**：`proxi on / off / status / use <配置名>` 命令行、给 AI 助手用的 MCP、URL 命令；连上公司 Wi‑Fi 自动开公司代理，回家自动关掉。
 - **省心**：配置用 iCloud 在几台 Mac 之间同步；有新版本，点一下就更新好。
 - **中文或英文**：界面跟着系统语言，也可以在「设置 → 通用 → 界面语言」里选。
 
@@ -58,22 +55,22 @@ brew install --cask whrss9527/tap/proxi
 2. 双击打开。没经过公证的版本第一次打开的办法见[使用指南](docs/guide.md#安装)。
 3. 以后有新版本，面板里点「更新」就行。
 
-以前用 ProxySwitch 的，在旧版本里一键更新就会变成 Proxi，配置都在，见[从 ProxySwitch 更新](docs/guide.md#从-proxyswitch-更新)。Windows 版在 [proxyswitch](https://github.com/whrss9527/proxyswitch)。
+从 0.12 及以前的版本更新过来的，见[使用指南](docs/guide.md#从-012-及以前的版本更新)。以前用 ProxySwitch 的，在旧版本里一键更新就会变成 Proxi，见[从 ProxySwitch 更新](docs/guide.md#从-proxyswitch-更新)。Windows 版在 [proxyswitch](https://github.com/whrss9527/proxyswitch)。
 
 ## 上手
 
 | 操作 | 效果 |
 | --- | --- |
-| 左键点菜单栏图标 | 打开面板：大开关、配置列表、延迟、一键测速 |
+| 设置 → 代理配置 →「新建」或「自动检测」 | 填上代理服务器的地址（比如 `proxy.corp.example:3128`、`127.0.0.1:8888`），选好要设置的地方 |
+| 左键点菜单栏图标 | 打开面板：大开关、配置列表、延迟、一键测试 |
 | 右键（或 Control + 点击） | 简洁菜单 |
 | ⌃⌥P | 在任何地方开关代理（可以在设置里换） |
-| 设置 → 节点与订阅 | 粘上机场的订阅地址，节点就出现在面板里 |
-| 终端里 `proxi status`、`proxi node 香港` | 用命令行查看和切换（先在「自动化」页装上命令行工具） |
+| 终端里 `proxi use 公司代理`、`proxi off` | 用命令行切换（用 Homebrew 装的直接能用，手动装的先在「自动化」页装上命令行工具） |
 
 ## 文档
 
-- [使用指南](docs/guide.md)：安装与更新、全部功能、内置节点代理、增强模式和网关模式、局域网共享、权限与文件位置
-- [自动化](docs/automation.md)：命令行、MCP、URL 命令、能导入的格式
+- [使用指南](docs/guide.md)：安装与更新、全部功能、常见用法、权限与文件位置
+- [自动化](docs/automation.md)：命令行、MCP、URL 命令、按网络自动切换
 - [开发指南](docs/development.md)：构建、代码结构、CI 与发版；签名和公证见 [docs/signing.md](docs/signing.md)
 - [更新日志](CHANGELOG.md)
 

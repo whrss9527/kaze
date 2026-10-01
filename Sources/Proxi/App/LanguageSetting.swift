@@ -44,7 +44,7 @@ enum LanguageSetting {
         }
     }
 
-    /// 由「立即重新启动」打开的新实例：先等旧的退出（最多 20 秒），再开始建菜单栏图标、启动内核。
+    /// 由「立即重新启动」打开的新实例：先等旧的退出（最多 20 秒），再开始建菜单栏图标。
     nonisolated static func waitForPreviousInstance(arguments: [String]) {
         guard let pid = Relaunch.pidToWait(in: arguments), pid != getpid() else { return }
         let deadline = Date().addingTimeInterval(20)

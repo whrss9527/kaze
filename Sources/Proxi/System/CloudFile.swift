@@ -67,10 +67,10 @@ enum CloudFile {
     }
 
     /// 改名后：旧文件夹（iCloud 云盘/ProxySwitch）里的同步文件比新文件夹里的新、或者新文件夹里还没有时，复制一份过来。
-    /// 还没更新的 Mac 照旧写旧文件夹，它们的改动这样也能到已经更新的 Mac 上。复制时把指向旧数据目录的文件地址换成新的（relocating）。
+    /// 还没更新的 Mac 照旧写旧文件夹，它们的改动这样也能到已经更新的 Mac 上。
     /// drive 是 iCloud 云盘的根目录。复制了返回 true。
     @discardableResult
-    static func migrateLegacyFolder(drive: URL? = nil, relocating: (from: String, to: String)? = (Store.directoryURLString(Store.legacyDirectory), Store.directoryURLString(Store.directory))) -> Bool {
+    static func migrateLegacyFolder(drive: URL? = nil) -> Bool {
         guard ProcessInfo.processInfo.environment[overrideVariable] == nil, let drive = drive ?? driveURL() else { return false }
         let fm = FileManager.default
         let folder = drive.appendingPathComponent(folderName, isDirectory: true)
@@ -78,12 +78,9 @@ enum CloudFile {
         // 别的 Mac 已经写过新文件、只是这台还没下载下来（只有占位文件）时不动。
         guard !fm.fileExists(atPath: folder.appendingPathComponent(".\(fileName).icloud").path) else { return false }
         let legacy = drive.appendingPathComponent(legacyFolderName, isDirectory: true).appendingPathComponent(fileName)
-        guard var synced = (try? read(at: legacy)) ?? nil else { return false }
+        guard let synced = (try? read(at: legacy)) ?? nil else { return false }
         if fm.fileExists(atPath: target.path) {
             guard let current = (try? read(at: target)) ?? nil, synced.updatedAt > current.updatedAt else { return false }
-        }
-        if let relocating {
-            _ = synced.config.engine.relocateFiles(from: relocating.from, to: relocating.to)
         }
         do {
             try write(synced, to: target)

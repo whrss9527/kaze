@@ -5,6 +5,9 @@ struct DesiredProxy: Equatable {
     struct Endpoint: Equatable {
         var host: String
         var port: Int
+        /// 代理要求登录时的用户名和密码；用户名为空表示不用登录。
+        var username: String = ""
+        var password: String = ""
     }
 
     var http: Endpoint?
@@ -14,15 +17,13 @@ struct DesiredProxy: Equatable {
     var bypassDomains: [String] = []
 
     /// 开启一个配置时的设置：开启期间关掉自动发现（WPAD），避免网络里的自动配置盖过手动设置。
-    init(profile: Profile) {
+    /// password 是从钥匙串里取出来的密码（不用登录时是空的）。
+    init(profile: Profile, password: String = "") {
         switch profile.kind {
         case .http:
-            http = Endpoint(host: profile.host, port: profile.port)
-            if profile.engine {
-                socks = Endpoint(host: profile.host, port: profile.port)
-            }
+            http = Endpoint(host: profile.host, port: profile.port, username: profile.username, password: password)
         case .socks5:
-            socks = Endpoint(host: profile.host, port: profile.port)
+            socks = Endpoint(host: profile.host, port: profile.port, username: profile.username, password: password)
         case .pac:
             pacURL = profile.pacURL.trimmingCharacters(in: .whitespaces)
         }
@@ -58,7 +59,13 @@ struct DesiredProxy: Equatable {
         var commands: [[String]] = []
         func set(_ setter: String, _ switcher: String, _ endpoint: Endpoint?) {
             if let endpoint {
-                commands.append([setter, service, endpoint.host, String(endpoint.port)])
+                let user = endpoint.username.trimmingCharacters(in: .whitespaces)
+                if user.isEmpty {
+                    commands.append([setter, service, endpoint.host, String(endpoint.port)])
+                } else {
+                    // 要登录的代理：networksetup 把用户名和密码交给系统保存。
+                    commands.append([setter, service, endpoint.host, String(endpoint.port), "on", user, endpoint.password])
+                }
                 commands.append([switcher, service, "on"])
             } else {
                 commands.append([switcher, service, "off"])

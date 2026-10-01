@@ -15,14 +15,14 @@ struct TestResult: Equatable {
 
 /// 经代理实际访问测速地址，测出延迟。PAC 由系统的 CFNetwork 执行，和浏览器一样。
 enum ProxyTester {
-    static func test(profile: Profile, testURL: String, timeout: TimeInterval = 8) async -> TestResult {
+    static func test(profile: Profile, password: String = "", testURL: String, timeout: TimeInterval = 8) async -> TestResult {
         guard let url = URL(string: testURL), url.host != nil else {
             return TestResult(ok: false, latencyMs: nil, message: L("测速地址格式不对"))
         }
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = timeout
         configuration.timeoutIntervalForResource = timeout
-        configuration.connectionProxyDictionary = proxyDictionary(for: profile)
+        configuration.connectionProxyDictionary = proxyDictionary(for: profile, password: password)
         let session = URLSession(configuration: configuration)
         defer { session.invalidateAndCancel() }
         var request = URLRequest(url: url)
@@ -44,7 +44,16 @@ enum ProxyTester {
     }
 
     /// URLSession 的代理设置。
-    static func proxyDictionary(for profile: Profile) -> [AnyHashable: Any] {
+    static func proxyDictionary(for profile: Profile, password: String = "") -> [AnyHashable: Any] {
+        var dictionary = baseDictionary(for: profile)
+        if profile.kind != .pac, profile.hasCredentials {
+            dictionary[kCFProxyUsernameKey as String] = profile.username
+            dictionary[kCFProxyPasswordKey as String] = password
+        }
+        return dictionary
+    }
+
+    private static func baseDictionary(for profile: Profile) -> [AnyHashable: Any] {
         switch profile.kind {
         case .http:
             return [
@@ -126,8 +135,9 @@ struct DetectedProxy: Identifiable, Equatable {
 }
 
 enum LocalProxyDetector {
-    /// 常见代理软件的端口。
-    static let commonPorts: [Int] = [7890, 7891, 7897, 7898, 1080, 1081, 1087, 1089, 6152, 6153, 8080, 8888, 9090, 10808, 10809, 10810, 20171, 20172, 33210, 33211]
+    /// 常见的本机代理端口：Charles（8888）、Proxyman（9090）、mitmproxy 和各种开发代理（8080、8081）、
+    /// Squid（3128）、Privoxy（8118）、SOCKS（1080）。
+    static let commonPorts: [Int] = [1080, 3128, 8080, 8081, 8118, 8888, 8889, 9090, 9091]
 
     struct Listener: Equatable {
         var port: Int

@@ -31,16 +31,16 @@ enum ProxyTarget: String, Codable, CaseIterable, Identifiable {
         case .system: return L("系统代理")
         case .environment: return L("环境变量")
         case .git: return "git"
-        case .npm: return "npm / pnpm"
+        case .npm: return "npm / pnpm / yarn"
         }
     }
 
     var detail: String {
         switch self {
         case .system: return L("浏览器和大多数软件都走它")
-        case .environment: return L("launchd 环境：之后新开的终端和程序生效")
+        case .environment: return L("http_proxy、https_proxy、all_proxy、no_proxy：之后新开的终端和程序生效")
         case .git: return L("git clone、pull 等（全局 http.proxy）")
-        case .npm: return L("写入用户目录的 .npmrc")
+        case .npm: return L("写入用户目录的 .npmrc（npm、pnpm 和 yarn 1 都读它）")
         }
     }
 }
@@ -54,7 +54,8 @@ enum ProfilePalette {
     }
 }
 
-/// 一套代理配置。
+/// 一套代理配置：指向你自己已经在用的代理服务器，比如公司代理、内网网关，
+/// 或者本机的调试代理（Charles、Proxyman、mitmproxy）。
 struct Profile: Codable, Identifiable, Equatable, Hashable {
     static let defaultBypass = "localhost, 127.0.0.1, *.local, 169.254/16, 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16"
     static let defaultNoProxy = "localhost,127.0.0.1,::1"
@@ -64,17 +65,21 @@ struct Profile: Codable, Identifiable, Equatable, Hashable {
     var color: String = ProfilePalette.colors[0]
     var kind: ProxyKind = .http
     var host: String = "127.0.0.1"
-    var port: Int = 7890
+    var port: Int = 8080
     var pacURL: String = ""
     var bypass: String = Profile.defaultBypass
     var noProxy: String = Profile.defaultNoProxy
     var targets: Set<ProxyTarget> = [.system]
-    /// 内置代理：地址是本机内核的端口，开启前先确保内核在跑。
-    var engine: Bool = false
+    /// 代理服务器要求登录时的用户名；不需要就留空。
+    var username: String = ""
+    /// 有没有密码。密码本身只存在这台 Mac 的钥匙串里（ProxyKeychain），不写进配置文件、不跟 iCloud 同步。
+    var hasPassword: Bool = false
+    /// 读配置时发现是以前版本里由内置代理自动生成的配置；不写回文件，读完就去掉。
+    var legacyBuiltIn = false
 
     init() {}
 
-    init(name: String, color: String, kind: ProxyKind = .http, host: String = "127.0.0.1", port: Int = 7890, pacURL: String = "", targets: Set<ProxyTarget> = [.system]) {
+    init(name: String, color: String, kind: ProxyKind = .http, host: String = "127.0.0.1", port: Int = 8080, pacURL: String = "", targets: Set<ProxyTarget> = [.system]) {
         self.name = name
         self.color = color
         self.kind = kind
@@ -85,7 +90,12 @@ struct Profile: Codable, Identifiable, Equatable, Hashable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, color, kind, host, port, pacURL, bypass, noProxy, targets, engine
+        case id, name, color, kind, host, port, pacURL, bypass, noProxy, targets, username, hasPassword
+    }
+
+    /// 以前版本才有的键，只读不写。
+    private enum LegacyKeys: String, CodingKey {
+        case engine
     }
 
     init(from decoder: Decoder) throws {
@@ -95,39 +105,57 @@ struct Profile: Codable, Identifiable, Equatable, Hashable {
         color = try container.decodeIfPresent(String.self, forKey: .color) ?? ProfilePalette.colors[0]
         kind = try container.decodeIfPresent(ProxyKind.self, forKey: .kind) ?? .http
         host = try container.decodeIfPresent(String.self, forKey: .host) ?? "127.0.0.1"
-        port = try container.decodeIfPresent(Int.self, forKey: .port) ?? 7890
+        port = try container.decodeIfPresent(Int.self, forKey: .port) ?? 8080
         pacURL = try container.decodeIfPresent(String.self, forKey: .pacURL) ?? ""
         bypass = try container.decodeIfPresent(String.self, forKey: .bypass) ?? Profile.defaultBypass
         noProxy = try container.decodeIfPresent(String.self, forKey: .noProxy) ?? Profile.defaultNoProxy
         targets = try container.decodeIfPresent(Set<ProxyTarget>.self, forKey: .targets) ?? [.system]
-        engine = try container.decodeIfPresent(Bool.self, forKey: .engine) ?? false
+        username = try container.decodeIfPresent(String.self, forKey: .username) ?? ""
+        hasPassword = try container.decodeIfPresent(Bool.self, forKey: .hasPassword) ?? false
+        let legacy = try decoder.container(keyedBy: LegacyKeys.self)
+        legacyBuiltIn = (try? legacy.decodeIfPresent(Bool.self, forKey: .engine)) ?? false
     }
 
-    /// 内置代理对应的配置。
-    static func engineProfile(port: Int) -> Profile {
-        var profile = Profile(name: L("节点代理"), color: ProfilePalette.colors[1], kind: .http, host: "127.0.0.1", port: port)
-        profile.engine = true
-        return profile
+    /// 以前版本里由内置代理自动生成的配置（存的是 "engine": true），0.13.0 起不再支持，读配置时去掉。
+    static func isLegacyBuiltIn(_ object: Any) -> Bool {
+        ((object as? [String: Any])?["engine"] as? Bool) == true
     }
 
     /// host:port。
-    var serverAddress: String { "\(host):\(port)" }
-
-    /// 环境变量、git、npm 使用的地址。
-    var proxyURL: String {
-        switch kind {
-        case .socks5: return "socks5://\(host):\(port)"
-        default: return "http://\(host):\(port)"
-        }
+    var serverAddress: String {
+        host.contains(":") && !host.hasPrefix("[") ? "[\(host)]:\(port)" : "\(host):\(port)"
     }
 
-    /// 菜单和列表里显示的一句话。
+    /// 要不要登录。
+    var hasCredentials: Bool { !username.trimmingCharacters(in: .whitespaces).isEmpty }
+
+    /// 开启时要不要到钥匙串里取密码。
+    var needsPassword: Bool { kind != .pac && hasCredentials && hasPassword }
+
+    /// 不带密码的地址（显示、复制用户名时用）。
+    var proxyURL: String { proxyURL(password: "") }
+
+    /// 环境变量、git、npm 使用的地址；要登录时带上用户名和密码（按网址的规则转义）。密码从钥匙串里取出来再传进来。
+    func proxyURL(password: String) -> String {
+        let scheme = kind == .socks5 ? "socks5" : "http"
+        guard hasCredentials else { return "\(scheme)://\(serverAddress)" }
+        let user = Profile.escapeUserInfo(username.trimmingCharacters(in: .whitespaces))
+        let pass = password.isEmpty ? "" : ":" + Profile.escapeUserInfo(password)
+        return "\(scheme)://\(user)\(pass)@\(serverAddress)"
+    }
+
+    /// 网址里用户名、密码部分的转义：只保留字母、数字和 -._~，其余都转成 %XX。
+    static func escapeUserInfo(_ text: String) -> String {
+        let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~")
+        return text.addingPercentEncoding(withAllowedCharacters: allowed) ?? text
+    }
+
+    /// 菜单和列表里显示的一句话（不含密码）。
     var summary: String {
-        if engine { return L("内置代理 · %@", serverAddress) }
         switch kind {
         case .pac: return pacURL.isEmpty ? L("PAC 脚本") : pacURL
-        case .socks5: return "socks5://\(serverAddress)"
-        case .http: return serverAddress
+        case .socks5: return (hasCredentials ? "socks5://\(username)@" : "socks5://") + serverAddress
+        case .http: return (hasCredentials ? "\(username)@" : "") + serverAddress
         }
     }
 

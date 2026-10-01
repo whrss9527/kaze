@@ -40,19 +40,15 @@ final class AppState: ObservableObject {
     @Published var lastError: String?
     @Published var testResults: [UUID: TestResult] = [:]
     @Published var loginItemEnabled = false
-    /// 这台 Mac 在局域网里的地址，主网卡在前；PS5 等设备填代理服务器时用。
-    @Published private(set) var lanAddresses: [LocalNetwork.Address] = []
+    /// 以前版本装的后台助手还在（要管理员密码才能删）。
+    @Published private(set) var legacyHelperInstalled = false
     let updater = Updater()
     let sync = CloudSync()
-    let engine = Engine()
     let speed = SpeedMeter()
-    let sleepGuard = SleepGuard()
     /// 本机控制接口（命令行、AI 助手）。
     let control = ControlService()
     /// 按网络自动切换。
     let network = NetworkAutomation()
-    /// 特权助手（增强模式、网关模式要用）。
-    let helper = HelperManager()
     /// 更新后正在重新启动：退出时不要按「退出时关闭代理」清理。
     var relaunching = false
 
@@ -63,8 +59,11 @@ final class AppState: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
 
     var onStatusChanged: (@MainActor () -> Void)?
+    /// 从以前的版本更新过来时要收尾的事（读配置之前看过原始文件）。
+    private let legacy: LegacyCleanup.Findings
 
     private init() {
+        legacy = LegacyCleanup.inspect()
         config = Store.loadConfig() ?? AppConfig()
         persisted = Store.loadState()
         $config
@@ -86,6 +85,7 @@ final class AppState: ObservableObject {
             Task { @MainActor in await self?.checkHealth() }
         }
         loginItemEnabled = LoginItem.isEnabled
+        finishLegacyMigration()
         registerHotkey()
         $config
             .map(\.toggleHotkey)
@@ -98,10 +98,9 @@ final class AppState: ObservableObject {
         updater.notify = { [weak self] title, body in
             self?.notify(title: title, body: body, problem: false, route: "about", category: Notifier.updateCategory)
         }
-        // 内置代理在跑时，更新先经它访问 GitHub（没开系统代理也能下载），失败再试系统代理和直连。
-        updater.routesProvider = { [weak self] url in
-            let corePort = (self?.engine.isRunning ?? false) ? self?.config.engine.mixedPort : nil
-            return NetworkRoute.routes(for: url, corePort: corePort, system: SystemProxy.current())
+        // 更新先经系统代理访问 GitHub，失败再直连。
+        updater.routesProvider = { url in
+            NetworkRoute.routes(for: url, system: SystemProxy.current())
         }
         updater.onRelaunch = { [weak self] in
             self?.relaunching = true
@@ -121,72 +120,8 @@ final class AppState: ObservableObject {
             .sink { [weak self] config in Task { @MainActor in self?.sync.localChanged(config) } }
             .store(in: &cancellables)
         sync.start(enabled: persisted.syncEnabled)
-        engine.readConfig = { [weak self] in self?.config ?? AppConfig() }
-        engine.writeEngine = { [weak self] engine in self?.config.engine = engine }
-        engine.onStatusChanged = { [weak self] in self?.onStatusChanged?() }
-        // 按出口累计的流量存在本机状态里，跨重启接着算。
-        engine.loadTraffic(persisted.traffic)
-        engine.persistTraffic = { [weak self] stats in
-            guard let self else { return }
-            self.persisted.traffic = stats
-            Store.save(self.persisted)
-        }
-        $config
-            .map { EngineInputs(engine: $0.engine, testURL: $0.testURL, profiles: $0.profiles) }
-            .removeDuplicates()
-            .dropFirst()
-            .sink { [weak self] _ in Task { @MainActor in self?.engineConfigChanged() } }
-            .store(in: &cancellables)
-        ensureEngineProfile()
-        sleepGuard.start()
-        helper.wanted = { [weak self] in
-            guard let tun = self?.persisted.tun else { return false }
-            return tun.enabled || tun.gateway
-        }
-        helper.start()
-        shareStateChanged()
-        engine.start()
-        // 本机的代理状态、共享设置、配置任何一个变了，都重新算一遍共享和网关的上游，内核跟着热加载。
-        Publishers.CombineLatest3($snapshot, $persisted, $config)
-            .dropFirst()
-            .sink { [weak self] _ in Task { @MainActor in self?.shareStateChanged() } }
-            .store(in: &cancellables)
-        // 特权助手装好或者停了、这台 Mac 换了局域网地址：重新算虚拟网卡的参数。
-        helper.$state
-            .removeDuplicates()
-            .dropFirst()
-            .sink { [weak self] _ in Task { @MainActor in self?.shareStateChanged() } }
-            .store(in: &cancellables)
-        $lanAddresses
-            .removeDuplicates()
-            .dropFirst()
-            .sink { [weak self] _ in Task { @MainActor in self?.shareStateChanged() } }
-            .store(in: &cancellables)
-        engine.$tunStatus
-            .removeDuplicates()
-            .dropFirst()
-            .sink { [weak self] status in
-                Task { @MainActor in
-                    if case .failed(let message) = status {
-                        self?.notify(title: L("增强模式没有开起来"), body: message, problem: true)
-                    }
-                }
-            }
-            .store(in: &cancellables)
-        engine.$shareStatus
-            .removeDuplicates()
-            .dropFirst()
-            .sink { [weak self] status in
-                Task { @MainActor in
-                    if case .failed(let message) = status {
-                        self?.notify(title: L("局域网共享出错"), body: message, problem: true)
-                    }
-                }
-            }
-            .store(in: &cancellables)
         control.start(state: self)
         network.start(state: self)
-        speed.coreTraffic = { [weak self] in try await self?.engine.trafficStream() }
         speed.setMode(config.speedDisplay)
         $config
             .map(\.speedDisplay)
@@ -196,36 +131,79 @@ final class AppState: ObservableObject {
             .store(in: &cancellables)
     }
 
-    /// 内置代理相关的设置变了：配置列表里对应的条目跟着变，内核重新加载。
-    private func engineConfigChanged() {
-        ensureEngineProfile()
-        if let index = config.profiles.firstIndex(where: { $0.engine }), config.profiles[index].port != config.engine.mixedPort {
-            config.profiles[index].port = config.engine.mixedPort
+    // MARK: - 从以前的版本更新过来
+
+    /// 第一次启动新版本时：上次开着的是以前版本内置代理的那条配置就把代理关掉（不然系统代理指向一个已经不存在的本机端口），
+    /// 删掉以前版本留下的文件，然后显示一次说明。
+    private func finishLegacyMigration() {
+        legacyHelperInstalled = LegacyCleanup.helperInstalled
+        if legacyHelperInstalled {
+            Log.info("以前版本的后台助手还在，等用户确认后移除")
         }
-        engine.scheduleReconcile()
-    }
-
-    /// 内置代理在配置列表里的那一条；有订阅时自动加上。
-    var engineProfile: Profile? { config.profiles.first { $0.engine } }
-
-    @discardableResult
-    func ensureEngineProfile() -> Profile? {
-        if let existing = engineProfile { return existing }
-        guard config.engine.wantsCore else { return nil }
-        let profile = Profile.engineProfile(port: config.engine.mixedPort)
-        config.profiles.insert(profile, at: 0)
-        if config.profiles.count == 1 {
-            persisted.lastProfileID = profile.id
+        let removed = LegacyCleanup.removeLegacyData()
+        if !removed.isEmpty {
+            Log.info("删掉了以前版本留下的数据：\(removed.joined(separator: "、"))")
+        }
+        if legacy.needsNotice {
+            Log.info("配置里有以前版本的设置：去掉了 \(legacy.builtInProfiles.count) 条自动生成的配置")
+        }
+        if config.profile(id: persisted.lastProfileID) == nil, persisted.lastProfileID != nil {
+            persisted.lastProfileID = config.profiles.first?.id
             Store.save(persisted)
         }
-        return profile
+        // 去掉以前版本的设置后写回去。
+        if legacy.needsNotice {
+            Store.save(config)
+            Store.save(persisted)
+        }
+        var turnedOff = false
+        if let active = legacy.activeBuiltIn {
+            turnedOff = true
+            Log.info("上次开着的「\(active.name)」是以前版本的内置代理，关掉代理")
+            busy = true
+            let mode = config.offMode
+            Task {
+                var failures: [String] = []
+                for target in ProxyTarget.allCases where active.targets.contains(target) {
+                    if let error = await clear(target: target, mode: mode) {
+                        failures.append(L("%@：%@", target.title, error))
+                    }
+                }
+                persisted.enabledByUs = false
+                persisted.original = nil
+                persisted.lastProfileID = config.profiles.first?.id
+                Store.save(persisted)
+                busy = false
+                refresh()
+                onStatusChanged?()
+                if failures.isEmpty {
+                    Log.info("已关闭以前版本的内置代理")
+                } else {
+                    let text = failures.joined(separator: L("；"))
+                    Log.error("关闭以前版本的内置代理失败：\(text)")
+                    lastError = text
+                }
+            }
+        }
+        guard !persisted.noticeShown, legacy.needsNotice || legacyHelperInstalled else { return }
+        persisted.noticeShown = true
+        Store.save(persisted)
+        let helper = legacyHelperInstalled
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(1))
+            NoticeWindowController.shared.showUpgradeNotice(turnedOff: turnedOff, helperInstalled: helper)
+        }
+        Log.info("已显示 0.13.0 的说明")
     }
 
-    /// 让内置代理成为下次开启的配置（面板里选了节点时用）。
-    func selectEngineProfile() {
-        guard let profile = ensureEngineProfile() else { return }
-        persisted.lastProfileID = profile.id
-        Store.save(persisted)
+    /// 删掉以前版本的后台助手（系统会请用户输入管理员密码）。
+    func removeLegacyHelper() async {
+        do {
+            try await LegacyCleanup.removeHelper()
+        } catch {
+            lastError = (error as? ControlError)?.message ?? error.localizedDescription
+        }
+        legacyHelperInstalled = LegacyCleanup.helperInstalled
     }
 
     // MARK: - 状态
@@ -261,124 +239,20 @@ final class AppState: ObservableObject {
         let current = SystemProxy.current()
         let changed = current != snapshot
         snapshot = current
-        let addresses = LocalNetwork.addresses()
-        if addresses != lanAddresses {
-            lanAddresses = addresses
-        }
         if changed {
             onStatusChanged?()
         }
     }
 
-    // MARK: - 局域网共享
-
-    /// 局域网共享的设置（本机的，不同步）。
-    var share: ShareConfig { persisted.share }
-
-    /// 主网卡的地址，设备上填它。
-    var lanAddress: LocalNetwork.Address? { lanAddresses.first }
-
-    /// 共享出去的流量往哪走：跟着本机现在的代理状态。
-    var shareUpstream: ShareUpstream { ShareUpstream(status: status, snapshot: snapshot) }
-
-    /// 交给内核的共享参数；没开时是 nil。
-    var shareInputs: ShareInputs? {
-        guard share.enabled else { return nil }
-        return ShareInputs(port: share.port, allowedPrefixes: share.allowedPrefixes, upstream: shareUpstream)
-    }
-
-    func setShare(_ share: ShareConfig) {
-        guard share != persisted.share else { return }
-        persisted.share = share
-        Store.save(persisted)
-        Log.info(share.enabled ? "局域网共享：开启，端口 \(share.port)" : "局域网共享：关闭")
-        shareStateChanged()
-    }
-
-    func setShareEnabled(_ enabled: Bool) {
-        var updated = share
-        updated.enabled = enabled
-        setShare(updated)
-    }
-
-    private func shareStateChanged() {
-        engine.setShare(shareInputs)
-        engine.setTun(tunInputs)
-        // 局域网设备靠这台 Mac 上网时（共享或者网关）不让它睡着。
-        sleepGuard.update(wanted: (share.enabled || persisted.tun.gateway) && share.keepAwake, allowOnBattery: share.keepAwakeOnBattery)
-    }
-
-    // MARK: - 增强模式和网关模式
-
-    /// 增强模式和网关模式的设置（本机的，不同步）。
-    var tun: TunConfig { persisted.tun }
-
-    /// 交给内核的虚拟网卡参数：特权助手能用，而且开了网关模式、或者开了增强模式又正在用内置代理时才有。
-    var tunInputs: TunInputs? {
-        let tun = persisted.tun
-        guard tun.enabled || tun.gateway, helper.isReady else { return nil }
-        let upstream = shareUpstream
-        let captureLocal = tun.enabled && upstream == .engine
-        guard captureLocal || tun.gateway else { return nil }
-        return TunInputs(stack: tun.stack, dnsMode: tun.dnsMode, captureLocal: captureLocal, gateway: tun.gateway, upstream: upstream, localAddresses: lanAddresses.map(\.ip))
-    }
-
-    func setTun(_ tun: TunConfig) {
-        guard tun != persisted.tun else { return }
-        let before = persisted.tun
-        persisted.tun = tun
-        Store.save(persisted)
-        if tun.enabled != before.enabled {
-            Log.info(tun.enabled ? "增强模式：开启" : "增强模式：关闭")
-        }
-        if tun.gateway != before.gateway {
-            Log.info(tun.gateway ? "网关模式：开启" : "网关模式：关闭")
-        }
-        shareStateChanged()
-        if tun.enabled || tun.gateway {
-            Task { await helper.refresh() }
-        }
-    }
-
-    func setTunEnabled(_ enabled: Bool) {
-        var updated = tun
-        updated.enabled = enabled
-        setTun(updated)
-    }
-
-    func setGatewayEnabled(_ enabled: Bool) {
-        var updated = tun
-        updated.gateway = enabled
-        setTun(updated)
-    }
-
-    /// 增强模式现在的情况，给界面和接口用的一句话。
-    var tunSummary: String {
-        let tun = persisted.tun
-        guard tun.enabled || tun.gateway else { return L("没开") }
-        guard helper.isReady else { return helper.summary }
-        switch engine.tunStatus {
-        case .on(let forwarding):
-            if tun.gateway && !forwarding { return L("虚拟网卡开着，IP 转发还没打开") }
-            if tunInputs?.captureLocal == false && tun.enabled { return L("本机没在用内置代理，只为网关模式开着虚拟网卡") }
-            return tun.gateway ? (tun.enabled ? L("增强模式和网关模式都开着") : L("网关模式开着")) : L("增强模式开着")
-        case .starting: return L("正在开启…")
-        case .failed(let message): return message
-        case .off:
-            if tun.enabled && !tun.gateway && shareUpstream != .engine { return L("本机开着内置代理时才生效") }
-            return L("没开")
-        }
-    }
-
     // MARK: - 开关
 
-    func toggle() {
+    func toggle(askForPassword: Bool = true) {
         switch status {
         case .on, .external:
             turnOff()
         case .off(let next):
             if let next {
-                turnOn(next)
+                turnOn(next, askForPassword: askForPassword)
             } else {
                 lastError = L("还没有代理配置，请先在设置里添加一个")
                 SettingsWindowController.shared.show(page: .profiles)
@@ -386,8 +260,28 @@ final class AppState: ObservableObject {
         }
     }
 
-    func turnOn(_ profile: Profile) {
+    /// askForPassword：钥匙串里没有密码时弹窗请用户输入；命令行和 AI 助手调用时不弹窗，直接报错。
+    func turnOn(_ profile: Profile, askForPassword: Bool = true) {
         guard !busy else { return }
+        // 要登录的代理：密码从这台 Mac 的钥匙串里取；还没有（比如配置是从别的 Mac 同步来的）就请用户输入一次。
+        var password = ""
+        if profile.needsPassword {
+            if let saved = ProxyKeychain.password(for: profile.id, allowUI: askForPassword) {
+                password = saved
+            } else if askForPassword, let entered = PasswordPrompt.ask(for: profile), !entered.isEmpty {
+                do {
+                    try ProxyKeychain.set(entered, for: profile.id)
+                } catch {
+                    Log.error("保存「\(profile.name)」的密码失败：\(error.localizedDescription)")
+                }
+                password = entered
+            } else {
+                lastError = L("没有「%@」的代理密码，没有开启", profile.name)
+                Log.error("这台 Mac 的钥匙串里没有「\(profile.name)」的代理密码，没有开启")
+                onStatusChanged?()
+                return
+            }
+        }
         busy = true
         let previous: Profile? = {
             if case .on(let current) = status { return current }
@@ -399,14 +293,6 @@ final class AppState: ObservableObject {
         let mode = config.offMode
         Task {
             var failures: [String] = []
-            if profile.engine {
-                do {
-                    try await engine.ensureRunning()
-                } catch {
-                    finish(action: L("开启 %@", profile.name), failures: [L("内核：%@", error.localizedDescription)], successText: "")
-                    return
-                }
-            }
             // 上一个配置设置过、新配置没有的项先清掉。
             if let previous {
                 for target in previous.targets where !profile.targets.contains(target) {
@@ -416,7 +302,7 @@ final class AppState: ObservableObject {
                 }
             }
             for target in ProxyTarget.allCases where profile.targets.contains(target) {
-                if let error = await set(target: target, profile: profile) {
+                if let error = await set(target: target, profile: profile, password: password) {
                     failures.append(L("%@：%@", target.title, error))
                 }
             }
@@ -489,22 +375,28 @@ final class AppState: ObservableObject {
         Task { await checkHealth() }
     }
 
-    private func set(target: ProxyTarget, profile: Profile) async -> String? {
+    private func set(target: ProxyTarget, profile: Profile, password: String) async -> String? {
+        let url = profile.proxyURL(password: password)
         do {
             switch target {
             case .system:
-                try await SystemProxy.apply(DesiredProxy(profile: profile))
+                try await SystemProxy.apply(DesiredProxy(profile: profile, password: password))
             case .environment:
-                try await EnvironmentProxy.set(proxyURL: profile.proxyURL, noProxy: profile.noProxy)
+                try await EnvironmentProxy.set(proxyURL: url, noProxy: profile.noProxy)
             case .git:
-                try await GitProxy.set(proxyURL: profile.proxyURL)
+                try await GitProxy.set(proxyURL: url)
             case .npm:
-                try NpmProxy.set(proxyURL: profile.proxyURL, noProxy: profile.noProxy)
+                try NpmProxy.set(proxyURL: url, noProxy: profile.noProxy)
             }
             return nil
         } catch {
-            return error.localizedDescription
+            return Redact.secrets(error.localizedDescription)
         }
+    }
+
+    /// 已经保存在钥匙串里的密码（没有就是空的）。
+    func savedPassword(for profile: Profile) -> String {
+        profile.needsPassword ? (ProxyKeychain.password(for: profile.id) ?? "") : ""
     }
 
     private func clear(target: ProxyTarget, mode: OffMode) async -> String? {
@@ -541,12 +433,13 @@ final class AppState: ObservableObject {
         }
     }
 
-    func update(_ profile: Profile) {
+    /// passwordChanged：只改了钥匙串里的密码（配置本身没变）时也要重新应用。
+    func update(_ profile: Profile, passwordChanged: Bool = false) {
         guard let index = config.profiles.firstIndex(where: { $0.id == profile.id }) else { return }
         let previous = config.profiles[index]
         config.profiles[index] = profile
         // 正在使用的配置改了地址：立即重新应用。
-        if case .on(let current) = status, current.id == profile.id, previous != profile {
+        if case .on(let current) = status, current.id == profile.id, previous != profile || passwordChanged {
             turnOn(profile)
         }
     }
@@ -556,6 +449,7 @@ final class AppState: ObservableObject {
             turnOff()
         }
         config.profiles.removeAll { $0.id == profile.id }
+        ProxyKeychain.delete(for: profile.id)
         if persisted.lastProfileID == profile.id {
             persisted.lastProfileID = config.profiles.first?.id
             Store.save(persisted)
@@ -611,7 +505,7 @@ final class AppState: ObservableObject {
     // MARK: - 测速与健康
 
     func test(_ profile: Profile) async {
-        let result = await ProxyTester.test(profile: profile, testURL: config.testURL)
+        let result = await ProxyTester.test(profile: profile, password: savedPassword(for: profile), testURL: config.testURL)
         testResults[profile.id] = result
     }
 
@@ -658,69 +552,9 @@ final class AppState: ObservableObject {
         Notifier.shared.show(title: title, body: body, route: route, category: category)
     }
 
-    // MARK: - 导入导出
-
-    /// 导入的文件（Clash 配置里的节点、转换后的规则）放在这里。
-    static var importsDirectory: URL { Store.directory.appendingPathComponent("imports", isDirectory: true) }
-
-    /// 从文字或网址做导入计划，不改动任何设置。文字本身是一个网址时按网址处理；
-    /// 网址的内容认不出来时当作订阅（交给内核解析）。
-    func prepareImport(text: String?, url: String?, sourceName: String) async throws -> ImportPlan {
-        var address = url?.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let text = text?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty {
-            if !text.contains(where: \.isNewline), let parsed = URL(string: text), let scheme = parsed.scheme?.lowercased(), (["http", "https", "file"] + URLCommand.schemes).contains(scheme) {
-                address = text
-            } else {
-                return try ConfigImporter.plan(text, sourceName: sourceName, existing: config)
-            }
-        }
-        guard var address, !address.isEmpty else { throw ImportError.empty }
-        // proxi://import?url=… 里面的地址。
-        if let scheme = URL(string: address)?.scheme?.lowercased(), URLCommand.schemes.contains(scheme),
-           let inner = URLComponents(string: address)?.queryItems?.first(where: { $0.name == "url" })?.value {
-            address = inner
-        }
-        guard let parsed = URL(string: address), let scheme = parsed.scheme?.lowercased() else { throw ImportError.invalid(L("认不出网址：%@", address)) }
-        if scheme == "file" {
-            let text = try String(contentsOf: parsed, encoding: .utf8)
-            return try ConfigImporter.plan(text, sourceName: parsed.deletingPathExtension().lastPathComponent, existing: config)
-        }
-        guard ["http", "https"].contains(scheme), parsed.host != nil else { throw ImportError.invalid(L("网址要以 http:// 或 https:// 开头")) }
-        let corePort = engine.isRunning && config.engine.wantsCore ? config.engine.mixedPort : nil
-        let data = try await RuleStore.download(address, routes: NetworkRoute.routes(for: parsed, corePort: corePort, system: SystemProxy.current()))
-        let text = String(decoding: data, as: UTF8.self)
-        let name = parsed.host ?? sourceName
-        if ConfigImporter.detect(text) == nil {
-            var plan = ImportPlan(format: .links, sourceName: name)
-            plan.subscriptions = [Subscription(name: name, url: address)]
-            plan.warnings.append(L("认不出内容的格式，当作订阅添加，交给内核解析"))
-            return plan
-        }
-        return try ConfigImporter.plan(text, sourceName: name, sourceURL: address, existing: config)
-    }
-
-    /// 应用导入：写文件、改设置，返回一句话。
-    @discardableResult
-    func applyImport(_ plan: ImportPlan, mode: ImportMode) throws -> String {
-        let result = ConfigImporter.apply(plan, to: config, mode: mode, directory: Self.importsDirectory)
-        for file in result.files {
-            try FileManager.default.createDirectory(at: file.url.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try file.content.write(to: file.url, atomically: true, encoding: .utf8)
-        }
-        config = result.config
-        ensureEngineProfile()
-        if !plan.subscriptions.isEmpty || plan.nodeFile != nil || !plan.manualNodes.isEmpty {
-            selectEngineProfile()
-        }
-        Log.info("导入「\(plan.sourceName)」（\(plan.format.title)，\(mode.title)）：\(result.summary)")
-        return result.summary
-    }
-
-    /// 退出时按设置关闭代理，并停掉内核。
+    /// 退出时按设置关闭代理。
     func handleExit() {
         control.stop()
-        sleepGuard.release()
-        defer { engine.shutdown() }
         guard !relaunching, config.disableOnExit, case .on(let profile) = status else { return }
         let desired = DesiredProxy(offWithAutoDiscovery: persisted.original?.autoDiscovery ?? snapshot.autoDiscovery, bypassDomains: snapshot.exceptions)
         let semaphore = DispatchSemaphore(value: 0)
@@ -730,6 +564,12 @@ final class AppState: ObservableObject {
             }
             if profile.targets.contains(.environment) {
                 try? await EnvironmentProxy.clear()
+            }
+            if profile.targets.contains(.git) {
+                try? await GitProxy.clear()
+            }
+            if profile.targets.contains(.npm) {
+                try? NpmProxy.clear()
             }
             semaphore.signal()
         }
@@ -745,11 +585,4 @@ final class AppState: ObservableObject {
             lastError = L("快捷键 %@ 已被其他程序占用，请换一个", binding.display)
         }
     }
-}
-
-/// 会影响内核配置的那部分设置，变了才重新生成（前置代理可以用配置列表里的代理，所以配置列表也算）。
-private struct EngineInputs: Equatable {
-    var engine: EngineConfig
-    var testURL: String
-    var profiles: [Profile]
 }

@@ -10,7 +10,7 @@
 	<string>Proxi</string>
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>
-	<!-- 改名前就用这个标识，保持不变：系统授权、登录项、通知和已经装好的特权助手都认它。 -->
+	<!-- 改名前就用这个标识，保持不变：系统授权、登录项、通知和一键更新都认它。 -->
 	<key>CFBundleIdentifier</key>
 	<string>com.whrss9527.proxyswitch</string>
 	<key>CFBundleInfoDictionaryVersion</key>

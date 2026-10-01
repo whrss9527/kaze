@@ -1,16 +1,9 @@
 import AppKit
 import SwiftUI
-import UniformTypeIdentifiers
 
 enum SettingsPage: String, CaseIterable, Identifiable {
     case profiles
-    case nodes
-    case rules
-    case share
-    case connections
-    case diagnose
     case automation
-    case advanced
     case general
     case hotkey
     case sync
@@ -22,13 +15,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .profiles: return L("代理配置")
-        case .nodes: return L("节点与订阅")
-        case .rules: return L("分流规则")
-        case .share: return L("局域网共享")
-        case .connections: return L("连接")
-        case .diagnose: return L("网址诊断")
         case .automation: return L("自动化")
-        case .advanced: return L("高级")
         case .general: return L("通用")
         case .hotkey: return L("快捷键")
         case .sync: return L("iCloud 同步")
@@ -40,13 +27,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
     var symbol: String {
         switch self {
         case .profiles: return "point.3.connected.trianglepath.dotted"
-        case .nodes: return "antenna.radiowaves.left.and.right"
-        case .rules: return "arrow.triangle.branch"
-        case .share: return "wifi.router"
-        case .connections: return "list.bullet.rectangle"
-        case .diagnose: return "stethoscope"
         case .automation: return "wand.and.stars"
-        case .advanced: return "slider.horizontal.3"
         case .general: return "gearshape"
         case .hotkey: return "keyboard"
         case .sync: return "icloud"
@@ -60,10 +41,6 @@ enum SettingsPage: String, CaseIterable, Identifiable {
 final class SettingsNavigation: ObservableObject {
     @Published var page: SettingsPage = .profiles
     @Published var selectedProfileID: UUID?
-    /// 从别处发起的诊断（proxi://diagnose 等），诊断页拿走后清空。
-    @Published var diagnoseRequest: DiagnoseRequest?
-    /// 要导入的配置（proxi://import、拖进窗口的文件），高级页拿走后打开导入预览。
-    @Published var importRequest: String?
 }
 
 /// 设置窗口：透明标题栏、全尺寸内容，内容是 SwiftUI。
@@ -141,18 +118,6 @@ struct SettingsRootView: View {
                 .background(VisualEffectView(material: .underWindowBackground).ignoresSafeArea())
         }
         .frame(minWidth: 760, minHeight: 520)
-        // 把配置文件拖进窗口就导入（先预览）。
-        .onDrop(of: [UTType.fileURL], isTargeted: nil) { providers in
-            guard let provider = providers.first else { return false }
-            _ = provider.loadObject(ofClass: URL.self) { url, _ in
-                guard let url else { return }
-                Task { @MainActor in
-                    navigation.importRequest = url.absoluteString
-                    navigation.page = .advanced
-                }
-            }
-            return true
-        }
     }
 
     private var pageSelection: Binding<SettingsPage?> {
@@ -163,13 +128,7 @@ struct SettingsRootView: View {
     private var detail: some View {
         switch navigation.page {
         case .profiles: ProfilesPage(state: state, navigation: navigation)
-        case .nodes: NodesPage(state: state, engine: state.engine, navigation: navigation)
-        case .rules: RulesPage(state: state, engine: state.engine, navigation: navigation)
-        case .share: SharePage(state: state, engine: state.engine, sleepGuard: state.sleepGuard)
-        case .connections: ConnectionsPage(state: state, engine: state.engine)
-        case .diagnose: DiagnosePage(state: state, engine: state.engine, navigation: navigation)
         case .automation: AutomationPage(state: state, control: state.control, network: state.network)
-        case .advanced: AdvancedPage(state: state, engine: state.engine, navigation: navigation)
         case .general: GeneralPage(state: state)
         case .hotkey: HotkeyPage(state: state)
         case .sync: SyncPage(state: state, sync: state.sync)
@@ -205,6 +164,7 @@ struct GeneralPage: View {
     @ObservedObject var state: AppState
     @State private var language = LanguageSetting.current
     @State private var relaunchError: String?
+    @State private var removingHelper = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -269,7 +229,7 @@ struct GeneralPage: View {
                     Text(L("变色：开着代理时网速用开关的颜色，系统代理是别的程序设置的时候是黄色，代理服务器连不上时是红色，关着时是普通的菜单栏文字颜色。颜色会按菜单栏深浅自动调深或调浅，保证看得清。"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    Text(L("「系统网络总速度」统计有线和 Wi‑Fi 网卡的全部流量；「只算内置代理」是经过内核的流量。"))
+                    Text(L("「系统网络总速度」统计有线和 Wi‑Fi 网卡的全部流量。"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -282,6 +242,24 @@ struct GeneralPage: View {
                     Toggle(L("定期检查代理服务器能否连上"), isOn: $state.config.healthCheck)
                     TextField(L("测速地址"), text: $state.config.testURL)
                         .textFieldStyle(.roundedBorder)
+                    Text(L("测试连接时经代理访问这个地址。默认是苹果的连通性检测页，也可以换成你自己内网里的地址。"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                if state.legacyHelperInstalled {
+                    Section(L("以前版本的后台助手")) {
+                        Text(L("以前的版本装过一个后台助手，现在的 Proxi 用不上它了。移除它需要输入一次管理员密码。"))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Button(removingHelper ? L("正在移除…") : L("移除后台助手…")) {
+                            removingHelper = true
+                            Task { @MainActor in
+                                await state.removeLegacyHelper()
+                                removingHelper = false
+                            }
+                        }
+                        .disabled(removingHelper)
+                    }
                 }
                 Section(L("通知")) {
                     Picker(L("通知"), selection: $state.config.notifyLevel) {
@@ -342,7 +320,7 @@ struct HotkeyPage: View {
                     Text(L("更多的命令、给 AI 助手用的接口和按网络自动切换在「自动化」页。终端里也可以用 open 命令控制："))
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    ForEach(["open proxi://toggle", "open proxi://on", "open proxi://off", L("open \"proxi://use?name=配置名\""), "open proxi://share/on", "open proxi://update"], id: \.self) { command in
+                    ForEach(["open proxi://toggle", "open proxi://on", "open proxi://off", L("open \"proxi://use?name=配置名\""), "open proxi://update"], id: \.self) { command in
                         HStack {
                             Text(command)
                                 .font(.system(size: 12, design: .monospaced))
@@ -494,7 +472,7 @@ struct AboutPage: View {
                 .font(.system(size: 20, weight: .bold))
             Text(L("版本 %@", UpdateChecker.currentVersion))
                 .foregroundStyle(.secondary)
-            Text(L("菜单栏里的代理开关：一键切换系统代理、环境变量、git 和 npm 的代理设置。"))
+            Text(L("给开发者用的代理开关：一键把系统代理、终端、git 和 npm 指向你自己的代理服务器。"))
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)

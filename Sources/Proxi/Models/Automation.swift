@@ -4,30 +4,32 @@ import Foundation
 enum ControlPermission: String, Codable, CaseIterable, Identifiable {
     /// 关闭接口。
     case off
-    /// 只能查看状态、节点、规则、连接。
+    /// 只能查看状态和代理配置。
     case readOnly
-    /// 还能开关代理、切节点、切模式、测速这些日常操作。
+    /// 还能开关代理、切换配置、测试连接。
     case operate
-    /// 还能改配置：加规则、加订阅、导入配置。
-    case full
 
     var id: String { rawValue }
+
+    /// 以前版本还有「完全控制」（full），现在按「日常操作」算。
+    init(from decoder: Decoder) throws {
+        let text = try decoder.singleValueContainer().decode(String.self)
+        self = ControlPermission(rawValue: text) ?? .operate
+    }
 
     var title: String {
         switch self {
         case .off: return L("关闭")
         case .readOnly: return L("只能查看")
-        case .operate: return L("日常操作")
-        case .full: return L("完全控制")
+        case .operate: return L("开关和切换")
         }
     }
 
     var detail: String {
         switch self {
         case .off: return L("命令行和 AI 助手都连不上")
-        case .readOnly: return L("查看状态、节点、规则和连接，不能改动任何东西")
-        case .operate: return L("另外可以开关代理、切换节点和模式、测速、断开连接")
-        case .full: return L("另外可以加规则、加订阅、导入配置；每次改动都记在操作记录里，可以撤销")
+        case .readOnly: return L("查看状态和代理配置，不能改动任何东西")
+        case .operate: return L("另外可以开关代理、切换配置、测试连接")
         }
     }
 
@@ -36,7 +38,6 @@ enum ControlPermission: String, Codable, CaseIterable, Identifiable {
         case .off: return 0
         case .readOnly: return 1
         case .operate: return 2
-        case .full: return 3
         }
     }
 
@@ -62,7 +63,7 @@ struct NetworkIdentity: Equatable {
     }
 }
 
-/// 按网络自动切换的一条规则：连上某个 Wi‑Fi 或路由器时开某个配置、关代理或者切模式。
+/// 按网络自动切换的一条规则：连上某个 Wi‑Fi 或路由器时开某个配置或者关代理。
 struct NetworkRule: Codable, Identifiable, Equatable, Hashable {
     enum Match: Equatable, Hashable {
         /// Wi‑Fi 名字（区分大小写）。
@@ -106,14 +107,11 @@ struct NetworkRule: Codable, Identifiable, Equatable, Hashable {
         case profile(UUID)
         /// 关闭代理。
         case off
-        /// 内置代理切到某个模式。
-        case mode(EngineMode)
 
         var rawValue: String {
             switch self {
             case .profile(let id): return "profile:" + id.uuidString
             case .off: return "off"
-            case .mode(let mode): return "mode:" + mode.rawValue
             }
         }
 
@@ -122,8 +120,6 @@ struct NetworkRule: Codable, Identifiable, Equatable, Hashable {
                 self = .off
             } else if rawValue.hasPrefix("profile:"), let id = UUID(uuidString: String(rawValue.dropFirst(8))) {
                 self = .profile(id)
-            } else if rawValue.hasPrefix("mode:"), let mode = EngineMode(rawValue: String(rawValue.dropFirst(5))) {
-                self = .mode(mode)
             } else {
                 return nil
             }
@@ -133,7 +129,6 @@ struct NetworkRule: Codable, Identifiable, Equatable, Hashable {
             switch self {
             case .profile(let id): return L("开启「%@」", profiles.first { $0.id == id }?.name ?? L("已删除的配置"))
             case .off: return L("关闭代理")
-            case .mode(let mode): return L("切到%@", mode.title)
             }
         }
     }
@@ -211,7 +206,7 @@ struct NetworkRule: Codable, Identifiable, Equatable, Hashable {
 
 /// 自动化的设置：本机控制接口的权限、按网络自动切换。
 struct AutomationConfig: Codable, Equatable {
-    var permission: ControlPermission = .full
+    var permission: ControlPermission = .operate
     /// 按网络自动切换的总开关。
     var networkSwitching: Bool = true
     var networkRules: [NetworkRule] = []
@@ -224,8 +219,19 @@ struct AutomationConfig: Codable, Equatable {
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        permission = (try? container.decodeIfPresent(ControlPermission.self, forKey: .permission)) ?? .full
+        permission = (try? container.decodeIfPresent(ControlPermission.self, forKey: .permission)) ?? .operate
         networkSwitching = try container.decodeIfPresent(Bool.self, forKey: .networkSwitching) ?? true
-        networkRules = (try? container.decodeIfPresent([NetworkRule].self, forKey: .networkRules)) ?? []
+        // 一条一条读：以前版本里的规则（比如切换模式）认不出来时只跳过那一条，别的照常保留。
+        let items = (try? container.decodeIfPresent([LenientRule].self, forKey: .networkRules)) ?? []
+        networkRules = items.compactMap(\.rule)
+    }
+}
+
+/// 读不出来的规则不让整个列表失败。
+private struct LenientRule: Decodable {
+    var rule: NetworkRule?
+
+    init(from decoder: Decoder) throws {
+        rule = try? NetworkRule(from: decoder)
     }
 }

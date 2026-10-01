@@ -5,11 +5,10 @@ struct ProfilesPage: View {
     @ObservedObject var state: AppState
     @ObservedObject var navigation: SettingsNavigation
     @State private var showDetect = false
-    @State private var importing = false
 
     var body: some View {
         VStack(spacing: 0) {
-            PageHeader(title: L("代理配置"), subtitle: L("每套配置可以设置系统代理、环境变量、git 和 npm，在菜单栏里一键切换"))
+            PageHeader(title: L("代理配置"), subtitle: L("每套配置指向一个你自己的代理服务器（公司代理、内网网关、Charles / Proxyman / mitmproxy 这类调试代理），在菜单栏里一键切换"))
             HStack(alignment: .top, spacing: 16) {
                 profileList
                     .frame(width: 250)
@@ -26,9 +25,6 @@ struct ProfilesPage: View {
                 state.addProfile(profile)
                 navigation.selectedProfileID = profile.id
             }
-        }
-        .sheet(isPresented: $importing) {
-            ImportSheet(state: state, initial: nil)
         }
         .onAppear {
             if navigation.selectedProfileID == nil {
@@ -96,12 +92,6 @@ struct ProfilesPage: View {
                     Label(L("自动检测"), systemImage: "wand.and.stars")
                 }
                 .help(L("找出本机正在运行的代理软件"))
-                Button {
-                    importing = true
-                } label: {
-                    Label(L("导入"), systemImage: "square.and.arrow.down")
-                }
-                .help(L("导入 Clash / Surge / 小火箭 / Quantumult X 的配置、节点链接或者 Proxi 的备份"))
             }
             .controlSize(.small)
             Spacer()
@@ -149,6 +139,9 @@ struct ProfileEditor: View {
     let original: Profile
     let onDelete: () -> Void
     @State private var portText: String
+    /// 钥匙串里的密码（编辑时显示在密码框里，保存时写回钥匙串）。
+    @State private var passwordText: String
+    private let originalPassword: String
     @State private var problem: String?
     @State private var testing = false
     @State private var result: TestResult?
@@ -160,9 +153,12 @@ struct ProfileEditor: View {
         self.onDelete = onDelete
         _draft = State(initialValue: profile)
         _portText = State(initialValue: String(profile.port))
+        let saved = profile.hasPassword ? (ProxyKeychain.password(for: profile.id) ?? "") : ""
+        originalPassword = saved
+        _passwordText = State(initialValue: saved)
     }
 
-    private var dirty: Bool { draft != original }
+    private var dirty: Bool { draft != original || passwordText != originalPassword }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -188,36 +184,22 @@ struct ProfileEditor: View {
                             .buttonStyle(.plain)
                         }
                     }
-                    if !draft.engine {
-                        Picker(L("类型"), selection: $draft.kind) {
-                            ForEach(ProxyKind.allCases) { kind in
-                                Text(kind.title).tag(kind)
-                            }
-                        }
-                        .pickerStyle(.segmented)
-                    }
-                }
-                if draft.engine {
-                    Section(L("内置代理")) {
-                        Text(L("这是内置代理：地址是本机内核的端口（%@:%@），订阅、节点、模式和端口都在「节点与订阅」页管理。", draft.host, String(draft.port)))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Button(L("管理节点与订阅")) {
-                            SettingsWindowController.shared.show(page: .nodes)
+                    Picker(L("类型"), selection: $draft.kind) {
+                        ForEach(ProxyKind.allCases) { kind in
+                            Text(kind.title).tag(kind)
                         }
                     }
+                    .pickerStyle(.segmented)
                 }
                 Section {
-                    if draft.engine {
-                        EmptyView()
-                    } else if draft.kind == .pac {
-                        TextField(L("PAC 地址"), text: $draft.pacURL, prompt: Text("http://127.0.0.1:7890/proxy.pac"))
+                    if draft.kind == .pac {
+                        TextField(L("PAC 地址"), text: $draft.pacURL, prompt: Text("http://proxy.corp.example/proxy.pac"))
                     } else {
-                        TextField(L("主机"), text: $draft.host, prompt: Text("127.0.0.1"))
+                        TextField(L("主机"), text: $draft.host, prompt: Text("proxy.corp.example"))
                             .onChange(of: draft.host) { _, value in
                                 splitPastedAddress(value)
                             }
-                        TextField(L("端口"), text: $portText, prompt: Text("7890"))
+                        TextField(L("端口"), text: $portText, prompt: Text("8080"))
                             .onChange(of: portText) { _, value in
                                 let digits = value.filter(\.isNumber)
                                 if digits != value {
@@ -227,12 +209,20 @@ struct ProfileEditor: View {
                             }
                     }
                 } header: {
-                    if !draft.engine {
-                        Text(draft.kind == .pac ? L("PAC 脚本") : L("代理服务器"))
-                    }
+                    Text(draft.kind == .pac ? L("PAC 脚本") : L("代理服务器"))
                 } footer: {
-                    if draft.kind != .pac && !draft.engine {
-                        Text(L("可以直接把 127.0.0.1:7890 或 socks5://127.0.0.1:1080 这样的整段地址粘到「主机」里，会自动拆开。"))
+                    if draft.kind != .pac {
+                        Text(L("可以直接把 proxy.corp.example:3128、127.0.0.1:8888 或 socks5://127.0.0.1:1080 这样的整段地址粘到「主机」里，会自动拆开。常见的本机调试代理：Charles 是 8888，Proxyman 是 9090，mitmproxy 是 8080。"))
+                    }
+                }
+                if draft.kind != .pac {
+                    Section {
+                        TextField(L("用户名"), text: $draft.username, prompt: Text(L("不需要登录就留空")))
+                        SecureField(L("密码"), text: $passwordText)
+                    } header: {
+                        Text(L("登录（可选）"))
+                    } footer: {
+                        Text(L("代理服务器要求登录时填写。密码只保存在这台 Mac 的钥匙串里，不写进配置文件、不跟 iCloud 同步，别的 Mac 第一次开启这个配置时会请你输入一次。开启时密码会写进系统代理设置，以及环境变量、git 和 npm 用的代理地址。"))
                     }
                 }
                 Section(L("生效范围")) {
@@ -332,6 +322,7 @@ struct ProfileEditor: View {
     private func save() {
         draft.name = draft.name.trimmingCharacters(in: .whitespaces)
         draft.host = draft.host.trimmingCharacters(in: .whitespaces)
+        draft.username = draft.username.trimmingCharacters(in: .whitespaces)
         draft.pacURL = draft.pacURL.trimmingCharacters(in: .whitespaces)
         if draft.kind == .pac {
             draft.targets = [.system]
@@ -345,7 +336,21 @@ struct ProfileEditor: View {
             return
         }
         problem = nil
-        state.update(draft)
+        let passwordChanged = passwordText != originalPassword
+        let user = draft.username.trimmingCharacters(in: .whitespaces)
+        if draft.kind == .pac || user.isEmpty || passwordText.isEmpty {
+            ProxyKeychain.delete(for: draft.id)
+            draft.hasPassword = false
+        } else if passwordText != originalPassword || !draft.hasPassword {
+            do {
+                try ProxyKeychain.set(passwordText, for: draft.id)
+                draft.hasPassword = true
+            } catch {
+                problem = error.localizedDescription
+                return
+            }
+        }
+        state.update(draft, passwordChanged: passwordChanged)
         saved = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) { saved = false }
     }
@@ -358,9 +363,10 @@ struct ProfileEditor: View {
         problem = nil
         testing = true
         let profile = draft
+        let password = passwordText
         let testURL = state.config.testURL
         Task { @MainActor in
-            result = await ProxyTester.test(profile: profile, testURL: testURL)
+            result = await ProxyTester.test(profile: profile, password: password, testURL: testURL)
             testing = false
         }
     }

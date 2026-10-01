@@ -1,8 +1,8 @@
 <div align="center">
   <img src="docs/icon.png" width="128" height="128" alt="Proxi icon">
   <h1>Proxi</h1>
-  <p><strong>One switch for all your proxies</strong></p>
-  <p>A proxy switch that lives in the macOS menu bar. Native Swift, glass design, free and open source.</p>
+  <p><strong>A proxy switch for developers</strong></p>
+  <p>Lives in the macOS menu bar and points the system proxy, Terminal, git and npm at your own proxy server in one click. Native Swift, glass design, free and open source.</p>
   <p>
     <a href="https://github.com/whrss9527/proxi/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/whrss9527/proxi?include_prereleases&label=release&color=2F6BEA"></a>
     <img alt="macOS 14+" src="https://img.shields.io/badge/macOS-14%2B-111827?logo=apple&logoColor=white">
@@ -26,21 +26,18 @@ Swap the **y** for an **i**: **y** is *why*, **i** is *I*.
 
 One less "why", one more "I".
 
-A proxy shouldn't be just a complicated networking tool. It should be a remote control that's truly in your hands: how you connect, where traffic goes and when it's on are all up to you.
+When you write code, a proxy usually has to be set in several places: System Settings, Terminal, git, npm… and when you change networks or open a debugging proxy, you have to change them all back one by one. Proxi puts them behind one switch in the menu bar: point it at your own proxy server, click once to set everything, click again to restore everything.
 
-**Proxi** is the proxy that's yours.
+Proxi only switches settings. It doesn't provide a proxy service or relay any traffic itself.
 
-<p align="center"><img src="docs/hero.png" width="1000" alt="The Settings window, the menu bar panel and the network speed in the menu bar"></p>
-
-The screenshots show the Chinese interface. Proxi is in English when your system language isn't Chinese, and you can pick the language under Settings → General → Language.
+The interface is in English when your system language isn't Chinese, and you can pick the language under Settings → General → Language.
 
 ## Features
 
-- **One-click switching**: the system proxy, environment variables, git and npm switch together; set up several profiles and change between them with a click.
-- **Subscriptions that just work**: paste your provider's subscription URL, then pick nodes, test latency and route by rules, all from the panel.
-- **The whole Mac, and your game console too**: enhanced mode sends Terminal and games through the proxy; LAN sharing and gateway mode let a PS5, Switch or phone use this Mac's connection.
-- **Every connection in sight**: which app connected where, which rule matched and which node it used; when a site won't open, diagnose it with one click.
-- **Scripts and AI**: control it from the command line, MCP and URL commands, and switch profiles automatically by Wi‑Fi.
+- **One-click switching**: the system proxy, Terminal environment variables (`http_proxy`, `https_proxy`, `all_proxy`, `no_proxy`), git and npm / pnpm / yarn switch together; set up several profiles and change between them with a click.
+- **Your own proxies**: a corporate proxy, an intranet gateway, or a local debugging proxy such as Charles, Proxyman or mitmproxy. HTTP, SOCKS5 and PAC are supported, proxies that require signing in can have a user name and password (the password stays in this Mac's keychain and is never synced), and each profile has its own bypass list.
+- **Always at hand**: a menu bar panel, a global hotkey (⌃⌥P by default), notifications, connection tests, detection of debugging proxies running on this Mac, and a one-line command that brings the proxy to Terminal windows that are already open.
+- **Scripts and AI**: the `proxi on / off / status / use <profile>` command line, MCP for AI assistants and URL commands; turn on the corporate proxy on the office Wi‑Fi and off at home automatically.
 - **Low maintenance**: profiles sync across your Macs with iCloud; new versions install with one click.
 - **English or Chinese**: the interface follows your system language, or pick one under Settings → General.
 
@@ -60,24 +57,24 @@ Or by hand:
 2. Double-click to open it. For opening versions that weren't notarized, see the [user guide](docs/guide.md#安装) (in Chinese).
 3. When a new version comes out, click "Update" in the panel.
 
-If you used ProxySwitch, updating from the old version in one click turns it into Proxi and keeps your settings; see [updating from ProxySwitch](docs/guide.md#从-proxyswitch-更新). The Windows version is [proxyswitch](https://github.com/whrss9527/proxyswitch).
+If you're updating from 0.12 or earlier, see [updating from 0.12 and earlier](docs/guide.md#从-012-及以前的版本更新): settings for features that have been removed are dropped, your own proxy profiles are kept, and if the removed built-in proxy was on, the proxy settings it made are cleared. If you used ProxySwitch, updating from the old version in one click turns it into Proxi and keeps your settings; see [updating from ProxySwitch](docs/guide.md#从-proxyswitch-更新). The Windows version is [proxyswitch](https://github.com/whrss9527/proxyswitch).
 
 ## Getting started
 
 | Action | Result |
 | --- | --- |
+| Settings → Proxy Profiles → "New" or "Detect" | Enter your proxy server's address (for example `proxy.corp.example:3128` or `127.0.0.1:8888`) and choose where to apply it |
 | Left-click the menu bar icon | Opens the panel: the big switch, profiles, latency and one-click testing |
 | Right-click (or Control-click) | A compact menu |
 | ⌃⌥P | Turns the proxy on or off from anywhere (you can change it in Settings) |
-| Settings → Nodes & Subscriptions | Paste your provider's subscription URL and the nodes appear in the panel |
-| `proxi status`, `proxi node HK` in Terminal | Check and switch from the command line (install the command-line tool on the Automation page first) |
+| `proxi use "Work proxy"`, `proxi off` in Terminal | Switch from the command line (ready to use with Homebrew; otherwise install the command-line tool on the Automation page first) |
 
 ## Documentation
 
 The documents are in Chinese for now.
 
-- [User guide](docs/guide.md): installing and updating, every feature, the built-in node proxy, enhanced mode and gateway mode, LAN sharing, permissions and file locations
-- [Automation](docs/automation.md): the command line, MCP, URL commands and the formats Proxi can import
+- [User guide](docs/guide.md): installing and updating, every feature, common setups, permissions and file locations
+- [Automation](docs/automation.md): the command line, MCP, URL commands and switching by network
 - [Development guide](docs/development.md): building, code layout, CI and releases; signing and notarization are in [docs/signing.md](docs/signing.md)
 - [Changelog](CHANGELOG.md)
 

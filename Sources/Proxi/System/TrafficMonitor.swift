@@ -1,6 +1,6 @@
 import Foundation
 
-/// 网卡的收发字节数。只算 en* 网卡（有线、Wi‑Fi、雷雳桥接），不算回环和 VPN 隧道（隧道流量最终也走物理网卡，算上会重复）。
+/// 网卡的收发字节数。只算 en* 网卡（有线、Wi‑Fi、雷雳桥接），不算回环和隧道接口（隧道流量最终也走物理网卡，算上会重复）。
 enum InterfaceCounters {
     struct Sample: Equatable {
         var received: UInt32

@@ -10,7 +10,7 @@ import Foundation
 /// 同一个中文在不同地方要译成不同的英文时，键后面加「‖」和说明，比如 `L("关闭‖按钮")`：
 /// 中文界面和没有翻译表时只显示「‖」前面的部分。
 ///
-/// 所有显示给用户的中文都要经过它（`Scripts/check-localization.py` 会检查），日志和内核配置里的名字不用；
+/// 所有显示给用户的中文都要经过它（`Scripts/check-localization.py` 会检查），日志不用；
 /// SwiftUI 的 `Text("…")` 也写成 `Text(L("…"))`，不依赖 SwiftUI 自己的查表。
 func L(_ key: String, _ arguments: Any...) -> String {
     var template = AppLanguage.bundle.localizedString(forKey: key, value: key, table: nil)

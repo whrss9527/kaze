@@ -3,7 +3,7 @@
 发布流程（`.github/workflows/release.yml`）在仓库的 Secrets 里找到 Developer ID 证书和公证凭据时，会：
 
 1. 把证书导入一个临时钥匙串（`Scripts/import-certificate.sh`）；
-2. 用证书签名程序和内核，带 hardened runtime 和安全时间戳（`Scripts/build-app.sh`）；
+2. 用证书签名程序，带 hardened runtime 和安全时间戳（`Scripts/build-app.sh`）；
 3. 把三个 zip 提交苹果公证，通过后把票据钉到 `.app` 上再重新打包（`Scripts/notarize.sh`）；
 4. 算校验和、上传，Release 说明末尾注明「已用 Developer ID 签名并通过苹果公证」。
 

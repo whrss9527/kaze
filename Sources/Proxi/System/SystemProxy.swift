@@ -65,7 +65,7 @@ enum SystemProxy {
         let script = "do shell script " + Shell.appleScriptString(lines.joined(separator: " && ")) + " with administrator privileges"
         let result = try await Shell.run(osascriptPath, ["-e", script], timeout: 180)
         if !result.succeeded {
-            throw SystemProxyError.needsAdmin(result.trimmedOutput)
+            throw SystemProxyError.needsAdmin(Redact.secrets(result.trimmedOutput))
         }
     }
 

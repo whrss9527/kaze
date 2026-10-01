@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// 自动化页：本机控制接口（命令行、AI 助手）、URL 命令、按网络自动切换和操作记录。
+/// 自动化页：本机控制接口（命令行、AI 助手）、URL 命令、按网络自动切换。
 struct AutomationPage: View {
     @ObservedObject var state: AppState
     @ObservedObject var control: ControlService
@@ -22,7 +22,6 @@ struct AutomationPage: View {
                 mcpSection
                 urlSection
                 NetworkRulesSection(state: state, network: network)
-                changesSection
             }
             .formStyle(.grouped)
             .scrollContentBackground(.hidden)
@@ -55,16 +54,20 @@ struct AutomationPage: View {
                 }
             }
             if let last = control.lastCall {
-                LabeledContent(L("最近一次调用"), value: "\(clientTitle(last.client)) · \(last.tool) · \(Engine.relative(last.date))")
+                LabeledContent(L("最近一次调用"), value: "\(ControlService.clientTitle(last.client)) · \(last.tool) · \(Self.relative(last.date))")
             }
-            Text(L("命令行和 AI 助手经本机的套接字（%@）操作 Proxi，只有这台 Mac 上你自己的账户能连。改配置的操作都记在下面的操作记录里，可以撤销。", UnixSocket.defaultPath))
+            Text(L("命令行和 AI 助手经本机的套接字（%@）操作 Proxi，只有这台 Mac 上你自己的账户能连。它们只能查看状态、开关代理和切换配置，不能改配置。", UnixSocket.defaultPath))
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
     }
 
-    private func clientTitle(_ client: String) -> String {
-        ControlChange(client: client, tool: "", summary: "").clientTitle
+    /// 「3 分钟前」这样的相对时间。
+    static func relative(_ date: Date) -> String {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.locale = AppLanguage.locale
+        formatter.unitsStyle = .short
+        return formatter.localizedString(for: date, relativeTo: Date())
     }
 
     // MARK: - 命令行
@@ -95,7 +98,7 @@ struct AutomationPage: View {
                     .font(.caption)
                     .foregroundStyle(.red)
             }
-            ForEach(["proxi status", L("proxi node 香港"), L("proxi rule add openai.com 美国"), "proxi import ~/Downloads/config.yaml --preview", "proxi services"], id: \.self) { command in
+            ForEach(["proxi status", L("proxi use 公司代理"), "proxi off", "proxi test", "proxi profiles --json"], id: \.self) { command in
                 copyRow(command)
             }
             Text(L("会在 /usr/local/bin 放一个小脚本（要输一次管理员密码）。不装也可以直接运行 %@ status。proxi help 看全部命令，加 --json 输出 JSON。", CommandLineInstaller.executablePath))
@@ -132,7 +135,7 @@ struct AutomationPage: View {
 
     private var mcpSection: some View {
         Section(L("AI 助手（MCP）")) {
-            Text(L("支持 MCP 的 AI 客户端（Claude Desktop、Claude Code、Cursor 等）加上下面的配置后，就能直接让 AI 查看状态、切节点、诊断网址、加规则、导入配置，不用自己动手。它能做到哪一步由上面的权限决定。"))
+            Text(L("支持 MCP 的 AI 客户端（Claude Desktop、Claude Code、Cursor 等）加上下面的配置后，就能让 AI 查看代理状态、开关代理、切换配置和测试连接。它能做到哪一步由上面的权限决定。"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
             codeBlock(CommandLineInstaller.mcpConfig, label: L("配置文件里的 mcpServers"))
@@ -166,49 +169,12 @@ struct AutomationPage: View {
 
     private var urlSection: some View {
         Section(L("URL 命令与快捷指令")) {
-            ForEach(["proxi://toggle", L("proxi://node?name=香港"), "proxi://mode?value=global", "proxi://tun/on", L("proxi://group?name=流媒体&member=日本"), "proxi://run?tool=check_services", "proxi://import?url=https://example.com/config.yaml"], id: \.self) { command in
+            ForEach(["proxi://toggle", "proxi://on", "proxi://off", L("proxi://use?name=公司代理"), "proxi://run?tool=test_profiles"], id: \.self) { command in
                 copyRow("open \"\(command)\"")
             }
-            Text(L("快捷指令里用「打开 URL」执行这些命令，或者用「运行 Shell 脚本」调用 proxi 命令。URL 命令不能直接改配置：导入会先打开预览让你确认。"))
+            Text(L("快捷指令里用「打开 URL」执行这些命令，或者用「运行 Shell 脚本」调用 proxi 命令。"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
-        }
-    }
-
-    // MARK: - 操作记录
-
-    private var changesSection: some View {
-        Section(L("操作记录")) {
-            if control.changes.isEmpty {
-                Text(L("命令行、AI 助手和导入做过的改动会记在这里，改配置的可以撤销。"))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } else {
-                ForEach(control.changes) { change in
-                    HStack(spacing: 10) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(change.summary)
-                                .font(.system(size: 12))
-                                .strikethrough(change.undone)
-                                .lineLimit(2)
-                            Text("\(change.clientTitle) · \(Engine.relative(change.date))" + (change.undone ? L(" · 已撤销") : ""))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        if change.canUndo {
-                            Button(L("撤销")) { control.undo(change.id) }
-                                .controlSize(.small)
-                                .help(L("回到这次改动之前的配置（之后的改动也会一起撤销）"))
-                        }
-                    }
-                }
-                HStack {
-                    Spacer()
-                    Button(L("清空记录")) { control.clearJournal() }
-                        .controlSize(.small)
-                }
-            }
         }
     }
 
@@ -327,8 +293,6 @@ struct NetworkRulesSection: View {
                     .foregroundStyle(.secondary)
                 Picker("", selection: $action) {
                     Text(L("关闭代理")).tag("off")
-                    Text(L("规则分流")).tag("mode:rule")
-                    Text(L("全局代理")).tag("mode:global")
                     ForEach(state.config.profiles) { profile in
                         Text(L("开启「%@」", profile.name)).tag("profile:" + profile.id.uuidString)
                     }
@@ -340,11 +304,11 @@ struct NetworkRulesSection: View {
                     .disabled(match == nil)
             }
             if let last = network.lastSwitch {
-                Text(L("最近一次：%@（%@）", last.summary, Engine.relative(last.date)))
+                Text(L("最近一次：%@（%@）", last.summary, AutomationPage.relative(last.date)))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            Text(L("比如在公司的 Wi‑Fi 自动开公司代理、回家自动关掉，或者连上手机热点时切到全局代理。同一个网络只切一次，之后你手动改了不会被改回去。认 Wi‑Fi 名字要定位权限；不给的话可以按路由器（MAC 地址）认。"))
+            Text(L("比如在公司的 Wi‑Fi 自动开公司代理、回家自动关掉。同一个网络只切一次，之后你手动改了不会被改回去。认 Wi‑Fi 名字要定位权限；不给的话可以按路由器（MAC 地址）认。"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }

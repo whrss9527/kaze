@@ -4,7 +4,7 @@ import CoreLocation
 import CoreWLAN
 import SystemConfiguration
 
-/// 按网络自动切换：网络一变就看现在连的是哪个 Wi‑Fi、哪个路由器，按「自动化」里的规则开关代理或者切模式。
+/// 按网络自动切换：网络一变就看现在连的是哪个 Wi‑Fi、哪个路由器，按「自动化」里的规则开关代理或者切换配置。
 /// 同一个网络只切一次，之后手动改了不会被改回去；换了网络才会再按规则切。只在主线程上用。
 @MainActor
 final class NetworkAutomation: NSObject, ObservableObject, CLLocationManagerDelegate {
@@ -117,7 +117,7 @@ final class NetworkAutomation: NSObject, ObservableObject, CLLocationManagerDele
 
     /// 路由器的 MAC 地址（从 ARP 表里查）。
     nonisolated static func macAddress(of ip: String) async -> String? {
-        guard IPPrefix.isIPv4Address(ip), let result = try? await Shell.run("/usr/sbin/arp", ["-n", ip], timeout: 3) else { return nil }
+        guard Self.isIPv4Address(ip), let result = try? await Shell.run("/usr/sbin/arp", ["-n", ip], timeout: 3) else { return nil }
         return parseARP(result.output)
     }
 
@@ -165,11 +165,6 @@ final class NetworkAutomation: NSObject, ObservableObject, CLLocationManagerDele
                 state.turnOff()
                 done = L("关闭代理")
             }
-        case .mode(let mode):
-            if state.config.engine.mode != mode {
-                state.engine.setMode(mode)
-                done = L("切到%@", mode.title)
-            }
         }
         guard let done else { return }
         let summary = "\(rule.match.title) → \(done)"
@@ -184,5 +179,11 @@ final class NetworkAutomation: NSObject, ObservableObject, CLLocationManagerDele
         if let mac = identity.routerMAC { return .router(mac) }
         if let ip = identity.routerIP { return .router(ip) }
         return nil
+    }
+
+    /// 是不是一个 IPv4 地址（只有这种才去查路由器的 MAC）。
+    nonisolated static func isIPv4Address(_ text: String) -> Bool {
+        var address = in_addr()
+        return text.withCString { inet_pton(AF_INET, $0, &address) == 1 }
     }
 }

@@ -66,7 +66,7 @@ A 和 B 填一组就行，两组都填时用 A。
 Actions → release → Run workflow，填新的版本标签（比如 `v0.7.0`）。日志里：
 
 - 「导入签名证书」会显示证书名字，应该是 `Developer ID Application: …`；
-- 「提交苹果公证并钉上票据」通常几分钟，最后 `spctl` 显示 `source=Notarized Developer ID` 就成功了；没通过时会打印苹果给的公证日志，里面写着是哪个文件、什么原因。
+- 「提交苹果公证并钉上票据」通常几分钟，最后 `spctl` 显示 `source=Notarized Developer ID` 就成功了；没通过时会打印苹果给的公证日志，里面写着是哪个文件、什么原因。公证已通过、票据也钉上并核对过，只是发布机器上的 `spctl` 仍说 `Unnotarized Developer ID` 时（发布用的 macOS 机器上偶尔会这样），照常发布，日志里记一条警告。
 
 ## 要知道的几件事
 

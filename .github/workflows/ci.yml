@@ -55,6 +55,8 @@ jobs:
           ls -la dist/*.zip
       - name: 冒烟启动并截图
         run: |
+          # 输出另存一份：失败时最后一步把末尾打在日志最后（前面是几万行截图）。
+          exec > >(tee "$RUNNER_TEMP/smoke.log") 2>&1
           support="$HOME/Library/Application Support/Proxi"
           mkdir -p "$support" screenshots
           # runner 的系统语言是英文。下面的检查和截图用中文界面：先在 Proxi 自己的偏好设置里把界面语言选成简体中文
@@ -172,6 +174,7 @@ jobs:
           sleep 3
           security delete-generic-password -s com.whrss9527.proxyswitch -a 6D2F2A1E-0000-4000-8000-000000000003 >/dev/null || true
           ls -la screenshots
+          echo "冒烟测试通过"
       - name: 从 0.12 更新过来的配置（以前版本的设置、开着的内置代理、留下的文件）
         run: |
           support="$HOME/Library/Application Support/Proxi"
@@ -658,6 +661,11 @@ jobs:
               base64 -b 76 -i about-window.jpg
               echo "=====END about-window.jpg====="
             fi
+          fi
+          if [ -f "$RUNNER_TEMP/smoke.log" ] && ! grep -q "冒烟测试通过" "$RUNNER_TEMP/smoke.log"; then
+            echo "=====BEGIN 冒烟测试的最后 80 行====="
+            tail -80 "$RUNNER_TEMP/smoke.log"
+            echo "=====END 冒烟测试====="
           fi
           # 更新测试没通过时，把它的最后 100 行放在整个日志的最后。
           if [ -f "$RUNNER_TEMP/update.log" ] && ! grep -q "更新测试通过" "$RUNNER_TEMP/update.log"; then

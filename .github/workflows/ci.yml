@@ -882,6 +882,7 @@ jobs:
           fi
           # 签名相关的检查结果放在日志最后，截图再多也看得到。
           if [ -f summary.txt ]; then
+            echo "::notice title=summary::$(sed 's/%/%25/g' summary.txt | awk '{printf "%s%%0A", $0}')"
             echo "=====BEGIN summary====="
             cat summary.txt
             echo "=====END summary====="

@@ -220,6 +220,15 @@ final class ControlService: ObservableObject {
         case .unknown: break
         }
         if let error = state.lastError { result["lastError"] = error }
+        // 可选扩展：没开启时只报告没开启，不显示别的。
+        let extensions = state.extensions
+        var ext: [String: Any] = ["enabled": state.persisted.extensionState.enabled]
+        if state.persisted.extensionState.enabled {
+            ext["installed"] = extensions.isInstalled
+            ext["running"] = extensions.status?.coreRunning ?? false
+            if let port = extensions.status?.mixedPort { ext["port"] = port }
+        }
+        result["extension"] = ext
         return result
     }
 

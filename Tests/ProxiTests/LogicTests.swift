@@ -854,7 +854,7 @@ final class CredentialsTests: XCTestCase {
     }
 }
 
-/// 从以前的版本更新过来：读配置时去掉以前版本的设置，找出要关掉的代理、要删的文件和后台助手。
+/// 从以前的版本更新过来：读配置时去掉以前版本的设置，代理引擎的数据挪到它自己的目录（不删），找出要关掉的代理和后台助手。
 final class LegacyCleanupTests: XCTestCase {
     private let builtInID = "6D2F2A1E-0000-4000-8000-0000000000AA"
     private let plainID = "6D2F2A1E-0000-4000-8000-000000000001"
@@ -892,7 +892,8 @@ final class LegacyCleanupTests: XCTestCase {
         let state = Data(#"{"lastProfileID":"\#(builtInID)","enabledByUs":true,"share":{"enabled":true}}"#.utf8)
         let findings = LegacyCleanup.inspect(configData: legacyConfig, stateData: state)
         XCTAssertTrue(findings.hadLegacySettings)
-        XCTAssertTrue(findings.needsNotice)
+        XCTAssertTrue(findings.needsMigration)
+        XCTAssertTrue(findings.hasEngineData)
         XCTAssertEqual(findings.builtInProfiles.map(\.id.uuidString), [builtInID])
         XCTAssertEqual(findings.activeBuiltIn?.targets, [.system, .git])
         XCTAssertEqual(findings.activeBuiltIn?.port, 7890)
@@ -908,23 +909,52 @@ final class LegacyCleanupTests: XCTestCase {
         var config = AppConfig()
         config.profiles = [Profile(name: "Charles", color: "#000", host: "127.0.0.1", port: 8888)]
         let findings = LegacyCleanup.inspect(configData: try JSONEncoder().encode(config), stateData: try JSONEncoder().encode(PersistedState()))
-        XCTAssertFalse(findings.needsNotice)
+        XCTAssertFalse(findings.needsMigration)
+        XCTAssertFalse(findings.hasEngineData)
         XCTAssertNil(findings.activeBuiltIn)
-        XCTAssertFalse(LegacyCleanup.inspect(configData: nil, stateData: nil).needsNotice)
+        XCTAssertFalse(LegacyCleanup.inspect(configData: nil, stateData: nil).needsMigration)
+        // 以前版本里只有代理引擎的默认设置、没有订阅和节点：要迁移，但不算有数据（不弹说明）。
+        let bare = LegacyCleanup.inspect(configData: Data(#"{"profiles":[],"engine":{"mode":"rule","subscriptions":[]}}"#.utf8), stateData: nil)
+        XCTAssertTrue(bare.needsMigration)
+        XCTAssertFalse(bare.hasEngineData)
+        let withNodes = LegacyCleanup.inspect(configData: Data(#"{"engine":{"manualNodes":[{"name":"a","link":"ss://x"}]}}"#.utf8), stateData: nil)
+        XCTAssertTrue(withNodes.hasEngineData)
+        let sharing = LegacyCleanup.inspect(configData: Data("{}".utf8), stateData: Data(#"{"share":{"enabled":true}}"#.utf8))
+        XCTAssertTrue(sharing.hasEngineData)
     }
 
-    func testRemovesLegacyData() throws {
+    func testMovesEngineDataWithoutDeletingAnything() throws {
         let fm = FileManager.default
-        let directory = fm.temporaryDirectory.appendingPathComponent("legacy-\(UUID().uuidString)", isDirectory: true)
+        let directory = fm.temporaryDirectory.appendingPathComponent("legacy \(UUID().uuidString)", isDirectory: true)
         defer { try? fm.removeItem(at: directory) }
         try fm.createDirectory(at: directory.appendingPathComponent("core/rules"), withIntermediateDirectories: true)
+        try Data("rules".utf8).write(to: directory.appendingPathComponent("core/rules/a.list"))
         try fm.createDirectory(at: directory.appendingPathComponent("imports"), withIntermediateDirectories: true)
-        try Data("[]".utf8).write(to: directory.appendingPathComponent("journal.json"))
-        try Data("{}".utf8).write(to: directory.appendingPathComponent("config.json"))
-        XCTAssertEqual(Set(LegacyCleanup.removeLegacyData(in: directory)), ["core", "imports", "journal.json"])
-        XCTAssertFalse(fm.fileExists(atPath: directory.appendingPathComponent("core").path))
-        XCTAssertTrue(fm.fileExists(atPath: directory.appendingPathComponent("config.json").path))
-        XCTAssertTrue(LegacyCleanup.removeLegacyData(in: directory).isEmpty)
+        try Data("nodes".utf8).write(to: directory.appendingPathComponent("imports/nodes.yaml"))
+        let importsURL = URL(fileURLWithPath: directory.appendingPathComponent("imports/nodes.yaml").path).absoluteString
+        try Data(#"[{"path":"\#(directory.appendingPathComponent("imports").path)/x"}]"#.utf8).write(to: directory.appendingPathComponent("journal.json"))
+        let config = #"{"profiles":[],"engine":{"subscriptions":[{"name":"f","url":"\#(importsURL)"}]}}"#
+        try Data(config.utf8).write(to: directory.appendingPathComponent("config.json"))
+        try Data(#"{"share":{"enabled":true},"traffic":{}}"#.utf8).write(to: directory.appendingPathComponent("state.json"))
+
+        let done = LegacyCleanup.migrateEngineData(in: directory)
+        XCTAssertEqual(Set(done), ["core", "imports", "journal.json", "config.json", "state.json"])
+        let engine = directory.appendingPathComponent("engine")
+        XCTAssertEqual(try String(contentsOf: engine.appendingPathComponent("core/rules/a.list"), encoding: .utf8), "rules")
+        XCTAssertEqual(try String(contentsOf: engine.appendingPathComponent("imports/nodes.yaml"), encoding: .utf8), "nodes")
+        // 配置原样复制，指向 imports/ 的地址换到新位置；原来的 config.json 还在，另有一份备份。
+        let copied = try String(contentsOf: engine.appendingPathComponent("config.json"), encoding: .utf8)
+        XCTAssertTrue(copied.contains(URL(fileURLWithPath: engine.appendingPathComponent("imports/nodes.yaml").path).absoluteString), copied)
+        XCTAssertTrue(copied.contains(#""subscriptions""#))
+        XCTAssertEqual(try String(contentsOf: engine.appendingPathComponent("config-0.12-backup.json"), encoding: .utf8), config)
+        XCTAssertEqual(try String(contentsOf: directory.appendingPathComponent("config.json"), encoding: .utf8), config)
+        XCTAssertTrue(fm.fileExists(atPath: engine.appendingPathComponent("state.json").path))
+        XCTAssertTrue(fm.fileExists(atPath: engine.appendingPathComponent("state-0.12-backup.json").path))
+        let journal = try String(contentsOf: engine.appendingPathComponent("journal.json"), encoding: .utf8)
+        XCTAssertTrue(journal.contains(engine.appendingPathComponent("imports").path), journal)
+        // 再跑一次什么都不动（目标已经有了）。
+        XCTAssertTrue(LegacyCleanup.migrateEngineData(in: directory).isEmpty)
+        XCTAssertEqual(try String(contentsOf: engine.appendingPathComponent("config.json"), encoding: .utf8), copied)
     }
 
     func testPersistedStateDropsLegacyKeys() throws {
@@ -935,6 +965,7 @@ final class LegacyCleanupTests: XCTestCase {
         let written = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(state)) as? [String: Any])
         XCTAssertNil(written["share"])
         XCTAssertNil(written["traffic"])
+        XCTAssertEqual(state.extensionState, ExtensionState(), "以前的版本没有扩展的状态，默认关着")
     }
 
     /// 现在写出来的键都在已知的名单里，不然每次启动都会当成以前版本的设置。

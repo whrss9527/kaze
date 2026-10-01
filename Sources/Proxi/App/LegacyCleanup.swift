@@ -1,22 +1,25 @@
 import Foundation
 
-/// 0.13.0 起 Proxi 只负责切换代理：一键把系统代理、终端、git 和 npm 指向用户自己指定的代理服务器。
-/// 从以前的版本更新过来后，第一次启动时在这里检查和清理以前版本留下的东西：
-/// - 配置里以前版本才有的设置（读配置时已经忽略），以及由内置代理自动生成的那条配置；
-/// - 这条配置开着时，代理要关掉（AppState.finishLegacyMigration 做），不然系统代理会指向一个已经不存在的本机端口；
-/// - 数据目录里以前版本用的子目录和文件；
-/// - 以前版本装的后台助手（要管理员密码才能删，由用户在提示里确认）。
+/// 从以前的版本（0.12 及以前，代理引擎还在 Proxi 里面）更新过来后，第一次启动时在这里检查和迁移：
+/// - 配置和状态里代理引擎的设置（订阅、节点、规则、局域网共享……），以及数据目录里的 core/、imports/、journal.json，
+///   一律原样挪到代理引擎的数据目录（engine/），一个都不删；以前的 config.json 和 state.json 另存一份备份；
+/// - 以前开着的就是代理引擎那条配置时，先把代理关掉（AppState.finishLegacyMigration 做），不然系统代理指向一个没人监听的本机端口；
+///   用户同意说明、开启扩展后，代理引擎运行起来再把它开回来；
+/// - 有代理引擎的数据时问一次要不要开启扩展；不开启时数据留着，以后在「设置 → 扩展」里随时可以开；
+/// - 以前版本装的后台助手：扩展开着时还要用，留着；扩展没开时提示可以移除（要管理员密码，由用户确认）。
 enum LegacyCleanup {
     /// 启动时读出来的情况。
     struct Findings: Equatable {
-        /// 配置里有以前版本才有的设置。
+        /// 配置或状态里有以前版本才有的设置（代理引擎的设置）。
         var hadLegacySettings = false
-        /// 由内置代理自动生成的配置（读配置时会去掉）。
+        /// 代理引擎那条配置（以前的版本里自动生成，存的是 "engine": true）。
         var builtInProfiles: [Profile] = []
-        /// 上次开着的就是这样一条配置：要把它设置过的代理清掉。
+        /// 上次开着的就是代理引擎那条配置：要先把它设置过的代理清掉。
         var activeBuiltIn: Profile?
+        /// 有用户自己的代理引擎数据：订阅、手动节点、代理引擎那条配置，或者开着局域网共享、增强模式、网关模式。
+        var hasEngineData = false
 
-        var needsNotice: Bool { hadLegacySettings || !builtInProfiles.isEmpty }
+        var needsMigration: Bool { hadLegacySettings || !builtInProfiles.isEmpty }
     }
 
     /// 现在的 config.json 和 state.json 里有的顶层键；别的键都是以前版本才有的设置。
@@ -24,8 +27,8 @@ enum LegacyCleanup {
         "profiles", "clickAction", "toggleHotkey", "offMode", "notifyLevel", "healthCheck", "disableOnExit", "testURL",
         "autoCheckUpdates", "speedDisplay", "speedSide", "speedColorFollowsStatus", "automation",
     ]
-    static let knownStateKeys: Set<String> = ["lastProfileID", "enabledByUs", "original", "syncEnabled", "noticeShown"]
-    /// 数据目录里以前版本用的子目录和文件。
+    static let knownStateKeys: Set<String> = ["lastProfileID", "enabledByUs", "original", "syncEnabled", "noticeShown", "extension"]
+    /// 数据目录里以前版本用的子目录和文件：挪到代理引擎的数据目录。
     static let legacyDataItems = ["core", "imports", "journal.json"]
 
     /// 读 config.json 和 state.json 的原始内容，看有没有以前版本留下的东西。不改任何文件。
@@ -40,10 +43,25 @@ enum LegacyCleanup {
                     findings.builtInProfiles.append(profile)
                 }
             }
+            if let engine = object["engine"] as? [String: Any] {
+                let subscriptions = (engine["subscriptions"] as? [Any]) ?? []
+                let manualNodes = (engine["manualNodes"] as? [Any]) ?? []
+                if !subscriptions.isEmpty || !manualNodes.isEmpty {
+                    findings.hasEngineData = true
+                }
+            }
+        }
+        if !findings.builtInProfiles.isEmpty {
+            findings.hasEngineData = true
         }
         if let stateData, let object = try? JSONSerialization.jsonObject(with: stateData) as? [String: Any] {
             if !Set(object.keys).isSubset(of: knownStateKeys) {
                 findings.hadLegacySettings = true
+            }
+            let share = ((object["share"] as? [String: Any])?["enabled"] as? Bool) ?? false
+            let tun = object["tun"] as? [String: Any]
+            if share || ((tun?["enabled"] as? Bool) ?? false) || ((tun?["gateway"] as? Bool) ?? false) {
+                findings.hasEngineData = true
             }
             let enabled = (object["enabledByUs"] as? Bool) ?? false
             if enabled, let text = object["lastProfileID"] as? String, let id = UUID(uuidString: text) {
@@ -58,23 +76,79 @@ enum LegacyCleanup {
         inspect(configData: try? Data(contentsOf: Store.configURL), stateData: try? Data(contentsOf: Store.stateURL))
     }
 
-    /// 删掉数据目录里以前版本用的子目录和文件，返回删了哪些。
+    // MARK: - 迁移数据
+
+    /// 把以前版本的代理引擎数据挪到代理引擎的数据目录（directory/engine/），返回做了哪些事（给日志看）。
+    /// 什么都不删：config.json、state.json 原样复制一份过去（代理引擎直接读它们），另外各存一份 -0.12-backup 备份；
+    /// core/、imports/、journal.json 整个挪过去，配置和操作记录里指向它们的路径跟着改。目标已经有的不覆盖。
     @discardableResult
-    static func removeLegacyData(in directory: URL = Store.directory) -> [String] {
-        var removed: [String] = []
+    static func migrateEngineData(in directory: URL = Store.directory) -> [String] {
+        let fm = FileManager.default
+        let target = directory.appendingPathComponent("engine", isDirectory: true)
+        var done: [String] = []
+        do {
+            try fm.createDirectory(at: target, withIntermediateDirectories: true)
+        } catch {
+            Log.error("建不了代理引擎的数据目录：\(error.localizedDescription)")
+            return done
+        }
         for name in legacyDataItems {
-            let url = directory.appendingPathComponent(name)
-            guard FileManager.default.fileExists(atPath: url.path) else { continue }
-            if (try? FileManager.default.removeItem(at: url)) != nil {
-                removed.append(name)
+            let source = directory.appendingPathComponent(name)
+            let destination = target.appendingPathComponent(name)
+            guard fm.fileExists(atPath: source.path), !fm.fileExists(atPath: destination.path) else { continue }
+            do {
+                try fm.moveItem(at: source, to: destination)
+                done.append(name)
+            } catch {
+                Log.error("挪 \(name) 失败（留在原处）：\(error.localizedDescription)")
             }
         }
-        return removed
+        for name in ["config.json", "state.json"] {
+            let source = directory.appendingPathComponent(name)
+            guard let data = try? Data(contentsOf: source) else { continue }
+            let backup = target.appendingPathComponent(name.replacingOccurrences(of: ".json", with: "-0.12-backup.json"))
+            if !fm.fileExists(atPath: backup.path) {
+                try? data.write(to: backup, options: .atomic)
+            }
+            let destination = target.appendingPathComponent(name)
+            guard !fm.fileExists(atPath: destination.path) else { continue }
+            let text = relocate(String(decoding: data, as: UTF8.self), from: directory, to: target)
+            do {
+                try Data(text.utf8).write(to: destination, options: .atomic)
+                done.append(name)
+            } catch {
+                Log.error("复制 \(name) 失败：\(error.localizedDescription)")
+            }
+        }
+        let journal = target.appendingPathComponent("journal.json")
+        if done.contains("journal.json"), let text = try? String(contentsOf: journal, encoding: .utf8) {
+            let relocated = relocate(text, from: directory, to: target)
+            if relocated != text {
+                try? relocated.write(to: journal, atomically: true, encoding: .utf8)
+            }
+        }
+        return done
+    }
+
+    /// 文字里指向 directory/imports/、directory/core/ 的路径（普通路径和 file:// 网址，JSON 里的 / 可能写成 \/）换到 target 下面。
+    static func relocate(_ text: String, from directory: URL, to target: URL) -> String {
+        var result = text
+        for item in ["imports", "core"] {
+            let oldPath = directory.appendingPathComponent(item).path + "/"
+            let newPath = target.appendingPathComponent(item).path + "/"
+            let oldURL = URL(fileURLWithPath: oldPath, isDirectory: true).absoluteString
+            let newURL = URL(fileURLWithPath: newPath, isDirectory: true).absoluteString
+            for (old, new) in [(oldURL, newURL), (oldPath, newPath)] {
+                result = result.replacingOccurrences(of: old, with: new)
+                result = result.replacingOccurrences(of: old.replacingOccurrences(of: "/", with: "\\/"), with: new.replacingOccurrences(of: "/", with: "\\/"))
+            }
+        }
+        return result
     }
 
     // MARK: - 以前版本的后台助手
 
-    /// 这些名字是以前版本定下的。
+    /// 这些名字是以前版本定下的（代理引擎现在装的也是这个）。
     enum Helper {
         static let label = "com.whrss9527.proxyswitch.helper"
         static let toolsDirectory = "/Library/PrivilegedHelperTools"

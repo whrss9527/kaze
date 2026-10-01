@@ -3,7 +3,8 @@
 
 代码里显示给用户的中文都写成 L("中文原文", 参数…)，原文就是 Localizable.strings 里的键。这个脚本检查：
 
-1. Sources/Proxi 里每个 L("…") 的键，在每种语言的 Resources/<语言>.lproj/Localizable.strings 里都有；
+1. Sources/Proxi 里每个 L("…") 的键，在每种语言的 Resources/<语言>.lproj/Localizable.strings 里都有
+   （扩展「代理引擎」Sources/ProxiEngine 的对应 Resources/Engine/<语言>.lproj，两套分开检查）；
 2. 各种语言的键完全一样，没有多出来的（代码里已经不用的）键；
 3. 译文里的占位（%@、%1$@）和键里的一样多；
 4. 代码里没有漏掉 L(...) 的中文字符串。日志（Log.info / Log.error）和行尾带 `// l10n-ignore` 的
@@ -17,8 +18,11 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-SOURCES = [ROOT / "Sources" / "Proxi"]
-RESOURCES = ROOT / "Resources"
+# (代码目录, 翻译表目录)：Proxi 和扩展「代理引擎」各一套。
+TARGETS = [
+    (ROOT / "Sources" / "Proxi", ROOT / "Resources"),
+    (ROOT / "Sources" / "ProxiEngine", ROOT / "Resources" / "Engine"),
+]
 # 中文（汉字和全角标点）。
 CHINESE = re.compile(r"[\u3000-\u303f\u4e00-\u9fff\uff00-\uffef“”‘’…]")
 # 这些行不是界面文字。
@@ -65,9 +69,9 @@ def literals(line):
         i += 1
 
 
-def scan():
+def scan(sources):
     keys, unwrapped = {}, []
-    for folder in SOURCES:
+    for folder in sources:
         for path in sorted(folder.rglob("*.swift")):
             if path.name in IGNORED_FILES:
                 continue
@@ -146,19 +150,20 @@ def parse_strings(path):
     return table
 
 
-def main():
-    keys, unwrapped = scan()
+def check(sources, resources):
+    keys, unwrapped = scan([sources])
     if "--print-keys" in sys.argv:
         for key in sorted(keys):
             print(key.replace("\n", "\\n").replace("\t", "\\t"))
         return 0
     status = 0
+    print(f"== {sources.relative_to(ROOT)} ↔ {resources.relative_to(ROOT)}")
     for problem in unwrapped:
         print(problem)
         status = 1
-    tables = {p.parent.name: parse_strings(p) for p in sorted(RESOURCES.glob("*.lproj/Localizable.strings"))}
+    tables = {p.parent.name: parse_strings(p) for p in sorted(resources.glob("*.lproj/Localizable.strings"))}
     if not tables:
-        print("Resources 里没有 Localizable.strings")
+        print(f"{resources.relative_to(ROOT)} 里没有 Localizable.strings")
         return 1
     for lang, table in tables.items():
         if "\0duplicate" in table:
@@ -177,6 +182,13 @@ def main():
             status = 1
         print(f"{lang}: {len(table)} 条，缺 {len(missing)} 条，多 {len(unused)} 条，占位不对 {len(mismatched)} 条")
     print(f"代码里的键 {len(keys)} 个，漏掉 L() 的中文 {len(unwrapped)} 处")
+    return status
+
+
+def main():
+    status = 0
+    for sources, resources in TARGETS:
+        status |= check(sources, resources)
     return status
 
 

@@ -190,6 +190,12 @@ struct ProfileEditor: View {
                         }
                     }
                     .pickerStyle(.segmented)
+                    .disabled(draft.engine)
+                    if draft.engine {
+                        Text(L("这条配置由扩展「代理引擎」管理：地址是它在本机的端口，跟着它变。在「设置 → 扩展」里关闭扩展时它会一起去掉。"))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 Section {
                     if draft.kind == .pac {
@@ -215,7 +221,8 @@ struct ProfileEditor: View {
                         Text(L("可以直接把 proxy.corp.example:3128、127.0.0.1:8888 或 socks5://127.0.0.1:1080 这样的整段地址粘到「主机」里，会自动拆开。常见的本机调试代理：Charles 是 8888，Proxyman 是 9090，mitmproxy 是 8080。"))
                     }
                 }
-                if draft.kind != .pac {
+                .disabled(draft.engine)
+                if draft.kind != .pac && !draft.engine {
                     Section {
                         TextField(L("用户名"), text: $draft.username, prompt: Text(L("不需要登录就留空")))
                         SecureField(L("密码"), text: $passwordText)
@@ -275,6 +282,7 @@ struct ProfileEditor: View {
                 } label: {
                     Label(L("删除"), systemImage: "trash")
                 }
+                .disabled(draft.engine)
                 Button {
                     test()
                 } label: {

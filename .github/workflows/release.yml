@@ -87,7 +87,7 @@ jobs:
           NOTARY_APPLE_ID: ${{ secrets.NOTARY_APPLE_ID }}
           NOTARY_PASSWORD: ${{ secrets.NOTARY_PASSWORD }}
           NOTARY_TEAM_ID: ${{ secrets.NOTARY_TEAM_ID }}
-        run: Scripts/notarize.sh dist/Proxi-macos.zip dist/Proxi-macos-arm64.zip dist/Proxi-macos-x86_64.zip
+        run: Scripts/notarize.sh dist/Proxi-macos.zip dist/Proxi-macos-arm64.zip dist/Proxi-macos-x86_64.zip "dist/Proxi-Engine-${TAG#v}.zip"
       - name: 旧名字的副本和校验和
         run: |
           cd dist
@@ -95,7 +95,8 @@ jobs:
           for arch in "" -arm64 -x86_64; do
             cp "Proxi-macos${arch}.zip" "ProxySwitch-macos${arch}.zip"
           done
-          shasum -a 256 Proxi-macos.zip Proxi-macos-arm64.zip Proxi-macos-x86_64.zip ProxySwitch-macos.zip ProxySwitch-macos-arm64.zip ProxySwitch-macos-x86_64.zip > SHA256SUMS.txt && cat SHA256SUMS.txt
+          # 可选扩展的程序也列上：Proxi 开启扩展时按这里的校验和核对。
+          shasum -a 256 Proxi-macos.zip Proxi-macos-arm64.zip Proxi-macos-x86_64.zip ProxySwitch-macos.zip ProxySwitch-macos-arm64.zip ProxySwitch-macos-x86_64.zip "Proxi-Engine-${TAG#v}.zip" > SHA256SUMS.txt && cat SHA256SUMS.txt
           ls -la *.zip
       - name: 发布
         env:
@@ -103,6 +104,10 @@ jobs:
         run: |
           VERSION="${TAG#v}"
           awk -v version="$VERSION" '/^## /{ if (printing) exit; if (index($0, version)) { printing = 1; next } } printing' CHANGELOG.md > notes.md
+          # 发布说明里不写可选扩展的内容（CI 也检查 CHANGELOG 最上面一节）。
+          if grep -qiE '代理引擎|Proxi-Engine|mihomo|内核|机场|翻墙|科学上网|GFW|VPN|netflix|youtube|chatgpt|telegram|流媒体' notes.md; then
+            echo "::error::发布说明里不该出现这些词"; cat notes.md; exit 1
+          fi
           if [ -n "${CODESIGN_IDENTITY:-}" ]; then
             printf '\n已用 Developer ID 签名并通过苹果公证，下载解压后双击就能打开。\n' >> notes.md
           fi
@@ -110,7 +115,7 @@ jobs:
             gh release create "$TAG" --draft --title "Proxi $TAG" --notes-file notes.md
           fi
           gh release upload "$TAG" dist/Proxi-macos.zip dist/Proxi-macos-arm64.zip dist/Proxi-macos-x86_64.zip \
-            dist/ProxySwitch-macos.zip dist/ProxySwitch-macos-arm64.zip dist/ProxySwitch-macos-x86_64.zip dist/SHA256SUMS.txt --clobber
+            dist/ProxySwitch-macos.zip dist/ProxySwitch-macos-arm64.zip dist/ProxySwitch-macos-x86_64.zip "dist/Proxi-Engine-${VERSION}.zip" dist/SHA256SUMS.txt --clobber
           gh release edit "$TAG" --draft=false --latest
           echo "已发布到 https://github.com/${GITHUB_REPOSITORY}/releases/tag/$TAG"
       - name: 删除临时钥匙串

@@ -7,6 +7,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
     case general
     case hotkey
     case sync
+    case extensions
     case diagnostics
     case about
 
@@ -19,6 +20,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         case .general: return L("通用")
         case .hotkey: return L("快捷键")
         case .sync: return L("iCloud 同步")
+        case .extensions: return L("扩展")
         case .diagnostics: return L("诊断")
         case .about: return L("关于")
         }
@@ -31,6 +33,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         case .general: return "gearshape"
         case .hotkey: return "keyboard"
         case .sync: return "icloud"
+        case .extensions: return "puzzlepiece.extension"
         case .diagnostics: return "stethoscope"
         case .about: return "info.circle"
         }
@@ -132,6 +135,7 @@ struct SettingsRootView: View {
         case .general: GeneralPage(state: state)
         case .hotkey: HotkeyPage(state: state)
         case .sync: SyncPage(state: state, sync: state.sync)
+        case .extensions: ExtensionsPage(state: state, extensions: state.extensions)
         case .diagnostics: DiagnosticsPage(state: state)
         case .about: AboutPage(state: state)
         }
@@ -246,9 +250,9 @@ struct GeneralPage: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                if state.legacyHelperInstalled {
+                if state.legacyHelperInstalled && !state.persisted.extensionState.enabled {
                     Section(L("以前版本的后台助手")) {
-                        Text(L("以前的版本装过一个后台助手，现在的 Proxi 用不上它了。移除它需要输入一次管理员密码。"))
+                        Text(L("以前的版本装过一个后台助手，没有开启扩展时用不上它。移除它需要输入一次管理员密码。"))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         Button(removingHelper ? L("正在移除…") : L("移除后台助手…")) {

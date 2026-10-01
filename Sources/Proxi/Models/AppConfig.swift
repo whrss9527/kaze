@@ -120,8 +120,8 @@ struct AppConfig: Codable, Equatable {
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        // 以前版本里由内置代理自动生成的配置不再支持，直接去掉。
-        profiles = (try container.decodeIfPresent([Profile].self, forKey: .profiles) ?? []).filter { !$0.legacyBuiltIn }
+        // 代理引擎那条配置不从文件里读（以前的版本写进去过）：扩展开着时由 ExtensionManager 加回来。
+        profiles = (try container.decodeIfPresent([Profile].self, forKey: .profiles) ?? []).filter { !$0.engine }
         clickAction = try container.decodeIfPresent(ClickAction.self, forKey: .clickAction) ?? .panel
         if container.contains(.toggleHotkey) {
             toggleHotkey = try container.decodeIfPresent(HotkeyBinding.self, forKey: .toggleHotkey)
@@ -146,7 +146,8 @@ struct AppConfig: Codable, Equatable {
 
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(profiles, forKey: .profiles)
+        // 代理引擎那条配置只在运行时存在，不写进文件，也就不会经 iCloud 同步到别的 Mac。
+        try container.encode(profiles.filter { !$0.engine }, forKey: .profiles)
         try container.encode(clickAction, forKey: .clickAction)
         // 明确写出 null，表示用户关掉了快捷键（缺少这个键时用默认值）。
         try container.encode(toggleHotkey, forKey: .toggleHotkey)
@@ -175,13 +176,16 @@ struct PersistedState: Codable, Equatable {
     var original: ProxySnapshot?
     /// iCloud 同步的开关是本机的，不跟着配置同步。
     var syncEnabled: Bool = false
-    /// 已经显示过 0.13.0 的「Proxi 现在只切换代理」提示。
+    /// 已经显示过从以前版本更新过来的提示（后台助手）。
     var noticeShown: Bool = false
+    /// 可选扩展「代理引擎」：开没开、同意说明的版本和时间（本机的，不同步）。
+    var extensionState = ExtensionState()
 
     init() {}
 
     private enum CodingKeys: String, CodingKey {
         case lastProfileID, enabledByUs, original, syncEnabled, noticeShown
+        case extensionState = "extension"
     }
 
     init(from decoder: Decoder) throws {
@@ -191,5 +195,6 @@ struct PersistedState: Codable, Equatable {
         original = try container.decodeIfPresent(ProxySnapshot.self, forKey: .original)
         syncEnabled = try container.decodeIfPresent(Bool.self, forKey: .syncEnabled) ?? false
         noticeShown = try container.decodeIfPresent(Bool.self, forKey: .noticeShown) ?? false
+        extensionState = (try? container.decodeIfPresent(ExtensionState.self, forKey: .extensionState)) ?? ExtensionState()
     }
 }

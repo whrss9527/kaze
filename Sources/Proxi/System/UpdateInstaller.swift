@@ -263,14 +263,15 @@ enum UpdateInstaller {
 
     /// 确认解压出来的确实是对应版本的 Proxi，签名完整；
     /// 当前版本是开发者签名的（requiredTeam 不是 nil）时，新版本也必须是同一个开发者签的。
-    static func validate(app: URL, expectedVersion: String, requiredTeam: String? = CodeSignature.currentTeam) async throws {
+    /// expectedIdentifier：要求的 bundle identifier，默认和自己的一样（扩展「代理引擎」用它自己的）。
+    static func validate(app: URL, expectedVersion: String, expectedIdentifier: String? = Bundle.main.bundleIdentifier, requiredTeam: String? = CodeSignature.currentTeam) async throws {
         let plistURL = app.appendingPathComponent("Contents/Info.plist")
         guard let data = try? Data(contentsOf: plistURL),
               let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] else {
             throw UpdateError.wrongApp(L("读不到 Info.plist"))
         }
         let identifier = plist["CFBundleIdentifier"] as? String ?? ""
-        if let ours = Bundle.main.bundleIdentifier, identifier != ours {
+        if let ours = expectedIdentifier, identifier != ours {
             throw UpdateError.wrongApp(L("bundle identifier 是 %@", identifier))
         }
         let version = plist["CFBundleShortVersionString"] as? String ?? ""

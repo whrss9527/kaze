@@ -57,7 +57,7 @@ Or by hand:
 2. Double-click to open it. For opening versions that weren't notarized, see the [user guide](docs/guide.md#安装) (in Chinese).
 3. When a new version comes out, click "Update" in the panel.
 
-If you're updating from 0.12 or earlier, see [updating from 0.12 and earlier](docs/guide.md#从-012-及以前的版本更新): settings for features that have been removed are dropped, your own proxy profiles are kept, and if the removed built-in proxy was on, the proxy settings it made are cleared. If you used ProxySwitch, updating from the old version in one click turns it into Proxi and keeps your settings; see [updating from ProxySwitch](docs/guide.md#从-proxyswitch-更新). The Windows version is [proxyswitch](https://github.com/whrss9527/proxyswitch).
+If you're updating from 0.12 or earlier, see [updating from 0.12 and earlier](docs/guide.md#从-012-及以前的版本更新): your own proxy profiles and other settings are kept, and nothing is deleted. If you used ProxySwitch, updating from the old version in one click turns it into Proxi and keeps your settings; see [updating from ProxySwitch](docs/guide.md#从-proxyswitch-更新). The Windows version is [proxyswitch](https://github.com/whrss9527/proxyswitch).
 
 ## Getting started
 

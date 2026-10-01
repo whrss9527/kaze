@@ -74,8 +74,9 @@ struct Profile: Codable, Identifiable, Equatable, Hashable {
     var username: String = ""
     /// 有没有密码。密码本身只存在这台 Mac 的钥匙串里（ProxyKeychain），不写进配置文件、不跟 iCloud 同步。
     var hasPassword: Bool = false
-    /// 读配置时发现是以前版本里由内置代理自动生成的配置；不写回文件，读完就去掉。
-    var legacyBuiltIn = false
+    /// 扩展「代理引擎」的那条配置（指向代理引擎的本机端口）。只在扩展开着时出现在列表里，由 ExtensionManager 维护，
+    /// 不写进 config.json、不跟 iCloud 同步（以前的版本存的是 "engine": true，读配置时去掉）。
+    var engine = false
 
     init() {}
 
@@ -93,7 +94,7 @@ struct Profile: Codable, Identifiable, Equatable, Hashable {
         case id, name, color, kind, host, port, pacURL, bypass, noProxy, targets, username, hasPassword
     }
 
-    /// 以前版本才有的键，只读不写。
+    /// 只读不写的键。
     private enum LegacyKeys: String, CodingKey {
         case engine
     }
@@ -113,12 +114,21 @@ struct Profile: Codable, Identifiable, Equatable, Hashable {
         username = try container.decodeIfPresent(String.self, forKey: .username) ?? ""
         hasPassword = try container.decodeIfPresent(Bool.self, forKey: .hasPassword) ?? false
         let legacy = try decoder.container(keyedBy: LegacyKeys.self)
-        legacyBuiltIn = (try? legacy.decodeIfPresent(Bool.self, forKey: .engine)) ?? false
+        engine = (try? legacy.decodeIfPresent(Bool.self, forKey: .engine)) ?? false
     }
 
-    /// 以前版本里由内置代理自动生成的配置（存的是 "engine": true），0.13.0 起不再支持，读配置时去掉。
+    /// 以前版本里代理引擎那条配置（存的是 "engine": true）。
     static func isLegacyBuiltIn(_ object: Any) -> Bool {
         ((object as? [String: Any])?["engine"] as? Bool) == true
+    }
+
+    /// 扩展「代理引擎」的配置：HTTP 和 SOCKS 都指向它在本机的端口。
+    static func engineProfile(id: UUID = UUID(), port: Int) -> Profile {
+        var profile = Profile(name: L("代理引擎"), color: ProfilePalette.colors[1], kind: .http, host: "127.0.0.1", port: port)
+        profile.id = id
+        profile.engine = true
+        profile.targets = [.system]
+        return profile
     }
 
     /// host:port。

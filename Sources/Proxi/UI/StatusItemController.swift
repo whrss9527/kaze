@@ -145,7 +145,7 @@ final class StatusItemController: NSObject {
             SettingsWindowController.shared.show(page: .about)
             Task { await state.updater.checkAndInstall() }
         case .tool(let name, let params):
-            guard let tool = ControlCatalog.tool(named: name) else {
+            guard ControlCatalog.tool(named: name) != nil else {
                 state.notify(title: L("没有这个命令"), body: name, problem: true)
                 return
             }

@@ -178,7 +178,7 @@ enum NpmProxy {
         try content.write(toFile: path, atomically: true, encoding: .utf8)
         // 里面有密码时只让自己能读。
         if Redact.secrets(content) != content {
-            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItem: path)
+            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: path)
         }
     }
 }

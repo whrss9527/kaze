@@ -40,7 +40,7 @@ enum ProxyKeychain {
     }
 
     static func delete(for id: UUID) {
-        SecItemDelete(query(id) as CFDictionary)
+        _ = SecItemDelete(query(id) as CFDictionary)
     }
 }
 

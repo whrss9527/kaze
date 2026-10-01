@@ -46,6 +46,14 @@
 
 需要 macOS 14 或更新版本，Intel 和 Apple 芯片都能用。
 
+用 [Homebrew](https://brew.sh) 安装（同时装好 `proxi` 命令）：
+
+```sh
+brew install --cask whrss9527/tap/proxi
+```
+
+或者手动安装：
+
 1. 在 [Releases](../../releases) 下载 `Proxi-macos.zip`，解压后把 `Proxi.app` 拖到「应用程序」。
 2. 双击打开。没经过公证的版本第一次打开的办法见[使用指南](docs/guide.md#安装)。
 3. 以后有新版本，面板里点「更新」就行。

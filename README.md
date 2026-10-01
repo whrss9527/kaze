@@ -48,6 +48,14 @@ The screenshots show the Chinese interface. Proxi is in English when your system
 
 Requires macOS 14 or later, on Intel or Apple silicon.
 
+With [Homebrew](https://brew.sh), which also puts the `proxi` command on your PATH:
+
+```sh
+brew install --cask whrss9527/tap/proxi
+```
+
+Or by hand:
+
 1. Download `Proxi-macos.zip` from [Releases](../../releases), unzip it and drag `Proxi.app` to Applications.
 2. Double-click to open it. For opening versions that weren't notarized, see the [user guide](docs/guide.md#安装) (in Chinese).
 3. When a new version comes out, click "Update" in the panel.

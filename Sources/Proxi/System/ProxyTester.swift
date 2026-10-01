@@ -15,14 +15,14 @@ struct TestResult: Equatable {
 
 /// 经代理实际访问测速地址，测出延迟。PAC 由系统的 CFNetwork 执行，和浏览器一样。
 enum ProxyTester {
-    static func test(profile: Profile, testURL: String, timeout: TimeInterval = 8) async -> TestResult {
+    static func test(profile: Profile, password: String = "", testURL: String, timeout: TimeInterval = 8) async -> TestResult {
         guard let url = URL(string: testURL), url.host != nil else {
             return TestResult(ok: false, latencyMs: nil, message: L("测速地址格式不对"))
         }
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = timeout
         configuration.timeoutIntervalForResource = timeout
-        configuration.connectionProxyDictionary = proxyDictionary(for: profile)
+        configuration.connectionProxyDictionary = proxyDictionary(for: profile, password: password)
         let session = URLSession(configuration: configuration)
         defer { session.invalidateAndCancel() }
         var request = URLRequest(url: url)
@@ -44,11 +44,11 @@ enum ProxyTester {
     }
 
     /// URLSession 的代理设置。
-    static func proxyDictionary(for profile: Profile) -> [AnyHashable: Any] {
+    static func proxyDictionary(for profile: Profile, password: String = "") -> [AnyHashable: Any] {
         var dictionary = baseDictionary(for: profile)
         if profile.kind != .pac, profile.hasCredentials {
             dictionary[kCFProxyUsernameKey as String] = profile.username
-            dictionary[kCFProxyPasswordKey as String] = profile.password
+            dictionary[kCFProxyPasswordKey as String] = password
         }
         return dictionary
     }

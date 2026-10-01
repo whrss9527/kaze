@@ -206,8 +206,8 @@ struct PanelView: View {
 
             if case .on(let profile) = state.status, profile.kind != .pac {
                 Menu {
-                    Button(L("zsh / bash（终端、iTerm）")) { copy(TerminalCommands.export(proxyURL: profile.proxyURL, noProxy: profile.noProxy)) }
-                    Button("fish") { copy(TerminalCommands.fish(proxyURL: profile.proxyURL, noProxy: profile.noProxy)) }
+                    Button(L("zsh / bash（终端、iTerm）")) { copy(TerminalCommands.export(proxyURL: profile.proxyURL(password: state.savedPassword(for: profile)), noProxy: profile.noProxy)) }
+                    Button("fish") { copy(TerminalCommands.fish(proxyURL: profile.proxyURL(password: state.savedPassword(for: profile)), noProxy: profile.noProxy)) }
                 } label: {
                     Image(systemName: copied ? "checkmark" : "terminal")
                 }

@@ -27,12 +27,12 @@ enum EnvironmentProxy {
         }
     }
 
-    /// 当前 launchd 环境里的值，诊断显示用。
+    /// 当前 launchd 环境里的值，诊断显示用（密码已经隐藏）。
     static func current() async -> [String: String] {
         var values: [String: String] = [:]
         for name in names {
             let result = try? await Shell.run(launchctlPath, ["getenv", name], timeout: 10)
-            values[name] = result?.trimmedOutput ?? ""
+            values[name] = Redact.secrets(result?.trimmedOutput ?? "")
         }
         return values
     }
@@ -53,11 +53,45 @@ enum EnvironmentProxy {
 }
 
 /// git 全局代理：调用 git 本身修改 ~/.gitconfig。
+/// 带密码的地址不放到命令行上：写进只有自己能读的一个文件（git-proxy.inc），~/.gitconfig 里用 include.path 引用它。
 enum GitProxy {
     static var gitPath: String? { Shell.lookPath("git") }
 
+    static var credentialFile: URL { Store.directory.appendingPathComponent("git-proxy.inc") }
+
+    /// include 文件的内容。
+    static func credentialFileContent(proxyURL: String) -> String {
+        let value = "\"" + proxyURL.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"") + "\""
+        return "# Proxi 写的代理设置（带密码，只有你自己能读），关闭代理时删掉。\n[http]\n\tproxy = \(value)\n[https]\n\tproxy = \(value)\n"  // l10n-ignore：文件内容
+    }
+
+    /// git config --unset-all 用的正则：只匹配这个文件的路径。
+    static func pathPattern(_ path: String) -> String {
+        var pattern = "^"
+        for character in path {
+            if ".[]()*+?{}|^$\\".contains(character) { pattern.append("\\") }
+            pattern.append(character)
+        }
+        return pattern + "$"
+    }
+
     static func set(proxyURL: String) async throws {
         guard let git = gitPath else { throw SystemProxyError.command(L("没有找到 git")) }
+        try await clear()
+        if Redact.secrets(proxyURL) != proxyURL {
+            let url = credentialFile
+            let fm = FileManager.default
+            try fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try? fm.removeItem(at: url)
+            guard fm.createFile(atPath: url.path, contents: Data(credentialFileContent(proxyURL: proxyURL).utf8), attributes: [.posixPermissions: 0o600]) else {
+                throw SystemProxyError.command(L("写不了 %@", url.path))
+            }
+            let result = try await Shell.run(git, ["config", "--global", "--add", "include.path", url.path])
+            if !result.succeeded {
+                throw SystemProxyError.command(L("git config %@ 失败：%@", "include.path", result.trimmedOutput))
+            }
+            return
+        }
         for key in ["http.proxy", "https.proxy"] {
             let result = try await Shell.run(git, ["config", "--global", key, proxyURL])
             if !result.succeeded {
@@ -76,12 +110,18 @@ enum GitProxy {
                 throw SystemProxyError.command(L("git config --unset %@ 失败：%@", key, result.trimmedOutput))
             }
         }
+        let include = try await Shell.run(git, ["config", "--global", "--unset-all", "include.path", pathPattern(credentialFile.path)])
+        if !include.succeeded && include.status != 5 {
+            throw SystemProxyError.command(L("git config --unset %@ 失败：%@", "include.path", include.trimmedOutput))
+        }
+        try? FileManager.default.removeItem(at: credentialFile)
     }
 
+    /// 现在生效的 http.proxy（包括 include 进来的），密码已经隐藏。
     static func current() async -> String {
         guard let git = gitPath else { return "" }
-        let result = try? await Shell.run(git, ["config", "--global", "--get", "http.proxy"], timeout: 10)
-        return result?.trimmedOutput ?? ""
+        let result = try? await Shell.run(git, ["config", "--global", "--includes", "--get", "http.proxy"], timeout: 10)
+        return Redact.secrets(result?.trimmedOutput ?? "")
     }
 }
 
@@ -99,12 +139,13 @@ enum NpmProxy {
         try write(update(read(), proxyURL: "", noProxy: ""))
     }
 
+    /// 现在的设置，密码已经隐藏。
     static func current() -> [String: String] {
         var values: [String: String] = [:]
         for line in read().split(separator: "\n") {
             let parts = line.split(separator: "=", maxSplits: 1).map { $0.trimmingCharacters(in: .whitespaces) }
             if parts.count == 2, ["proxy", "https-proxy", "noproxy"].contains(parts[0]) {
-                values[parts[0]] = parts[1]
+                values[parts[0]] = Redact.secrets(parts[1])
             }
         }
         return values
@@ -135,5 +176,9 @@ enum NpmProxy {
 
     private static func write(_ content: String) throws {
         try content.write(toFile: path, atomically: true, encoding: .utf8)
+        // 里面有密码时只让自己能读。
+        if Redact.secrets(content) != content {
+            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItem: path)
+        }
     }
 }

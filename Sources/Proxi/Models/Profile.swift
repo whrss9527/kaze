@@ -70,9 +70,10 @@ struct Profile: Codable, Identifiable, Equatable, Hashable {
     var bypass: String = Profile.defaultBypass
     var noProxy: String = Profile.defaultNoProxy
     var targets: Set<ProxyTarget> = [.system]
-    /// 代理服务器要求登录时的用户名和密码；不需要就留空。
+    /// 代理服务器要求登录时的用户名；不需要就留空。
     var username: String = ""
-    var password: String = ""
+    /// 有没有密码。密码本身只存在这台 Mac 的钥匙串里（ProxyKeychain），不写进配置文件、不跟 iCloud 同步。
+    var hasPassword: Bool = false
     /// 读配置时发现是以前版本里由内置代理自动生成的配置；不写回文件，读完就去掉。
     var legacyBuiltIn = false
 
@@ -89,7 +90,7 @@ struct Profile: Codable, Identifiable, Equatable, Hashable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, color, kind, host, port, pacURL, bypass, noProxy, targets, username, password
+        case id, name, color, kind, host, port, pacURL, bypass, noProxy, targets, username, hasPassword
     }
 
     /// 以前版本才有的键，只读不写。
@@ -110,7 +111,7 @@ struct Profile: Codable, Identifiable, Equatable, Hashable {
         noProxy = try container.decodeIfPresent(String.self, forKey: .noProxy) ?? Profile.defaultNoProxy
         targets = try container.decodeIfPresent(Set<ProxyTarget>.self, forKey: .targets) ?? [.system]
         username = try container.decodeIfPresent(String.self, forKey: .username) ?? ""
-        password = try container.decodeIfPresent(String.self, forKey: .password) ?? ""
+        hasPassword = try container.decodeIfPresent(Bool.self, forKey: .hasPassword) ?? false
         let legacy = try decoder.container(keyedBy: LegacyKeys.self)
         legacyBuiltIn = (try? legacy.decodeIfPresent(Bool.self, forKey: .engine)) ?? false
     }
@@ -128,8 +129,14 @@ struct Profile: Codable, Identifiable, Equatable, Hashable {
     /// 要不要登录。
     var hasCredentials: Bool { !username.trimmingCharacters(in: .whitespaces).isEmpty }
 
-    /// 环境变量、git、npm 使用的地址；要登录时带上用户名和密码（按网址的规则转义）。
-    var proxyURL: String {
+    /// 开启时要不要到钥匙串里取密码。
+    var needsPassword: Bool { kind != .pac && hasCredentials && hasPassword }
+
+    /// 不带密码的地址（显示、复制用户名时用）。
+    var proxyURL: String { proxyURL(password: "") }
+
+    /// 环境变量、git、npm 使用的地址；要登录时带上用户名和密码（按网址的规则转义）。密码从钥匙串里取出来再传进来。
+    func proxyURL(password: String) -> String {
         let scheme = kind == .socks5 ? "socks5" : "http"
         guard hasCredentials else { return "\(scheme)://\(serverAddress)" }
         let user = Profile.escapeUserInfo(username.trimmingCharacters(in: .whitespaces))

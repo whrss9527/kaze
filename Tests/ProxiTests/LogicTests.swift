@@ -757,21 +757,24 @@ final class ParsingTests: XCTestCase {
     }
 }
 
-/// 要登录的代理：环境变量、git、npm 的地址带上转义过的用户名和密码，系统代理交给 networksetup。
+/// 要登录的代理：密码只在钥匙串里，配置里只有标记；环境变量、git、npm 的地址带上转义过的用户名和密码，系统代理交给 networksetup。
 final class CredentialsTests: XCTestCase {
     func testProxyURLWithCredentials() {
         var profile = Profile(name: "公司", color: "#000", kind: .http, host: "proxy.corp", port: 3128)
         XCTAssertEqual(profile.proxyURL, "http://proxy.corp:3128")
         XCTAssertFalse(profile.hasCredentials)
+        XCTAssertFalse(profile.needsPassword)
         profile.username = "me@corp"
-        profile.password = "p@ss:w/rd"
-        XCTAssertEqual(profile.proxyURL, "http://me%40corp:p%40ss%3Aw%2Frd@proxy.corp:3128")
-        // 列表里显示的不带密码。
+        profile.hasPassword = true
+        XCTAssertTrue(profile.needsPassword)
+        XCTAssertEqual(profile.proxyURL(password: "p@ss:w/rd"), "http://me%40corp:p%40ss%3Aw%2Frd@proxy.corp:3128")
+        // 不给密码时只带用户名；列表里显示的不带密码。
+        XCTAssertEqual(profile.proxyURL, "http://me%40corp@proxy.corp:3128")
         XCTAssertEqual(profile.summary, "me@corp@proxy.corp:3128")
-        XCTAssertFalse(profile.summary.contains("p@ss"))
         profile.kind = .socks5
-        profile.password = ""
-        XCTAssertEqual(profile.proxyURL, "socks5://me%40corp@proxy.corp:3128")
+        XCTAssertEqual(profile.proxyURL(password: "x"), "socks5://me%40corp:x@proxy.corp:3128")
+        profile.kind = .pac
+        XCTAssertFalse(profile.needsPassword)
         var ipv6 = Profile(name: "v6", color: "#000", kind: .http, host: "::1", port: 8080)
         XCTAssertEqual(ipv6.proxyURL, "http://[::1]:8080")
         ipv6.host = "[::1]"
@@ -781,22 +784,65 @@ final class CredentialsTests: XCTestCase {
     func testNetworksetupWithCredentials() {
         var profile = Profile(name: "公司", color: "#000", kind: .http, host: "proxy.corp", port: 3128)
         profile.username = "me"
-        profile.password = "secret"
-        let commands = DesiredProxy(profile: profile).commands(service: "Wi-Fi")
+        profile.hasPassword = true
+        let commands = DesiredProxy(profile: profile, password: "secret").commands(service: "Wi-Fi")
         XCTAssertEqual(commands.first, ["-setwebproxy", "Wi-Fi", "proxy.corp", "3128", "on", "me", "secret"])
         XCTAssertTrue(commands.contains(["-setsecurewebproxy", "Wi-Fi", "proxy.corp", "3128", "on", "me", "secret"]))
-        XCTAssertEqual(ProxyTester.proxyDictionary(for: profile)[kCFProxyUsernameKey as String] as? String, "me")
+        let dictionary = ProxyTester.proxyDictionary(for: profile, password: "secret")
+        XCTAssertEqual(dictionary[kCFProxyUsernameKey as String] as? String, "me")
+        XCTAssertEqual(dictionary[kCFProxyPasswordKey as String] as? String, "secret")
     }
 
-    func testCredentialsRoundTrip() throws {
+    /// 配置文件（以及 iCloud 同步的内容）里只有「有没有密码」，没有密码本身。
+    func testPasswordNeverEncoded() throws {
         var profile = Profile(name: "公司", color: "#000", kind: .http, host: "proxy.corp", port: 3128)
         profile.username = "me"
-        profile.password = "secret"
+        profile.hasPassword = true
+        var config = AppConfig()
+        config.profiles = [profile]
+        let data = try JSONEncoder().encode(SyncedConfig(updatedAt: Date(), device: "x", config: config))
+        let text = String(decoding: data, as: UTF8.self)
+        XCTAssertTrue(text.contains("\"hasPassword\":true"), text)
+        XCTAssertFalse(text.contains("\"password\""), text)
         let decoded = try JSONDecoder().decode(Profile.self, from: JSONEncoder().encode(profile))
         XCTAssertEqual(decoded, profile)
-        let old = try JSONDecoder().decode(Profile.self, from: Data(#"{"name":"x","host":"h","port":1}"#.utf8))
-        XCTAssertEqual(old.username, "")
-        XCTAssertEqual(old.password, "")
+        // 写着密码的旧文件：密码不读进来。
+        let old = try JSONDecoder().decode(Profile.self, from: Data(#"{"name":"x","host":"h","port":1,"username":"u","password":"leak"}"#.utf8))
+        XCTAssertFalse(old.hasPassword)
+        XCTAssertFalse(String(decoding: try JSONEncoder().encode(old), as: UTF8.self).contains("leak"))
+    }
+
+    func testRedaction() {
+        XCTAssertEqual(Redact.secrets("http_proxy=http://dev:p%40ss%20word@devproxy.example:8080"), "http_proxy=http://dev:***@devproxy.example:8080")
+        XCTAssertEqual(Redact.secrets("socks5://u:x@h:1 and http://a:b@c"), "socks5://u:***@h:1 and http://a:***@c")
+        XCTAssertEqual(Redact.secrets("http://me@proxy:3128"), "http://me@proxy:3128")
+        XCTAssertEqual(Redact.secrets("mail me@example.com"), "mail me@example.com")
+        XCTAssertEqual(Redact.secrets("proxy=http://h:8080"), "proxy=http://h:8080")
+    }
+
+    func testGitCredentialFile() {
+        let content = GitProxy.credentialFileContent(proxyURL: "http://dev:p%40ss@h:8080")
+        XCTAssertTrue(content.contains("[http]\n\tproxy = \"http://dev:p%40ss@h:8080\"\n"), content)
+        XCTAssertTrue(content.contains("[https]\n\tproxy = "), content)
+        XCTAssertEqual(GitProxy.pathPattern("/Users/me/Library/Application Support/Proxi/git-proxy.inc"),
+                       "^/Users/me/Library/Application Support/Proxi/git-proxy\\.inc$")
+        XCTAssertTrue(GitProxy.credentialFile.path.hasSuffix("/Proxi/git-proxy.inc"))
+    }
+
+    /// 真的写进钥匙串再读出来、删掉（runner 的钥匙串不能用时跳过）。
+    func testKeychainRoundTrip() throws {
+        let id = UUID()
+        do {
+            try ProxyKeychain.set("first", for: id)
+        } catch {
+            throw XCTSkip("钥匙串不能用：\(error.localizedDescription)")
+        }
+        defer { ProxyKeychain.delete(for: id) }
+        XCTAssertEqual(ProxyKeychain.password(for: id), "first")
+        try ProxyKeychain.set("second", for: id)
+        XCTAssertEqual(ProxyKeychain.password(for: id), "second")
+        ProxyKeychain.delete(for: id)
+        XCTAssertNil(ProxyKeychain.password(for: id))
     }
 
     func testEnvironmentNamesAndTerminalCommands() {

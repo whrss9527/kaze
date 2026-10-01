@@ -262,6 +262,24 @@ final class AppState: ObservableObject {
 
     func turnOn(_ profile: Profile) {
         guard !busy else { return }
+        // 要登录的代理：密码从这台 Mac 的钥匙串里取；还没有（比如配置是从别的 Mac 同步来的）就请用户输入一次。
+        var password = ""
+        if profile.needsPassword {
+            if let saved = ProxyKeychain.password(for: profile.id) {
+                password = saved
+            } else if let entered = PasswordPrompt.ask(for: profile), !entered.isEmpty {
+                do {
+                    try ProxyKeychain.set(entered, for: profile.id)
+                } catch {
+                    Log.error("保存「\(profile.name)」的密码失败：\(error.localizedDescription)")
+                }
+                password = entered
+            } else {
+                lastError = L("没有「%@」的代理密码，没有开启", profile.name)
+                onStatusChanged?()
+                return
+            }
+        }
         busy = true
         let previous: Profile? = {
             if case .on(let current) = status { return current }
@@ -282,7 +300,7 @@ final class AppState: ObservableObject {
                 }
             }
             for target in ProxyTarget.allCases where profile.targets.contains(target) {
-                if let error = await set(target: target, profile: profile) {
+                if let error = await set(target: target, profile: profile, password: password) {
                     failures.append(L("%@：%@", target.title, error))
                 }
             }
@@ -355,22 +373,28 @@ final class AppState: ObservableObject {
         Task { await checkHealth() }
     }
 
-    private func set(target: ProxyTarget, profile: Profile) async -> String? {
+    private func set(target: ProxyTarget, profile: Profile, password: String) async -> String? {
+        let url = profile.proxyURL(password: password)
         do {
             switch target {
             case .system:
-                try await SystemProxy.apply(DesiredProxy(profile: profile))
+                try await SystemProxy.apply(DesiredProxy(profile: profile, password: password))
             case .environment:
-                try await EnvironmentProxy.set(proxyURL: profile.proxyURL, noProxy: profile.noProxy)
+                try await EnvironmentProxy.set(proxyURL: url, noProxy: profile.noProxy)
             case .git:
-                try await GitProxy.set(proxyURL: profile.proxyURL)
+                try await GitProxy.set(proxyURL: url)
             case .npm:
-                try NpmProxy.set(proxyURL: profile.proxyURL, noProxy: profile.noProxy)
+                try NpmProxy.set(proxyURL: url, noProxy: profile.noProxy)
             }
             return nil
         } catch {
-            return error.localizedDescription
+            return Redact.secrets(error.localizedDescription)
         }
+    }
+
+    /// 已经保存在钥匙串里的密码（没有就是空的）。
+    func savedPassword(for profile: Profile) -> String {
+        profile.needsPassword ? (ProxyKeychain.password(for: profile.id) ?? "") : ""
     }
 
     private func clear(target: ProxyTarget, mode: OffMode) async -> String? {
@@ -407,12 +431,13 @@ final class AppState: ObservableObject {
         }
     }
 
-    func update(_ profile: Profile) {
+    /// passwordChanged：只改了钥匙串里的密码（配置本身没变）时也要重新应用。
+    func update(_ profile: Profile, passwordChanged: Bool = false) {
         guard let index = config.profiles.firstIndex(where: { $0.id == profile.id }) else { return }
         let previous = config.profiles[index]
         config.profiles[index] = profile
         // 正在使用的配置改了地址：立即重新应用。
-        if case .on(let current) = status, current.id == profile.id, previous != profile {
+        if case .on(let current) = status, current.id == profile.id, previous != profile || passwordChanged {
             turnOn(profile)
         }
     }
@@ -422,6 +447,7 @@ final class AppState: ObservableObject {
             turnOff()
         }
         config.profiles.removeAll { $0.id == profile.id }
+        ProxyKeychain.delete(for: profile.id)
         if persisted.lastProfileID == profile.id {
             persisted.lastProfileID = config.profiles.first?.id
             Store.save(persisted)
@@ -477,7 +503,7 @@ final class AppState: ObservableObject {
     // MARK: - 测速与健康
 
     func test(_ profile: Profile) async {
-        let result = await ProxyTester.test(profile: profile, testURL: config.testURL)
+        let result = await ProxyTester.test(profile: profile, password: savedPassword(for: profile), testURL: config.testURL)
         testResults[profile.id] = result
     }
 

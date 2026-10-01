@@ -17,12 +17,13 @@ struct DesiredProxy: Equatable {
     var bypassDomains: [String] = []
 
     /// 开启一个配置时的设置：开启期间关掉自动发现（WPAD），避免网络里的自动配置盖过手动设置。
-    init(profile: Profile) {
+    /// password 是从钥匙串里取出来的密码（不用登录时是空的）。
+    init(profile: Profile, password: String = "") {
         switch profile.kind {
         case .http:
-            http = Endpoint(host: profile.host, port: profile.port, username: profile.username, password: profile.password)
+            http = Endpoint(host: profile.host, port: profile.port, username: profile.username, password: password)
         case .socks5:
-            socks = Endpoint(host: profile.host, port: profile.port, username: profile.username, password: profile.password)
+            socks = Endpoint(host: profile.host, port: profile.port, username: profile.username, password: password)
         case .pac:
             pacURL = profile.pacURL.trimmingCharacters(in: .whitespaces)
         }

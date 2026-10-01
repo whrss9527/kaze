@@ -7,6 +7,7 @@
 "%@：%@" = "%@: %@";
 "；" = "; ";
 "还没有代理配置，请先在设置里添加一个" = "No proxy profiles yet. Add one in Settings first.";
+"没有「%@」的代理密码，没有开启" = "No proxy password for “%@”, so it wasn't turned on";
 "%@（清除）：%@" = "%@ (clearing): %@";
 "开启 %@" = "Turn on %@";
 "系统代理：%@" = "System proxy: %@";
@@ -169,6 +170,7 @@
 "launchctl setenv %@ 失败：%@" = "launchctl setenv %@ failed: %@";
 "launchctl unsetenv %@ 失败：%@" = "launchctl unsetenv %@ failed: %@";
 "没有找到 git" = "git not found";
+"写不了 %@" = "Couldn't write %@";
 "git config %@ 失败：%@" = "git config %@ failed: %@";
 "git config --unset %@ 失败：%@" = "git config --unset %@ failed: %@";
 
@@ -185,6 +187,10 @@
 
 /* System/NetworkRoute.swift */
 "直连" = "Direct";
+
+/* System/ProxyKeychain.swift */
+"Proxi 代理密码" = "Proxi proxy password";
+"钥匙串出错：%@" = "Keychain error: %@";
 
 /* System/ProxyTester.swift */
 "可用" = "Available";
@@ -316,6 +322,12 @@
 "复制在当前终端里使用代理的命令" = "Copy the command for using the proxy in the current terminal";
 "%@ 开关" = "%@ to toggle";
 
+/* UI/PasswordPrompt.swift */
+"输入「%@」的代理密码" = "Enter the proxy password for “%@”";
+"用户名：%@。密码只保存在这台 Mac 的钥匙串里，不会写进配置文件，也不会跟 iCloud 同步。" = "User name: %@. The password is stored only in this Mac's keychain; it isn't written to the configuration file or synced with iCloud.";
+"保存并开启" = "Save and Turn On";
+"取消" = "Cancel";
+
 /* UI/ProfilesPage.swift */
 "每套配置指向一个你自己的代理服务器（公司代理、内网网关、Charles / Proxyman / mitmproxy 这类调试代理），在菜单栏里一键切换" = "Each profile points at a proxy server of your own (a corporate proxy, an intranet gateway, or a debugging proxy such as Charles, Proxyman or mitmproxy). Switch between them from the menu bar.";
 "还没有配置" = "No profiles yet";
@@ -336,7 +348,7 @@
 "不需要登录就留空" = "Leave empty if no sign-in is needed";
 "密码" = "Password";
 "登录（可选）" = "Sign-in (optional)";
-"代理服务器要求登录时填写。用户名和密码会写进系统代理设置、环境变量、git 和 npm 的代理地址里，并和配置一起保存在本机（开了 iCloud 同步时也会同步）。" = "Fill these in when the proxy server requires signing in. The user name and password are written into the system proxy settings and the proxy address used for environment variables, git and npm, and are saved with the profile on this Mac (and synced when iCloud sync is on).";
+"代理服务器要求登录时填写。密码只保存在这台 Mac 的钥匙串里，不写进配置文件、不跟 iCloud 同步，别的 Mac 第一次开启这个配置时会请你输入一次。开启时密码会写进系统代理设置，以及环境变量、git 和 npm 用的代理地址。" = "Fill these in when the proxy server requires signing in. The password is stored only in this Mac's keychain; it isn't written to the configuration file or synced with iCloud, and other Macs ask for it once the first time they turn this profile on. When the profile is on, the password is written into the system proxy settings and the proxy address used for environment variables, git and npm.";
 "生效范围" = "Scope";
 "PAC 脚本只能用于系统代理" = "PAC scripts only work with the system proxy";
 "不经代理的地址" = "Bypass Proxy For";
@@ -456,7 +468,6 @@
 "用 iCloud 的替换本机的" = "Replace This Mac's with iCloud's";
 "合并两边的配置" = "Merge Both";
 "用本机的覆盖 iCloud" = "Overwrite iCloud with This Mac's";
-"取消" = "Cancel";
 "来自「%@」，更新于 %@，有 %@ 套配置；本机现在有 %@ 套。要怎么处理？" = "From “%@”, updated %@, with %@ profiles; this Mac has %@ now. What would you like to do?";
 "正在同步…" = "Syncing…";
 "已同步" = "Synced";

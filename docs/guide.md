@@ -39,11 +39,11 @@ Proxi 以前叫 ProxySwitch，0.11.0 起改名。在旧版本里一键更新就�
 ## 功能
 
 - **菜单栏面板**：点图标弹出，大开关、配置列表和每个配置的延迟、复制在当前终端里用代理的命令、一键测试、进设置。右键或 Control + 点击是简洁菜单。
-- **代理配置**：HTTP / SOCKS5 / PAC 三种，每套配置有名字和颜色，指向你自己的代理服务器。要登录的代理可以填用户名和密码。每套配置可以选生效范围：
+- **代理配置**：HTTP / SOCKS5 / PAC 三种，每套配置有名字和颜色，指向你自己的代理服务器。要登录的代理可以填用户名和密码：密码只存在这台 Mac 的钥匙串里（「钥匙串访问」里名为「Proxi 代理密码」的项），配置文件和 iCloud 同步里只记「有密码」，别的 Mac 第一次开启这个配置时会请你输入一次；日志和诊断页里的密码都会隐藏成 `***`。每套配置可以选生效范围：
   - **系统代理**：浏览器和大多数软件都走它。读取和监听用 SystemConfiguration，别的程序改了代理会立刻反映在图标上，可以一键保存成配置；写入用 `networksetup`，同时设置不经代理的地址（例外列表）。
   - **终端环境变量**：`http_proxy`、`https_proxy`、`all_proxy`、`no_proxy`（大小写两种）写到 launchd（`launchctl setenv`），之后新开的终端和程序都能读到；已经打开的终端用面板里复制的 `export` 命令（zsh / bash 或 fish）。
-  - **git**：全局的 `http.proxy` 和 `https.proxy`。
-  - **npm / pnpm / yarn**：写进 `~/.npmrc` 的 `proxy`、`https-proxy`、`noproxy`（pnpm 和 yarn 1 也读它）。
+  - **git**：全局的 `http.proxy` 和 `https.proxy`。带密码的地址不经命令行：写进只有自己能读的 `~/Library/Application Support/Proxi/git-proxy.inc`，`~/.gitconfig` 里用 `include.path` 引用它，关闭时一起删掉。
+  - **npm / pnpm / yarn**：写进 `~/.npmrc` 的 `proxy`、`https-proxy`、`noproxy`（pnpm 和 yarn 1 也读它）；里面有密码时文件权限改成只有自己能读。
 - **关闭代理**：上面设置过的地方全部清掉；系统代理可以选直接连接或者恢复开启前的设置。
 - **测试连接**：经代理实际访问测试地址（默认 `https://www.apple.com/library/test/success.html`，可以换成你内网里的地址）测出延迟；PAC 由系统执行，和浏览器一致。开启期间定期检查代理服务器的端口，连不上时提醒。
 - **自动检测**：找出本机正在监听的代理端口（Charles 的 8888、Proxyman 的 9090、mitmproxy 的 8080 这类），确认能用后一键添加。
@@ -66,7 +66,8 @@ Proxi 以前叫 ProxySwitch，0.11.0 起改名。在旧版本里一键更新就�
 ## 权限与隐私
 
 - 修改系统代理需要**管理员账户**。标准账户会弹出系统的授权对话框，输入一次管理员密码。
-- iCloud 同步用的是 iCloud 云盘里的普通文件夹，第一次开启时系统可能会询问是否允许访问 iCloud 云盘。代理配置里填的用户名和密码也会跟着同步。
+- iCloud 同步用的是 iCloud 云盘里的普通文件夹，第一次开启时系统可能会询问是否允许访问 iCloud 云盘。代理密码不同步。
+- 代理密码存在登录钥匙串里（不开 iCloud 钥匙串同步）。开启配置时，密码会出现在系统代理设置、launchd 环境变量和 `~/.npmrc` 里（这些地方只能这样写），写系统代理时会短暂出现在 `networksetup` 的参数里。
 - 全局快捷键用 Carbon 的热键接口，不需要辅助功能权限。
 - 通知需要在第一次弹出时允许。
 - 按网络自动切换要读 Wi‑Fi 名字，macOS 14 起需要定位权限（Proxi 不读取、不保存位置），不给也可以按路由器认。
@@ -74,7 +75,8 @@ Proxi 以前叫 ProxySwitch，0.11.0 起改名。在旧版本里一键更新就�
 
 ### 文件位置
 
-- 配置、状态和日志：`~/Library/Application Support/Proxi/`（`config.json`、`state.json`、`proxi.log`），本机控制接口的套接字是同一目录里的 `control.sock`。诊断页里可以直接打开这个目录。
+- 配置、状态和日志：`~/Library/Application Support/Proxi/`（`config.json`、`state.json`、`proxi.log`），本机控制接口的套接字是同一目录里的 `control.sock`，开着带密码的 git 代理时还有 `git-proxy.inc`。诊断页里可以直接打开这个目录。
+- 代理密码：登录钥匙串里服务为 `com.whrss9527.proxyswitch`、账户为配置 id 的通用密码。
 - 偏好设置（界面语言、跳过的版本）：`~/Library/Preferences/com.whrss9527.proxyswitch.plist`。
 - iCloud 同步：`~/Library/Mobile Documents/com~apple~CloudDocs/Proxi/config.json`。
 - 命令行工具：`/usr/local/bin/proxi`（改名前装的还有 `/usr/local/bin/proxyswitch`）。

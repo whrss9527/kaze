@@ -15,16 +15,17 @@ enum Log {
     static var fileURL: URL { Store.directory.appendingPathComponent(fileName) }
 
     static func info(_ message: String) {
-        logger.info("\(message, privacy: .public)")
+        logger.info("\(Redact.secrets(message), privacy: .public)")
         append("INFO", message)
     }
 
     static func error(_ message: String) {
-        logger.error("\(message, privacy: .public)")
+        logger.error("\(Redact.secrets(message), privacy: .public)")
         append("ERROR", message)
     }
 
     private static func append(_ level: String, _ message: String) {
+        let message = Redact.secrets(message)
         let line = "\(formatter.string(from: Date())) \(level) \(message)\n"
         queue.async {
             let url = fileURL

@@ -139,6 +139,9 @@ struct ProfileEditor: View {
     let original: Profile
     let onDelete: () -> Void
     @State private var portText: String
+    /// 钥匙串里的密码（编辑时显示在密码框里，保存时写回钥匙串）。
+    @State private var passwordText: String
+    private let originalPassword: String
     @State private var problem: String?
     @State private var testing = false
     @State private var result: TestResult?
@@ -150,9 +153,12 @@ struct ProfileEditor: View {
         self.onDelete = onDelete
         _draft = State(initialValue: profile)
         _portText = State(initialValue: String(profile.port))
+        let saved = profile.hasPassword ? (ProxyKeychain.password(for: profile.id) ?? "") : ""
+        originalPassword = saved
+        _passwordText = State(initialValue: saved)
     }
 
-    private var dirty: Bool { draft != original }
+    private var dirty: Bool { draft != original || passwordText != originalPassword }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -212,11 +218,11 @@ struct ProfileEditor: View {
                 if draft.kind != .pac {
                     Section {
                         TextField(L("用户名"), text: $draft.username, prompt: Text(L("不需要登录就留空")))
-                        SecureField(L("密码"), text: $draft.password)
+                        SecureField(L("密码"), text: $passwordText)
                     } header: {
                         Text(L("登录（可选）"))
                     } footer: {
-                        Text(L("代理服务器要求登录时填写。用户名和密码会写进系统代理设置、环境变量、git 和 npm 的代理地址里，并和配置一起保存在本机（开了 iCloud 同步时也会同步）。"))
+                        Text(L("代理服务器要求登录时填写。密码只保存在这台 Mac 的钥匙串里，不写进配置文件、不跟 iCloud 同步，别的 Mac 第一次开启这个配置时会请你输入一次。开启时密码会写进系统代理设置，以及环境变量、git 和 npm 用的代理地址。"))
                     }
                 }
                 Section(L("生效范围")) {
@@ -330,7 +336,21 @@ struct ProfileEditor: View {
             return
         }
         problem = nil
-        state.update(draft)
+        let passwordChanged = passwordText != originalPassword
+        let user = draft.username.trimmingCharacters(in: .whitespaces)
+        if draft.kind == .pac || user.isEmpty || passwordText.isEmpty {
+            ProxyKeychain.delete(for: draft.id)
+            draft.hasPassword = false
+        } else if passwordText != originalPassword || !draft.hasPassword {
+            do {
+                try ProxyKeychain.set(passwordText, for: draft.id)
+                draft.hasPassword = true
+            } catch {
+                problem = error.localizedDescription
+                return
+            }
+        }
+        state.update(draft, passwordChanged: passwordChanged)
         saved = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) { saved = false }
     }
@@ -343,9 +363,10 @@ struct ProfileEditor: View {
         problem = nil
         testing = true
         let profile = draft
+        let password = passwordText
         let testURL = state.config.testURL
         Task { @MainActor in
-            result = await ProxyTester.test(profile: profile, testURL: testURL)
+            result = await ProxyTester.test(profile: profile, password: password, testURL: testURL)
             testing = false
         }
     }

@@ -1145,7 +1145,7 @@ final class Engine: ObservableObject {
         ruleSetStatus[id] = entry
     }
 
-    /// 下载规则走的线路：内核在跑就先经它（GitHub 在国内直连不通），再系统代理、直连；每条线路都会试 jsDelivr 镜像。
+    /// 下载规则走的线路：内核在跑就先经它（直连 GitHub 不一定连得上），再系统代理、直连；每条线路都会试 jsDelivr 镜像。
     private func downloadRoutes(for text: String) -> [NetworkRoute] {
         guard let url = URL(string: text) else { return [.direct] }
         let corePort = (isRunning && engineConfig.wantsCore) ? engineConfig.mixedPort : nil

@@ -99,7 +99,7 @@ enum RuleConverter {
         "IP-CIDR6,fe80::/10,DIRECT,no-resolve",
     ]
 
-    /// 内置规则：国内 IP 直连，其余走节点。
+    /// 内置的「智能分流」：.cn 域名和 GEOIP 为 CN 的地址直连，其余走节点。
     static let chinaDirectRules: [String] = [
         "DOMAIN-SUFFIX,cn,DIRECT",
         "GEOIP,CN,DIRECT",

@@ -413,7 +413,7 @@
 "域名列表" = "Domain List";
 "IP 段列表" = "IP Range List";
 "规则" = "Rules";
-"国内直连" = "China Direct";
+"智能分流" = "Smart Routing";
 "没有这个内置规则" = "No such built-in rule";
 "规则地址要以 http:// 或 https:// 开头" = "The rule URL must start with http:// or https://";
 "去广告" = "Ad Blocking";
@@ -1240,7 +1240,7 @@
 "内核加载 · %@" = "Loaded by core · %@";
 "转换并入" = "Converted and merged";
 "%@ 条" = "%@ rules";
-"不用下载" = "No download needed";
+"按域名后缀和 IP 归属地判断，不用下载" = "Matched by domain suffix and IP location; no download needed";
 "还没有下载" = "Not downloaded yet";
 "规则库" = "Rule Library";
 "blackmatrix7、MetaCubeX、ACL4SSR 和 johnshall 维护的公开规则，点「添加」加进规则集，去向可以再改" = "Public rules maintained by blackmatrix7, MetaCubeX, ACL4SSR and johnshall. Click “Add” to add one as a rule set; you can change its target later";

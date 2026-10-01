@@ -52,7 +52,7 @@ struct ExtensionsPage: View {
             .scrollContentBackground(.hidden)
         }
         .sheet(isPresented: $showingDisclaimer) {
-            ExtensionDisclaimerView(migrating: false, restoring: false, onEnable: {
+            ExtensionDisclaimerView(restoring: state.willRestoreEngineProfile, onEnable: {
                 showingDisclaimer = false
                 state.enableExtension()
             }, onCancel: {
@@ -152,11 +152,9 @@ struct ExtensionsPage: View {
     }
 }
 
-/// 开启扩展前的说明：要勾选「我已阅读并同意」才能开启。扩展页和从以前的版本更新过来时的提示共用。
+/// 开启扩展前的说明：要勾选「我已阅读并同意」才能开启。只在扩展页里打开开关时显示。
 struct ExtensionDisclaimerView: View {
-    /// 从以前的版本更新过来、这台 Mac 上有代理引擎的数据。
-    let migrating: Bool
-    /// 以前开着它：开启后会自动开回来。
+    /// 从以前的版本更新过来时开着的是代理引擎那条配置：开启后会自动开回来。
     let restoring: Bool
     let onEnable: () -> Void
     let onCancel: () -> Void
@@ -176,13 +174,9 @@ struct ExtensionDisclaimerView: View {
                 Text(L("开启代理引擎（扩展）"))
                     .font(.system(size: 16, weight: .semibold))
             }
-            if migrating {
-                Text(L("这台 Mac 上有以前的版本留下的代理引擎设置，已经原样保留。代理引擎现在是一个可选扩展：开启后单独下载安装，之后和以前一样使用；暂不开启的话设置留着，以后可以在「设置 → 扩展」里开启。"))
+            if restoring {
+                Label(L("以前开着的「代理引擎」配置已经先关掉了，开启扩展后会自动开回来。"), systemImage: "power")
                     .fixedSize(horizontal: false, vertical: true)
-                if restoring {
-                    Label(L("以前开着的「代理引擎」配置已经先关掉了，开启扩展后会自动开回来。"), systemImage: "power")
-                        .fixedSize(horizontal: false, vertical: true)
-                }
             }
             Text(L("使用说明"))
                 .font(.system(size: 13, weight: .semibold))
@@ -203,7 +197,7 @@ struct ExtensionDisclaimerView: View {
                 .fixedSize(horizontal: false, vertical: true)
             HStack {
                 Spacer()
-                Button(migrating ? L("暂不开启") : L("取消")) { onCancel() }
+                Button(L("取消")) { onCancel() }
                     .keyboardShortcut(.cancelAction)
                 Button(L("开启")) { onEnable() }
                     .buttonStyle(.borderedProminent)

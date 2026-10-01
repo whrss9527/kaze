@@ -41,7 +41,7 @@ final class LanguageTests: XCTestCase {
     }
 
     func testFormatsPlaceholders() {
-        XCTAssertEqual(AppLanguage.format("开启 %@", ["Clash"]), "开启 Clash")
+        XCTAssertEqual(AppLanguage.format("开启 %@", ["Charles"]), "开启 Charles")
         XCTAssertEqual(AppLanguage.format("No %2$@ named “%1$@”", ["Work", "profile"]), "No profile named “Work”")
         XCTAssertEqual(AppLanguage.format("%@ 秒，%.1f、50%", ["3"]), "3 秒，%.1f、50%")
         XCTAssertEqual(AppLanguage.format("%@ %@", ["a"]), "a ")

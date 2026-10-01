@@ -839,7 +839,7 @@ final class LegacyCleanupTests: XCTestCase {
         // 自己填的测速地址不动。
         let custom = try JSONDecoder().decode(AppConfig.self, from: Data(#"{"testURL":"http://intranet.example/ping"}"#.utf8))
         XCTAssertEqual(custom.testURL, "http://intranet.example/ping")
-        XCTAssertEqual(AppConfig().testURL, "http://captive.apple.com/hotspot-detect.html")
+        XCTAssertEqual(AppConfig().testURL, "https://www.apple.com/library/test/success.html")
     }
 
     func testInspectFindsTheActiveBuiltInProfile() {

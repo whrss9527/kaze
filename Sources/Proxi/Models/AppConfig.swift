@@ -91,7 +91,7 @@ enum SpeedSide: String, Codable, CaseIterable, Identifiable {
 
 struct AppConfig: Codable, Equatable {
     /// 测速默认访问的地址：苹果用来检测网络连通的页面，返回很小，哪里都能访问。
-    static let defaultTestURL = "http://captive.apple.com/hotspot-detect.html"
+    static let defaultTestURL = "https://www.apple.com/library/test/success.html"
     /// 以前版本的默认测速地址；还是它时换成新的默认值。
     static let legacyTestURLs = ["https://cp.cloudflare.com/generate_204", "http://cp.cloudflare.com/generate_204"]
 

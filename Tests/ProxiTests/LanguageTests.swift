@@ -42,7 +42,7 @@ final class LanguageTests: XCTestCase {
 
     func testFormatsPlaceholders() {
         XCTAssertEqual(AppLanguage.format("开启 %@", ["Clash"]), "开启 Clash")
-        XCTAssertEqual(AppLanguage.format("No %2$@ named “%1$@”", ["HK", "node"]), "No node named “HK”")
+        XCTAssertEqual(AppLanguage.format("No %2$@ named “%1$@”", ["Work", "profile"]), "No profile named “Work”")
         XCTAssertEqual(AppLanguage.format("%@ 秒，%.1f、50%", ["3"]), "3 秒，%.1f、50%")
         XCTAssertEqual(AppLanguage.format("%@ %@", ["a"]), "a ")
     }
@@ -51,26 +51,10 @@ final class LanguageTests: XCTestCase {
     func testFallsBackToChinese() {
         XCTAssertFalse(AppLanguage.isEnglish)
         XCTAssertEqual(L("设置…"), "设置…")
-        XCTAssertEqual(L("%@ 个节点", 12), "12 个节点")
-        XCTAssertEqual(L("节点 %@（%@）", "香港 01", "机场"), "节点 香港 01（机场）")
+        XCTAssertEqual(L("%@ 个代理配置", 12), "12 个代理配置")
+        XCTAssertEqual(L("已开启「%@」（%@）", "公司代理", "proxy.corp:3128"), "已开启「公司代理」（proxy.corp:3128）")
         // 「‖」后面是给翻译看的说明，中文里不显示。
         XCTAssertEqual(L("关闭‖按钮"), "关闭")
     }
 
-    /// 内核配置里的名字不翻译，界面上换成界面语言（测试里是中文）。
-    func testCoreNamesStayChineseInTheCoreConfig() {
-        XCTAssertEqual(RuleConverter.proxyGroup, "节点")
-        XCTAssertEqual(CoreConfigBuilder.autoGroup, "自动选择")
-        XCTAssertEqual(CoreConfigBuilder.displayName("节点"), "节点")
-        XCTAssertEqual(CoreConfigBuilder.displayName("前置·公司代理"), "前置·公司代理")
-        XCTAssertEqual(CoreConfigBuilder.displayName("香港 01"), "香港 01")
-        XCTAssertEqual(TrafficEntry(name: "设备 192.168.1.30", traffic: TrafficTotal()).displayName, "设备 192.168.1.30")
-        XCTAssertEqual(TrafficEntry(name: "本机其他", traffic: TrafficTotal()).displayName, "本机其他")
-    }
-
-    func testExcludeProblemsMentionExclude() {
-        XCTAssertEqual(PolicyGroup.validateFilter("(", exclude: true), "排除不是正确的正则表达式")
-        XCTAssertEqual(PolicyGroup.validateFilter("(", exclude: false), "筛选不是正确的正则表达式")
-        XCTAssertEqual(Subscription.validateOptions(filter: "", exclude: "a`b", prefix: ""), "排除里不能有反引号")
-    }
 }

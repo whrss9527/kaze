@@ -60,7 +60,6 @@ struct HotkeyBinding: Codable, Equatable {
 enum SpeedDisplay: String, Codable, CaseIterable, Identifiable {
     case none
     case system
-    case engine
 
     var id: String { rawValue }
 
@@ -68,7 +67,6 @@ enum SpeedDisplay: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .none: return L("不显示")
         case .system: return L("系统网络总速度")
-        case .engine: return L("只算内置代理")
         }
     }
 }
@@ -92,7 +90,10 @@ enum SpeedSide: String, Codable, CaseIterable, Identifiable {
 }
 
 struct AppConfig: Codable, Equatable {
-    static let defaultTestURL = "https://cp.cloudflare.com/generate_204"
+    /// 测速默认访问的地址：苹果用来检测网络连通的页面，返回很小，哪里都能访问。
+    static let defaultTestURL = "http://captive.apple.com/hotspot-detect.html"
+    /// 以前版本的默认测速地址；还是它时换成新的默认值。
+    static let legacyTestURLs = ["https://cp.cloudflare.com/generate_204", "http://cp.cloudflare.com/generate_204"]
 
     var profiles: [Profile] = []
     var clickAction: ClickAction = .panel
@@ -103,8 +104,6 @@ struct AppConfig: Codable, Equatable {
     var disableOnExit: Bool = false
     var testURL: String = AppConfig.defaultTestURL
     var autoCheckUpdates: Bool = true
-    /// 内置代理（订阅、节点、模式）。
-    var engine = EngineConfig()
     var speedDisplay: SpeedDisplay = .system
     /// 网速在图标的左边还是右边；默认在左边，开关在右边。
     var speedSide: SpeedSide = .left
@@ -116,12 +115,13 @@ struct AppConfig: Codable, Equatable {
     init() {}
 
     private enum CodingKeys: String, CodingKey {
-        case profiles, clickAction, toggleHotkey, offMode, notifyLevel, healthCheck, disableOnExit, testURL, autoCheckUpdates, engine, speedDisplay, speedSide, speedColorFollowsStatus, automation
+        case profiles, clickAction, toggleHotkey, offMode, notifyLevel, healthCheck, disableOnExit, testURL, autoCheckUpdates, speedDisplay, speedSide, speedColorFollowsStatus, automation
     }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        profiles = try container.decodeIfPresent([Profile].self, forKey: .profiles) ?? []
+        // 以前版本里由内置代理自动生成的配置不再支持，直接去掉。
+        profiles = (try container.decodeIfPresent([Profile].self, forKey: .profiles) ?? []).filter { !$0.legacyBuiltIn }
         clickAction = try container.decodeIfPresent(ClickAction.self, forKey: .clickAction) ?? .panel
         if container.contains(.toggleHotkey) {
             toggleHotkey = try container.decodeIfPresent(HotkeyBinding.self, forKey: .toggleHotkey)
@@ -133,9 +133,12 @@ struct AppConfig: Codable, Equatable {
         healthCheck = try container.decodeIfPresent(Bool.self, forKey: .healthCheck) ?? true
         disableOnExit = try container.decodeIfPresent(Bool.self, forKey: .disableOnExit) ?? false
         testURL = try container.decodeIfPresent(String.self, forKey: .testURL) ?? AppConfig.defaultTestURL
+        if AppConfig.legacyTestURLs.contains(testURL) {
+            testURL = AppConfig.defaultTestURL
+        }
         autoCheckUpdates = try container.decodeIfPresent(Bool.self, forKey: .autoCheckUpdates) ?? true
-        engine = try container.decodeIfPresent(EngineConfig.self, forKey: .engine) ?? EngineConfig()
-        speedDisplay = try container.decodeIfPresent(SpeedDisplay.self, forKey: .speedDisplay) ?? .system
+        // 以前版本里的其他设置（已经去掉的功能）直接忽略；认不出的网速显示方式按系统网络总速度算。
+        speedDisplay = (try? container.decodeIfPresent(SpeedDisplay.self, forKey: .speedDisplay)) ?? .system
         speedSide = try container.decodeIfPresent(SpeedSide.self, forKey: .speedSide) ?? .left
         speedColorFollowsStatus = try container.decodeIfPresent(Bool.self, forKey: .speedColorFollowsStatus) ?? true
         automation = try container.decodeIfPresent(AutomationConfig.self, forKey: .automation) ?? AutomationConfig()
@@ -153,7 +156,6 @@ struct AppConfig: Codable, Equatable {
         try container.encode(disableOnExit, forKey: .disableOnExit)
         try container.encode(testURL, forKey: .testURL)
         try container.encode(autoCheckUpdates, forKey: .autoCheckUpdates)
-        try container.encode(engine, forKey: .engine)
         try container.encode(speedDisplay, forKey: .speedDisplay)
         try container.encode(speedSide, forKey: .speedSide)
         try container.encode(speedColorFollowsStatus, forKey: .speedColorFollowsStatus)
@@ -173,17 +175,13 @@ struct PersistedState: Codable, Equatable {
     var original: ProxySnapshot?
     /// iCloud 同步的开关是本机的，不跟着配置同步。
     var syncEnabled: Bool = false
-    /// 局域网共享也是本机的：由这台 Mac 共享给 PS5 等设备，不跟着配置同步。
-    var share = ShareConfig()
-    /// 内置代理按出口累计的流量，本机的统计。
-    var traffic = TrafficStats()
-    /// 增强模式和网关模式：要装特权助手，也是本机的。
-    var tun = TunConfig()
+    /// 已经显示过 0.13.0 的「Proxi 现在只切换代理」提示。
+    var noticeShown: Bool = false
 
     init() {}
 
     private enum CodingKeys: String, CodingKey {
-        case lastProfileID, enabledByUs, original, syncEnabled, share, traffic, tun
+        case lastProfileID, enabledByUs, original, syncEnabled, noticeShown
     }
 
     init(from decoder: Decoder) throws {
@@ -192,8 +190,6 @@ struct PersistedState: Codable, Equatable {
         enabledByUs = try container.decodeIfPresent(Bool.self, forKey: .enabledByUs) ?? false
         original = try container.decodeIfPresent(ProxySnapshot.self, forKey: .original)
         syncEnabled = try container.decodeIfPresent(Bool.self, forKey: .syncEnabled) ?? false
-        share = try container.decodeIfPresent(ShareConfig.self, forKey: .share) ?? ShareConfig()
-        traffic = try container.decodeIfPresent(TrafficStats.self, forKey: .traffic) ?? TrafficStats()
-        tun = (try? container.decodeIfPresent(TunConfig.self, forKey: .tun)) ?? TunConfig()
+        noticeShown = try container.decodeIfPresent(Bool.self, forKey: .noticeShown) ?? false
     }
 }

@@ -23,7 +23,7 @@ final class Updater: ObservableObject {
     @Published private(set) var lastChecked: Date?
     /// 最近一次检查失败的原因（手动检查时显示）。
     @Published private(set) var checkError: String?
-    /// 正在下载用的线路（内置代理、系统代理、直连）。
+    /// 正在下载用的线路（系统代理、直连）。
     @Published private(set) var route: NetworkRoute?
     /// 最近一次安装失败的原因，界面据此给出对应的按钮。
     @Published private(set) var lastFailure: UpdateError?

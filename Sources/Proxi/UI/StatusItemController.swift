@@ -22,13 +22,9 @@ final class StatusItemController: NSObject {
             _ = button.sendAction(on: [.leftMouseUp, .rightMouseUp])
             button.imagePosition = .imageOnly
         }
-        // 更新条出现、进度变化、节点列表变化时面板高度会变，跟着调整窗口。
+        // 更新条出现、进度变化时面板高度会变，跟着调整窗口。
         state.updater.$phase
             .debounce(for: .milliseconds(50), scheduler: DispatchQueue.main)
-            .sink { [weak self] _ in Task { @MainActor in self?.resizePanelIfVisible() } }
-            .store(in: &cancellables)
-        state.engine.objectWillChange
-            .debounce(for: .milliseconds(80), scheduler: DispatchQueue.main)
             .sink { [weak self] _ in Task { @MainActor in self?.resizePanelIfVisible() } }
             .store(in: &cancellables)
         state.speed.onUpdate = { [weak self] in self?.updateSpeedLabel() }
@@ -148,39 +144,16 @@ final class StatusItemController: NSObject {
         case .update:
             SettingsWindowController.shared.show(page: .about)
             Task { await state.updater.checkAndInstall() }
-        case .share(let enabled):
-            state.setShareEnabled(enabled ?? !state.share.enabled)
-        case .tun(let enabled):
-            setTun(enabled ?? !state.tun.enabled)
-        case .gateway(let enabled):
-            setGateway(enabled ?? !state.tun.gateway)
-        case .diagnose(let url, let device):
-            SettingsWindowController.shared.navigation.diagnoseRequest = DiagnoseRequest(url: url ?? "", device: device)
-            SettingsWindowController.shared.show(page: .diagnose)
-        case .node(let name):
-            runTool("select_node", ["name": name])
-        case .mode(let mode):
-            runTool("set_mode", ["mode": mode.rawValue])
-        case .group(let name, let member):
-            runTool("select_group", ["group": name, "member": member])
-        case .importConfig(let target):
-            // 网页也能触发 URL 命令：导入一定先给用户看预览、由用户确认。
-            SettingsWindowController.shared.navigation.importRequest = target
-            SettingsWindowController.shared.show(page: .advanced)
         case .tool(let name, let params):
             guard let tool = ControlCatalog.tool(named: name) else {
                 state.notify(title: L("没有这个命令"), body: name, problem: true)
-                return
-            }
-            guard tool.permission != .full else {
-                state.notify(title: L("URL 命令不能改配置"), body: L("「%@」要改配置，请在设置里操作，或者用命令行、AI 助手", tool.title), problem: true)
                 return
             }
             runTool(name, params)
         }
     }
 
-    /// 经本机控制接口执行（和命令行、AI 助手一样受权限限制，也记在操作记录里）。
+    /// 经本机控制接口执行（和命令行、AI 助手一样受权限限制）。
     private func runTool(_ name: String, _ params: [String: Any]) {
         Task { @MainActor in
             do {
@@ -226,33 +199,6 @@ final class StatusItemController: NSObject {
                 menu.addItem(menuItem)
             }
         }
-        if state.config.engine.wantsCore {
-            menu.addItem(.separator())
-            let nodesItem = NSMenuItem(title: L("节点‖列表"), action: nil, keyEquivalent: "")
-            nodesItem.submenu = nodesMenu()
-            menu.addItem(nodesItem)
-            if !state.engine.groupStates.isEmpty {
-                let groupsItem = NSMenuItem(title: L("策略组"), action: nil, keyEquivalent: "")
-                groupsItem.submenu = groupsMenu()
-                menu.addItem(groupsItem)
-            }
-        }
-        menu.addItem(.separator())
-        let shareItem = item(L("局域网共享（PS5 等设备）"), action: #selector(menuToggleShare), key: "")
-        shareItem.state = state.share.enabled ? .on : .off
-        menu.addItem(shareItem)
-        if state.share.enabled, let address = state.lanAddress {
-            menu.addItem(header(L("设备上填 %@:%@", address.ip, state.share.port)))
-        }
-        let tunItem = item(L("增强模式（所有程序都经过代理）"), action: #selector(menuToggleTun), key: "")
-        tunItem.state = state.tun.enabled ? .on : .off
-        menu.addItem(tunItem)
-        let gatewayItem = item(L("网关模式（设备的路由器填这台 Mac）"), action: #selector(menuToggleGateway), key: "")
-        gatewayItem.state = state.tun.gateway ? .on : .off
-        menu.addItem(gatewayItem)
-        if state.tun.gateway, let address = state.lanAddress {
-            menu.addItem(header(L("设备的路由器和 DNS 填 %@", address.ip)))
-        }
         menu.addItem(.separator())
         let updater = state.updater
         if let release = updater.release, updater.isInstalling {
@@ -287,24 +233,6 @@ final class StatusItemController: NSObject {
 
     @objc private func menuTurnOff() { state.turnOff() }
     @objc private func menuSaveExternal() { state.saveExternalAsProfile() }
-    @objc private func menuToggleShare() { state.setShareEnabled(!state.share.enabled) }
-    @objc private func menuToggleTun() { setTun(!state.tun.enabled) }
-    @objc private func menuToggleGateway() { setGateway(!state.tun.gateway) }
-
-    /// 打开增强模式：还没装特权助手时带到高级页去装。
-    private func setTun(_ enabled: Bool) {
-        state.setTunEnabled(enabled)
-        if enabled && !state.helper.isReady {
-            SettingsWindowController.shared.show(page: .advanced)
-        }
-    }
-
-    private func setGateway(_ enabled: Bool) {
-        state.setGatewayEnabled(enabled)
-        if enabled && !state.helper.isReady {
-            SettingsWindowController.shared.show(page: .share)
-        }
-    }
     @objc private func menuSettings() { SettingsWindowController.shared.show(page: nil) }
     @objc private func menuQuit() { NSApp.terminate(nil) }
 
@@ -316,85 +244,6 @@ final class StatusItemController: NSObject {
     @objc private func menuInstallUpdate() {
         SettingsWindowController.shared.show(page: .about)
         state.updater.install()
-    }
-
-    /// 「节点」子菜单：模式、自动选择、所有节点。
-    private func nodesMenu() -> NSMenu {
-        let menu = NSMenu()
-        menu.autoenablesItems = false
-        for mode in EngineMode.allCases {
-            let menuItem = NSMenuItem(title: mode.title, action: #selector(menuSetMode(_:)), keyEquivalent: "")
-            menuItem.target = self
-            menuItem.representedObject = mode.rawValue
-            menuItem.state = state.config.engine.mode == mode ? .on : .off
-            menu.addItem(menuItem)
-        }
-        menu.addItem(.separator())
-        let engine = state.engine
-        guard engine.isRunning else {
-            menu.addItem(header(engine.status == .starting ? L("内核正在启动…") : L("内核未运行")))
-            return menu
-        }
-        let auto = NSMenuItem(title: L("自动选择") + (engine.autoNode.map { L("（%@）", $0) } ?? ""), action: #selector(menuSelectNode(_:)), keyEquivalent: "")
-        auto.target = self
-        auto.representedObject = ""
-        auto.state = engine.currentSelection == Engine.autoGroup ? .on : .off
-        menu.addItem(auto)
-        let favorites = Set(state.config.engine.favoriteNodes)
-        for node in engine.sortedNodes {
-            let name = favorites.contains(node.name) ? "★ " + node.name : node.name
-            let title = node.delayText.isEmpty ? name : L("%@　%@", name, node.delayText)
-            let menuItem = NSMenuItem(title: title, action: #selector(menuSelectNode(_:)), keyEquivalent: "")
-            menuItem.target = self
-            menuItem.representedObject = node.name
-            menuItem.state = engine.currentSelection == node.name ? .on : .off
-            menu.addItem(menuItem)
-        }
-        return menu
-    }
-
-    /// 「策略组」子菜单：每个组一个子菜单，列出成员，手动选择的组可以点选。
-    private func groupsMenu() -> NSMenu {
-        let menu = NSMenu()
-        menu.autoenablesItems = false
-        let engine = state.engine
-        for group in engine.groupStates {
-            let groupItem = NSMenuItem(title: L("%@　%@", CoreConfigBuilder.displayName(group.name), CoreConfigBuilder.displayName(group.now ?? "")), action: nil, keyEquivalent: "")
-            let submenu = NSMenu()
-            submenu.autoenablesItems = false
-            submenu.addItem(header(L("%@：%@", group.kind.title, group.kind.detail)))
-            for member in group.members {
-                var title = member == "DIRECT" ? L("直连") : CoreConfigBuilder.displayName(member)
-                if let node = engine.nodes.first(where: { $0.name == member }), !node.delayText.isEmpty {
-                    title += L("　%@", node.delayText)
-                }
-                let menuItem = NSMenuItem(title: title, action: #selector(menuSelectGroupMember(_:)), keyEquivalent: "")
-                menuItem.target = self
-                menuItem.representedObject = ["group": group.name, "member": member]
-                menuItem.state = group.now == member ? .on : .off
-                menuItem.isEnabled = group.kind == .select
-                submenu.addItem(menuItem)
-            }
-            groupItem.submenu = submenu
-            menu.addItem(groupItem)
-        }
-        return menu
-    }
-
-    @objc private func menuSelectGroupMember(_ sender: NSMenuItem) {
-        guard let info = sender.representedObject as? [String: String], let group = info["group"], let member = info["member"] else { return }
-        Task { await state.engine.select(group: group, member: member) }
-    }
-
-    @objc private func menuSetMode(_ sender: NSMenuItem) {
-        guard let raw = sender.representedObject as? String, let mode = EngineMode(rawValue: raw) else { return }
-        state.engine.setMode(mode)
-    }
-
-    @objc private func menuSelectNode(_ sender: NSMenuItem) {
-        let name = sender.representedObject as? String
-        state.selectEngineProfile()
-        Task { await state.engine.select(name?.isEmpty == false ? name : nil) }
     }
 
     @objc private func menuUseProfile(_ sender: NSMenuItem) {
@@ -415,7 +264,7 @@ final class StatusItemController: NSObject {
 
     func openPanel() {
         if panel == nil {
-            let view = PanelView(state: state, engine: state.engine, actions: PanelActions(
+            let view = PanelView(state: state, actions: PanelActions(
                 openSettings: { [weak self] page in
                     MainActor.assumeIsolated {
                         self?.closePanel()

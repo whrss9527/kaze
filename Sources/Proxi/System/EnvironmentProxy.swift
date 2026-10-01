@@ -1,14 +1,14 @@
 import Foundation
 
-/// 环境变量 HTTP_PROXY / HTTPS_PROXY / NO_PROXY 写到用户的 launchd 环境（launchctl setenv），
+/// 环境变量 HTTP_PROXY / HTTPS_PROXY / ALL_PROXY / NO_PROXY 写到用户的 launchd 环境（launchctl setenv），
 /// 之后由 launchd 启动的程序（新打开的终端、图形程序）都能看到；已经打开的终端需要重开，或者用复制的终端命令。
 /// 大小写两种都设置：curl 等只认小写的 http_proxy。
 enum EnvironmentProxy {
     static let launchctlPath = "/bin/launchctl"
-    static let names = ["HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY"]
+    static let names = ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY"]
 
     static func set(proxyURL: String, noProxy: String) async throws {
-        for name in ["HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"] {
+        for name in ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"] {
             try await setenv(name, proxyURL)
         }
         let trimmed = noProxy.trimmingCharacters(in: .whitespaces)
@@ -22,7 +22,7 @@ enum EnvironmentProxy {
     }
 
     static func clear() async throws {
-        for name in ["HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "no_proxy"] {
+        for name in ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "all_proxy", "no_proxy"] {
             try await unsetenv(name)
         }
     }
@@ -85,7 +85,7 @@ enum GitProxy {
     }
 }
 
-/// npm / pnpm 的代理：改用户目录的 .npmrc。
+/// npm / pnpm / yarn 1 的代理：改用户目录的 .npmrc。
 enum NpmProxy {
     static var path: String {
         (NSHomeDirectory() as NSString).appendingPathComponent(".npmrc")

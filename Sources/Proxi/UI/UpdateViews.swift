@@ -255,7 +255,7 @@ struct UpdateSection: View {
         if let size = release.archiveSize {
             text += " \(ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file))"
         }
-        return text + L("，校验后替换程序并自动重新启动，配置不会丢。内置代理在运行时经它下载。")
+        return text + L("，校验后替换程序并自动重新启动，配置不会丢。")
     }
 
     private func progressView(title: String, fraction: Double?, cancellable: Bool) -> some View {

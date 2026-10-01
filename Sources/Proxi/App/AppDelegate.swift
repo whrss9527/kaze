@@ -16,7 +16,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Log.flush()
             exit(0)
         }
-        // 设置里改了界面语言、点「立即重新启动」打开的新实例：先等旧的退出，再建菜单栏图标、启动内核。
+        // 设置里改了界面语言、点「立即重新启动」打开的新实例：先等旧的退出，再建菜单栏图标。
         LanguageSetting.waitForPreviousInstance(arguments: ProcessInfo.processInfo.arguments)
         _ = LanguageSetting.atLaunch
         let app = NSApplication.shared
@@ -86,7 +86,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Log.info("Proxi 已退出")
     }
 
-    /// kill、logout 这类信号也走正常退出：关代理、停内核。
+    /// kill、logout 这类信号也走正常退出（按设置关代理）。
     private func installSignalHandlers() {
         for signalNumber in [SIGTERM, SIGINT, SIGHUP] {
             signal(signalNumber, SIG_IGN)

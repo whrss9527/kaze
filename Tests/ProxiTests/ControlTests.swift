@@ -1,92 +1,19 @@
 import XCTest
 @testable import Proxi
 
-final class NodeQueryTests: XCTestCase {
-    private let first = UUID()
-    private let second = UUID()
-
-    private var nodes: [ProxyNode] {
-        [
-            ProxyNode(name: "🇭🇰 香港 01", type: "Shadowsocks", delay: 120, subscription: "甲", source: first),
-            ProxyNode(name: "日本 Tokyo 02", type: "Vmess", delay: 0, subscription: "甲", source: first),
-            ProxyNode(name: "US-LA 03", type: "Trojan", delay: 300, subscription: "乙", source: second),
-            ProxyNode(name: "RUSSIA 04", type: "Trojan", delay: nil, subscription: "乙", source: second),
-            ProxyNode(name: "剩余流量 10G", type: "Shadowsocks", delay: 80, subscription: "乙", source: second),
-            ProxyNode(name: "HK02 IPLC", type: "Shadowsocks", delay: 60, subscription: "乙", source: second),
-        ]
-    }
-
-    func testRegions() {
-        XCTAssertEqual(NodeRegion.detect("🇭🇰 香港 01")?.code, "HK")
-        XCTAssertEqual(NodeRegion.detect("HK02 IPLC")?.code, "HK")
-        XCTAssertEqual(NodeRegion.detect("日本 Tokyo 02")?.code, "JP")
-        XCTAssertEqual(NodeRegion.detect("US-LA 03")?.code, "US")
-        // RUSSIA 里的 US 不算美国。
-        XCTAssertEqual(NodeRegion.detect("RUSSIA 04")?.code, "RU")
-        XCTAssertNil(NodeRegion.detect("剩余流量 10G"))
-        XCTAssertEqual(NodeRegion.named("jp")?.flag, "🇯🇵")
-        let regions = NodeQuery.regions(in: nodes)
-        XCTAssertEqual(regions.map { $0.region?.code ?? "other" }, ["HK", "JP", "US", "RU", "other"])
-        XCTAssertEqual(regions.first?.count, 2)
-        XCTAssertEqual(NodeQuery.types(in: nodes).map(\.type), ["shadowsocks", "trojan", "vmess"])
-    }
-
-    func testFiltersAndSorting() {
-        var query = NodeQuery(sort: .delay)
-        XCTAssertEqual(query.apply(nodes, favorites: []).map(\.name), ["HK02 IPLC", "剩余流量 10G", "🇭🇰 香港 01", "US-LA 03", "日本 Tokyo 02", "RUSSIA 04"])
-        XCTAssertEqual(query.apply(nodes, favorites: ["US-LA 03"]).first?.name, "US-LA 03")
-        query.source = first
-        XCTAssertEqual(query.apply(nodes, favorites: []).map(\.name), ["🇭🇰 香港 01", "日本 Tokyo 02"])
-        query.source = nil
-        query.region = "HK"
-        XCTAssertEqual(query.apply(nodes, favorites: []).map(\.name), ["HK02 IPLC", "🇭🇰 香港 01"])
-        query.region = NodeQuery.otherRegion
-        XCTAssertEqual(query.apply(nodes, favorites: []).map(\.name), ["剩余流量 10G"])
-        query.region = nil
-        query.onlyAvailable = true
-        query.type = "trojan"
-        XCTAssertEqual(query.apply(nodes, favorites: []).map(\.name), ["US-LA 03"])
-        XCTAssertTrue(query.isFiltering)
-        query.reset()
-        XCTAssertFalse(query.isFiltering)
-        XCTAssertEqual(query.sort, .delay)
-        query.sort = .name
-        query.onlyFavorites = true
-        XCTAssertEqual(query.apply(nodes, favorites: ["日本 Tokyo 02", "HK02 IPLC"]).map(\.name), ["HK02 IPLC", "日本 Tokyo 02"])
-    }
-
-    func testMakeGroupFromConditions() {
-        var query = NodeQuery()
-        query.region = "HK"
-        query.source = second
-        let group = query.makeGroup(name: "香港自动", kind: .urlTest, favorites: [])
-        XCTAssertEqual(group.sources, [second])
-        XCTAssertEqual(group.matches(nodes.map(\.name)), ["🇭🇰 香港 01", "HK02 IPLC"])
-        XCTAssertEqual(query.suggestedGroupName(sourceName: "乙"), "香港自动")
-        query.text = "IPLC"
-        let narrowed = query.makeGroup(name: "x", kind: .urlTest, favorites: [])
-        XCTAssertEqual(narrowed.matches(nodes.map(\.name)), ["HK02 IPLC"])
-        XCTAssertNil(PolicyGroup.validateFilter(narrowed.filter))
-        var other = NodeQuery()
-        other.region = NodeQuery.otherRegion
-        XCTAssertEqual(other.makeGroup(name: "x", kind: .select, favorites: []).matches(nodes.map(\.name)), ["剩余流量 10G"])
-        var favorites = NodeQuery()
-        favorites.onlyFavorites = true
-        XCTAssertEqual(favorites.makeGroup(name: "x", kind: .select, favorites: ["US-LA 03"]).matches(nodes.map(\.name)), ["US-LA 03"])
-    }
-}
-
 final class ControlProtocolTests: XCTestCase {
     func testCatalogAndSchemas() {
         let names = ControlCatalog.tools.map(\.name)
         XCTAssertEqual(Set(names).count, names.count)
         XCTAssertNotNil(ControlCatalog.tool(named: "get_status"))
-        let addRule = ControlCatalog.tool(named: "add_rule")!
-        XCTAssertEqual(addRule.permission, .full)
-        let schema = addRule.inputSchema
+        let use = ControlCatalog.tool(named: "use_profile")!
+        XCTAssertEqual(use.permission, .operate)
+        let schema = use.inputSchema
         XCTAssertEqual(schema["type"] as? String, "object")
-        XCTAssertEqual(schema["required"] as? [String], ["value", "policy"])
-        XCTAssertTrue(ControlPermission.full.allows(.operate))
+        XCTAssertEqual(schema["required"] as? [String], ["profile"])
+        // 只剩查看状态和开关、切换配置：没有改配置的工具。
+        XCTAssertEqual(Set(names), ["get_status", "list_profiles", "get_logs", "turn_on", "use_profile", "turn_off", "toggle", "test_profiles"])
+        XCTAssertTrue(ControlPermission.operate.allows(.readOnly))
         XCTAssertFalse(ControlPermission.readOnly.allows(.operate))
         XCTAssertFalse(ControlPermission.off.allows(.readOnly))
         let params = ControlParams(["a": " x ", "n": 3, "b": "yes", "e": ""])
@@ -95,6 +22,16 @@ final class ControlProtocolTests: XCTestCase {
         XCTAssertEqual(params.int("n"), 3)
         XCTAssertEqual(params.bool("b"), true)
         XCTAssertThrowsError(try params.require("missing"))
+    }
+
+    /// 以前版本的「完全控制」读出来按「开关和切换」算，读不出来的网络规则只跳过那一条。
+    func testLegacyPermissionAndRules() throws {
+        let json = #"{"permission":"full","networkSwitching":true,"networkRules":[{"match":"ssid:Office","action":"mode:global"},{"match":"other","action":"off"}]}"#
+        let automation = try JSONDecoder().decode(AutomationConfig.self, from: Data(json.utf8))
+        XCTAssertEqual(automation.permission, .operate)
+        XCTAssertEqual(automation.networkRules.count, 1)
+        XCTAssertEqual(automation.networkRules.first?.action, .off)
+        XCTAssertEqual(ControlPermission.allCases, [.off, .readOnly, .operate])
     }
 
     func testMCPServer() throws {
@@ -193,39 +130,30 @@ final class CommandLineTests: XCTestCase {
     }
 
     func testRequests() throws {
-        func request(_ args: String..., type: String? = nil, replace: Bool = false, preview: Bool = false) throws -> (String, [String: Any])? {
-            try CommandLineTool.request(for: args[0], Array(args.dropFirst()), type: type, replace: replace, preview: preview)
+        func request(_ args: String...) throws -> (String, [String: Any])? {
+            try CommandLineTool.request(for: args[0], Array(args.dropFirst()))
         }
         XCTAssertEqual(try request("status")?.0, "get_status")
-        XCTAssertEqual(try request("node", "香港", "02")?.1["name"] as? String, "香港 02")
-        XCTAssertNil(try request("node"))
-        let group = try XCTUnwrap(try request("group", "流媒体", "日本", "01"))
-        XCTAssertEqual(group.0, "select_group")
-        XCTAssertEqual(group.1["member"] as? String, "日本 01")
-        let rule = try XCTUnwrap(try request("rule", "add", "openai.com", "美国", type: "suffix"))
-        XCTAssertEqual(rule.0, "add_rule")
-        XCTAssertEqual(rule.1["policy"] as? String, "美国")
-        XCTAssertEqual(rule.1["type"] as? String, "suffix")
-        XCTAssertEqual(try request("rule", "remove", "openai.com")?.0, "remove_rule")
-        XCTAssertNil(try request("rule", "add", "x"))
-        XCTAssertEqual(try request("sub", "update")?.0, "update_subscriptions")
-        XCTAssertEqual(try request("ruleset", "add", "广告拦截", "reject")?.1["library"] as? String, "广告拦截")
-        XCTAssertEqual(try request("ruleset", "add", "https://x/a.list")?.1["url"] as? String, "https://x/a.list")
-        XCTAssertEqual(try request("share", "on")?.1["enabled"] as? Bool, true)
-        XCTAssertNil(try request("share", "maybe"))
+        let use = try XCTUnwrap(try request("use", "公司", "代理"))
+        XCTAssertEqual(use.0, "use_profile")
+        XCTAssertEqual(use.1["profile"] as? String, "公司 代理")
+        XCTAssertNil(try request("use"))
+        XCTAssertEqual(try request("on", "Charles")?.1["profile"] as? String, "Charles")
+        XCTAssertNil(try request("on")?.1["profile"])
+        XCTAssertEqual(try request("test", "Charles")?.0, "test_profiles")
         XCTAssertEqual(try request("logs", "50")?.1["lines"] as? Int, 50)
-        let imported = try XCTUnwrap(try request("import", "https://example.com/c.yaml", replace: true))
-        XCTAssertEqual(imported.0, "import_config")
-        XCTAssertEqual(imported.1["mode"] as? String, "replace")
-        XCTAssertEqual(imported.1["url"] as? String, "https://example.com/c.yaml")
-        XCTAssertEqual(try request("import", "https://example.com/c.yaml", preview: true)?.0, "preview_import")
-        XCTAssertEqual(try request("call", "select_node", #"{"name":"香港"}"#)?.1["name"] as? String, "香港")
-        XCTAssertThrowsError(try request("call", "select_node", "not json"))
+        XCTAssertEqual(try request("call", "use_profile", #"{"profile":"Charles"}"#)?.1["profile"] as? String, "Charles")
+        XCTAssertThrowsError(try request("call", "use_profile", "not json"))
         XCTAssertNil(try request("bogus"))
+        // 以前版本的命令不再认。
+        for command in ["node", "nodes", "rule", "sub", "share", "gateway", "import", "undo"] {
+            XCTAssertFalse(CommandLineTool.commands.contains(command), command)
+        }
         // 每个子命令对应的工具都在清单里。
-        for command in ["status", "on", "off", "toggle", "profiles", "nodes", "groups", "test", "services", "rules", "subs", "traffic", "logs", "connections", "undo", "history", "export"] {
+        for command in ["status", "on", "off", "toggle", "profiles", "test", "logs"] {
             let name = try XCTUnwrap(try request(command)?.0, command)
             XCTAssertNotNil(ControlCatalog.tool(named: name), command)
         }
+        XCTAssertNotNil(ControlCatalog.tool(named: try XCTUnwrap(try request("use", "x")?.0)))
     }
 }

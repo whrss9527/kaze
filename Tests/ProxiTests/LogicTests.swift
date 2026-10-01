@@ -3,13 +3,13 @@ import XCTest
 
 final class DesiredProxyTests: XCTestCase {
     func testHttpProfileCommands() {
-        var profile = Profile(name: "本机", color: "#16a34a", kind: .http, host: "127.0.0.1", port: 7890)
+        var profile = Profile(name: "本机", color: "#16a34a", kind: .http, host: "127.0.0.1", port: 8888)
         profile.bypass = "localhost, 10.*, <local>"
         let commands = DesiredProxy(profile: profile).commands(service: "Wi-Fi").map { $0.joined(separator: " ") }
         XCTAssertEqual(commands, [
-            "-setwebproxy Wi-Fi 127.0.0.1 7890",
+            "-setwebproxy Wi-Fi 127.0.0.1 8888",
             "-setwebproxystate Wi-Fi on",
-            "-setsecurewebproxy Wi-Fi 127.0.0.1 7890",
+            "-setsecurewebproxy Wi-Fi 127.0.0.1 8888",
             "-setsecurewebproxystate Wi-Fi on",
             "-setsocksfirewallproxystate Wi-Fi off",
             "-setautoproxystate Wi-Fi off",
@@ -26,9 +26,9 @@ final class DesiredProxyTests: XCTestCase {
     }
 
     func testPacAndSocks() {
-        let pac = Profile(name: "PAC", color: "#000000", kind: .pac, pacURL: "http://127.0.0.1:7890/proxy.pac")
+        let pac = Profile(name: "PAC", color: "#000000", kind: .pac, pacURL: "http://127.0.0.1:8888/proxy.pac")
         let pacCommands = DesiredProxy(profile: pac).commands(service: "Wi-Fi").map { $0.joined(separator: " ") }
-        XCTAssertTrue(pacCommands.contains("-setautoproxyurl Wi-Fi http://127.0.0.1:7890/proxy.pac"))
+        XCTAssertTrue(pacCommands.contains("-setautoproxyurl Wi-Fi http://127.0.0.1:8888/proxy.pac"))
         XCTAssertTrue(pacCommands.contains("-setautoproxystate Wi-Fi on"))
         XCTAssertTrue(pacCommands.contains("-setwebproxystate Wi-Fi off"))
 
@@ -65,8 +65,8 @@ final class BypassListTests: XCTestCase {
 final class ProxySnapshotTests: XCTestCase {
     func testParseAndMatch() {
         let snapshot = ProxySnapshot(dictionary: [
-            "HTTPEnable": 1, "HTTPProxy": "127.0.0.1", "HTTPPort": 7890,
-            "HTTPSEnable": 1, "HTTPSProxy": "127.0.0.1", "HTTPSPort": 7890,
+            "HTTPEnable": 1, "HTTPProxy": "127.0.0.1", "HTTPPort": 8888,
+            "HTTPSEnable": 1, "HTTPSProxy": "127.0.0.1", "HTTPSPort": 8888,
             "SOCKSEnable": 0, "SOCKSProxy": "127.0.0.1", "SOCKSPort": 7891,
             "ProxyAutoConfigEnable": 0, "ProxyAutoConfigURLString": "http://x/proxy.pac",
             "ProxyAutoDiscoveryEnable": 1, "ExceptionsList": ["*.local", "169.254/16"],
@@ -76,31 +76,31 @@ final class ProxySnapshotTests: XCTestCase {
         XCTAssertFalse(snapshot.socksActive)
         XCTAssertFalse(snapshot.pacActive)
         XCTAssertTrue(snapshot.autoDiscovery)
-        XCTAssertEqual(snapshot.summary, "127.0.0.1:7890")
-        let profile = Profile(name: "本机", color: "#16a34a", kind: .http, host: "127.0.0.1", port: 7890)
+        XCTAssertEqual(snapshot.summary, "127.0.0.1:8888")
+        let profile = Profile(name: "本机", color: "#16a34a", kind: .http, host: "127.0.0.1", port: 8888)
         XCTAssertTrue(snapshot.matches(profile))
         let other = Profile(name: "其他", color: "#16a34a", kind: .http, host: "127.0.0.1", port: 8080)
         XCTAssertFalse(snapshot.matches(other))
         let socks = Profile(name: "SOCKS", color: "#16a34a", kind: .socks5, host: "127.0.0.1", port: 7891)
         XCTAssertFalse(snapshot.matches(socks))
-        XCTAssertEqual(snapshot.asProfile(name: "系统代理")?.serverAddress, "127.0.0.1:7890")
+        XCTAssertEqual(snapshot.asProfile(name: "系统代理")?.serverAddress, "127.0.0.1:8888")
         XCTAssertFalse(ProxySnapshot(dictionary: [:]).isActive)
         XCTAssertEqual(ProxySnapshot(dictionary: [:]).summary, "未开启")
     }
 
     func testPacMatchIgnoresCase() {
-        let snapshot = ProxySnapshot(dictionary: ["ProxyAutoConfigEnable": 1, "ProxyAutoConfigURLString": "http://127.0.0.1:7890/Proxy.pac"])
-        let profile = Profile(name: "PAC", color: "#000", kind: .pac, pacURL: "http://127.0.0.1:7890/proxy.pac")
+        let snapshot = ProxySnapshot(dictionary: ["ProxyAutoConfigEnable": 1, "ProxyAutoConfigURLString": "http://127.0.0.1:8888/Proxy.pac"])
+        let profile = Profile(name: "PAC", color: "#000", kind: .pac, pacURL: "http://127.0.0.1:8888/proxy.pac")
         XCTAssertTrue(snapshot.matches(profile))
-        XCTAssertEqual(snapshot.summary, "PAC http://127.0.0.1:7890/Proxy.pac")
+        XCTAssertEqual(snapshot.summary, "PAC http://127.0.0.1:8888/Proxy.pac")
     }
 }
 
 final class NpmProxyTests: XCTestCase {
     func testUpdate() {
         let content = "registry=https://registry.npmmirror.com\nproxy=http://old:1\nhttps-proxy=http://old:1\n"
-        let updated = NpmProxy.update(content, proxyURL: "http://127.0.0.1:7890", noProxy: "localhost")
-        XCTAssertEqual(updated, "registry=https://registry.npmmirror.com\nproxy=http://127.0.0.1:7890\nhttps-proxy=http://127.0.0.1:7890\nnoproxy=localhost\n")
+        let updated = NpmProxy.update(content, proxyURL: "http://127.0.0.1:8888", noProxy: "localhost")
+        XCTAssertEqual(updated, "registry=https://registry.npmmirror.com\nproxy=http://127.0.0.1:8888\nhttps-proxy=http://127.0.0.1:8888\nnoproxy=localhost\n")
         XCTAssertEqual(NpmProxy.update(updated, proxyURL: "", noProxy: ""), "registry=https://registry.npmmirror.com\n")
         XCTAssertEqual(NpmProxy.update("", proxyURL: "", noProxy: ""), "")
     }
@@ -108,8 +108,8 @@ final class NpmProxyTests: XCTestCase {
 
 final class TerminalCommandsTests: XCTestCase {
     func testExportAndFish() {
-        let export = TerminalCommands.export(proxyURL: "http://127.0.0.1:7890", noProxy: "it's")
-        XCTAssertTrue(export.hasPrefix("export http_proxy='http://127.0.0.1:7890' https_proxy='http://127.0.0.1:7890' no_proxy='it'\\''s' HTTP_PROXY="))
+        let export = TerminalCommands.export(proxyURL: "http://127.0.0.1:8888", noProxy: "it's")
+        XCTAssertTrue(export.hasPrefix("export http_proxy='http://127.0.0.1:8888' https_proxy='http://127.0.0.1:8888' all_proxy='http://127.0.0.1:8888' no_proxy='it'\\''s' HTTP_PROXY="))
         let fish = TerminalCommands.fish(proxyURL: "socks5://127.0.0.1:1080", noProxy: "")
         XCTAssertTrue(fish.hasPrefix("set -gx http_proxy 'socks5://127.0.0.1:1080'; set -gx HTTP_PROXY 'socks5://127.0.0.1:1080'; "))
         XCTAssertTrue(fish.contains("set -gx no_proxy '\(Profile.defaultNoProxy)'"))
@@ -118,11 +118,11 @@ final class TerminalCommandsTests: XCTestCase {
 
 final class ParsingTests: XCTestCase {
     func testLsof() {
-        let output = "p512\ncClashX\nf23\nn*:7890\nf24\nn127.0.0.1:7891\np9000\ncnode\nf18\nn[::1]:3000\n"
+        let output = "p512\ncCharles\nf23\nn*:8888\nf24\nn127.0.0.1:8889\np9000\ncnode\nf18\nn[::1]:3000\n"
         let listeners = LocalProxyDetector.parseLsof(output)
         XCTAssertEqual(listeners, [
-            LocalProxyDetector.Listener(port: 7890, process: "ClashX"),
-            LocalProxyDetector.Listener(port: 7891, process: "ClashX"),
+            LocalProxyDetector.Listener(port: 8888, process: "Charles"),
+            LocalProxyDetector.Listener(port: 8889, process: "Charles"),
             LocalProxyDetector.Listener(port: 3000, process: "node"),
         ])
     }
@@ -147,10 +147,10 @@ final class ParsingTests: XCTestCase {
             NetworkServices.Service(name: "Wi-Fi", bsdName: "en0", enabled: true),
             NetworkServices.Service(name: "Thunderbolt Bridge", bsdName: "bridge0", enabled: true),
             NetworkServices.Service(name: "Bluetooth PAN", bsdName: "en3", enabled: false),
-            NetworkServices.Service(name: "VPN", bsdName: nil, enabled: true),
+            NetworkServices.Service(name: "Remote Access", bsdName: nil, enabled: true),
         ]
         XCTAssertEqual(NetworkServices.select(services: services) { $0 == "en0" || $0 == "en3" }, ["Wi-Fi"])
-        XCTAssertEqual(NetworkServices.select(services: services) { _ in false }, ["Wi-Fi", "Thunderbolt Bridge", "VPN"])
+        XCTAssertEqual(NetworkServices.select(services: services) { _ in false }, ["Wi-Fi", "Thunderbolt Bridge", "Remote Access"])
     }
 
     func testVersionCompare() {
@@ -278,25 +278,15 @@ final class ParsingTests: XCTestCase {
         let github = URL(string: "https://github.com/whrss9527/proxi/releases/download/v1/Proxi-macos.zip")!
         var off = ProxySnapshot()
         off.httpEnabled = false
-        var coreProxy = ProxySnapshot()
-        coreProxy.httpEnabled = true; coreProxy.httpHost = "127.0.0.1"; coreProxy.httpPort = 7890
-        coreProxy.httpsEnabled = true; coreProxy.httpsHost = "127.0.0.1"; coreProxy.httpsPort = 7890
         var other = ProxySnapshot()
         other.httpsEnabled = true; other.httpsHost = "proxy.corp"; other.httpsPort = 3128
 
-        XCTAssertEqual(NetworkRoute.routes(for: github, corePort: 7890, system: off), [.core(7890), .direct])
-        XCTAssertEqual(NetworkRoute.routes(for: github, corePort: 7890, system: coreProxy), [.core(7890), .direct])
-        XCTAssertEqual(NetworkRoute.routes(for: github, corePort: 7890, system: other), [.core(7890), .system, .direct])
-        XCTAssertEqual(NetworkRoute.routes(for: github, corePort: nil, system: other), [.system, .direct])
-        XCTAssertEqual(NetworkRoute.routes(for: github, corePort: nil, system: off), [.direct])
+        XCTAssertEqual(NetworkRoute.routes(for: github, system: other), [.system, .direct])
+        XCTAssertEqual(NetworkRoute.routes(for: github, system: off), [.direct])
         // 本机地址（测试用的发布源）不经代理。
-        XCTAssertEqual(NetworkRoute.routes(for: URL(string: "http://127.0.0.1:8765/latest.json")!, corePort: 7890, system: other), [.direct])
-        XCTAssertTrue(coreProxy.pointsAtLocalhost(port: 7890))
-        XCTAssertFalse(coreProxy.pointsAtLocalhost(port: 7891))
+        XCTAssertEqual(NetworkRoute.routes(for: URL(string: "http://127.0.0.1:8765/latest.json")!, system: other), [.direct])
 
         let configuration = URLSessionConfiguration.ephemeral
-        NetworkRoute.core(7890).apply(to: configuration)
-        XCTAssertEqual(configuration.connectionProxyDictionary?[kCFNetworkProxiesHTTPSPort as String] as? Int, 7890)
         NetworkRoute.direct.apply(to: configuration)
         XCTAssertEqual(configuration.connectionProxyDictionary?.count, 0)
         NetworkRoute.system.apply(to: configuration)
@@ -394,175 +384,6 @@ final class ParsingTests: XCTestCase {
         let drive = home.appendingPathComponent("Library/Mobile Documents/com~apple~CloudDocs", isDirectory: true)
         try FileManager.default.createDirectory(at: drive, withIntermediateDirectories: true)
         XCTAssertEqual(CloudFile.driveURL(home: home)?.lastPathComponent, "com~apple~CloudDocs")
-    }
-
-    func testRuleConversion() {
-        let conf = """
-        [General]
-        skip-proxy = 192.168.0.0/16
-        [Rule]
-        # 注释
-        DOMAIN-SUFFIX,google.com,Proxy
-        DOMAIN-SUFFIX,google.com,Proxy
-        DOMAIN,ad.example.com,Reject
-        DOMAIN-KEYWORD,baidu,direct
-        IP-CIDR,91.108.56.0/22,PROXY,no-resolve
-        IP-CIDR6,2001:b28:f23d::/48,Proxy
-        GEOIP,cn,DIRECT
-        USER-AGENT,MicroMessenger*,Proxy
-        RULE-SET,https://example.com/apple.list,PROXY
-        RULE-SET,local-name,DIRECT
-        FINAL,direct
-        [URL Rewrite]
-        ^https?://(www.)?g.cn https://www.google.com 302
-        """
-        let converted = RuleConverter.convert(conf)
-        XCTAssertEqual(converted.rules, [
-            "DOMAIN-SUFFIX,google.com,节点",
-            "DOMAIN,ad.example.com,REJECT",
-            "DOMAIN-KEYWORD,baidu,DIRECT",
-            "IP-CIDR,91.108.56.0/22,节点,no-resolve",
-            "IP-CIDR6,2001:b28:f23d::/48,节点",
-            "GEOIP,CN,DIRECT",
-            "MATCH,DIRECT",
-        ])
-        XCTAssertEqual(converted.ruleSets, [RuleSetReference(url: "https://example.com/apple.list", policy: "节点")])
-        XCTAssertEqual(converted.skipped, 2)
-
-        // Surge 的 .list 规则集：没有策略字段，用默认策略；内联到 FINAL 之前。
-        let list = RuleConverter.convert("DOMAIN-SUFFIX,apple.news\nIP-CIDR,17.0.0.0/8,no-resolve\n", defaultPolicy: "节点")
-        XCTAssertEqual(list.rules, ["DOMAIN-SUFFIX,apple.news,节点", "IP-CIDR,17.0.0.0/8,节点,no-resolve"])
-        let merged = RuleConverter.merge(converted, ruleSetRules: ["https://example.com/apple.list": list.rules])
-        XCTAssertEqual(merged.last, "MATCH,DIRECT")
-        XCTAssertEqual(merged.count, converted.rules.count + list.rules.count)
-        XCTAssertTrue(merged.contains("DOMAIN-SUFFIX,apple.news,节点"))
-
-        // Clash 的规则文件和 payload 列表。
-        let clash = "port: 7890\nrules:\n  - DOMAIN-SUFFIX,x.com,Proxy\n  - 'GEOIP,CN,DIRECT'\n  - MATCH,Proxy\nproxies: []\n"
-        XCTAssertEqual(RuleConverter.convert(clash).rules, ["DOMAIN-SUFFIX,x.com,节点", "GEOIP,CN,DIRECT", "MATCH,节点"])
-        let payload = "payload:\n  - '+.example.com'\n  - 'sub.example.org'\n  - '10.0.0.0/8'\n"
-        XCTAssertEqual(RuleConverter.convert(payload, defaultPolicy: "DIRECT").rules, ["DOMAIN-SUFFIX,example.com,DIRECT", "DOMAIN,sub.example.org,DIRECT", "IP-CIDR,10.0.0.0/8,DIRECT,no-resolve"])
-        XCTAssertEqual(RuleConverter.policy("Reject"), "REJECT")
-        XCTAssertEqual(RuleConverter.policy("自定义组"), "节点")
-        // 和自定义策略组同名的策略指到那个组；强制去向时全部改过去，FINAL 不动。
-        XCTAssertEqual(RuleConverter.policy("流媒体", groups: ["流媒体"]), "流媒体")
-        XCTAssertEqual(RuleConverter.policy("streaming", groups: ["Streaming"]), "Streaming")
-        let grouped = RuleConverter.convert("DOMAIN-SUFFIX,netflix.com,流媒体\nDOMAIN-SUFFIX,x.com,Proxy\nFINAL,DIRECT", groups: ["流媒体"])
-        XCTAssertEqual(grouped.rules, ["DOMAIN-SUFFIX,netflix.com,流媒体", "DOMAIN-SUFFIX,x.com,节点", "MATCH,DIRECT"])
-        let forced = RuleConverter.convert("DOMAIN-SUFFIX,netflix.com,流媒体\nDOMAIN,ad.example.com,REJECT\nIP-CIDR,1.1.1.0/24,DIRECT,no-resolve\nRULE-SET,https://x/a.list,DIRECT\n+.plain.com\nFINAL,DIRECT", force: "REJECT", groups: ["流媒体"])
-        XCTAssertEqual(forced.rules, ["DOMAIN-SUFFIX,netflix.com,REJECT", "DOMAIN,ad.example.com,REJECT", "IP-CIDR,1.1.1.0/24,REJECT,no-resolve", "DOMAIN-SUFFIX,plain.com,REJECT", "MATCH,DIRECT"])
-        XCTAssertEqual(forced.ruleSets, [RuleSetReference(url: "https://x/a.list", policy: "REJECT")])
-    }
-
-    func testCoreConfig() throws {
-        var engine = EngineConfig()
-        engine.subscriptions = [Subscription(name: "机场", url: "https://air.example.com/sub?token=\"x\"")]
-        engine.mixedPort = 7891
-        engine.apiPort = 9098
-        let input = CoreConfigBuilder.Input(engine: engine, secret: "s3cret", directory: URL(fileURLWithPath: "/tmp/core"), testURL: "https://cp.cloudflare.com/generate_204", rules: RuleConverter.chinaDirectRules)
-        let yaml = CoreConfigBuilder.yaml(input)
-        XCTAssertTrue(yaml.contains("mixed-port: 7891\n"))
-        XCTAssertTrue(yaml.contains("external-controller: \"127.0.0.1:9098\"\n"))
-        XCTAssertTrue(yaml.contains("secret: \"s3cret\"\n"))
-        XCTAssertTrue(yaml.contains("    url: \"https://air.example.com/sub?token=\\\"x\\\"\"\n"))
-        XCTAssertTrue(yaml.contains("    path: \"/tmp/core/providers/\(engine.subscriptions[0].providerName).yaml\"\n"))
-        XCTAssertTrue(yaml.contains("    use: [\(engine.subscriptions[0].providerName)]\n"))
-        XCTAssertTrue(yaml.contains("  - \"GEOIP,CN,DIRECT\"\n  - \"MATCH,节点\"\n"))
-        XCTAssertTrue(yaml.hasSuffix("\n"))
-        // 没有 MATCH 时补上。
-        var global = input
-        global.rules = ["DOMAIN-SUFFIX,x.com,DIRECT"]
-        XCTAssertTrue(CoreConfigBuilder.yaml(global).hasSuffix("  - \"MATCH,节点\"\n"))
-        XCTAssertEqual(CoreConfigBuilder.quote("a\"b\\c\n"), "\"a\\\"b\\\\c\\n\"")
-        XCTAssertEqual(CoreConfigBuilder.makeSecret().count, 32)
-        XCTAssertTrue(yaml.contains("find-process-mode: always\n"))
-        XCTAssertFalse(yaml.contains("rule-providers:"))
-
-        // 自定义策略组：手动选择的带「节点」「自动选择」「DIRECT」，自动类的只有筛出来的节点；筛选默认不区分大小写。
-        var grouped = engine
-        grouped.groups = [
-            PolicyGroup(name: "流媒体", kind: .select, filter: "港|HK"),
-            PolicyGroup(name: "自动香港", kind: .urlTest, filter: "(?i)hk"),
-            PolicyGroup(name: "轮询", kind: .loadBalance),
-            PolicyGroup(name: "备用", kind: .fallback, filter: "US"),
-        ]
-        var groupedInput = input
-        groupedInput.engine = grouped
-        groupedInput.ruleProviders = [
-            RuleProviderSpec(name: "rs-abcd1234", path: "/tmp/core/rules/rs-abcd1234.txt", behavior: .classical, format: "text"),
-            RuleProviderSpec(name: "rs-ffff0000", path: "/tmp/core/rules/rs-ffff0000.mrs", behavior: .domain, format: "mrs"),
-        ]
-        groupedInput.rules = ["RULE-SET,rs-abcd1234,流媒体", "RULE-SET,rs-ffff0000,REJECT", "MATCH,节点"]
-        let groupedYAML = CoreConfigBuilder.yaml(groupedInput)
-        let use = "    use: [\(engine.subscriptions[0].providerName)]\n"
-        XCTAssertTrue(groupedYAML.contains("  - name: \"流媒体\"\n    type: select\n    proxies: [\"节点\", \"自动选择\", \"DIRECT\"]\n" + use + "    filter: \"(?i)港|HK\"\n"))
-        XCTAssertTrue(groupedYAML.contains("  - name: \"自动香港\"\n    type: url-test\n    url: \"https://cp.cloudflare.com/generate_204\"\n    interval: 600\n    tolerance: 80\n    lazy: true\n" + use + "    filter: \"(?i)hk\"\n"))
-        XCTAssertTrue(groupedYAML.contains("  - name: \"轮询\"\n    type: load-balance\n    url: \"https://cp.cloudflare.com/generate_204\"\n    interval: 600\n    strategy: round-robin\n    lazy: true\n" + use + "  - name: \"备用\"\n    type: fallback\n    url: \"https://cp.cloudflare.com/generate_204\"\n    interval: 600\n    lazy: true\n" + use + "    filter: \"(?i)US\"\n"))
-        XCTAssertTrue(groupedYAML.contains("rule-providers:\n  rs-abcd1234:\n    type: file\n    behavior: classical\n    format: text\n    path: \"/tmp/core/rules/rs-abcd1234.txt\"\n  rs-ffff0000:\n    type: file\n    behavior: domain\n    format: mrs\n    path: \"/tmp/core/rules/rs-ffff0000.mrs\"\n"))
-        XCTAssertTrue(groupedYAML.contains("  - \"RULE-SET,rs-abcd1234,流媒体\"\n  - \"RULE-SET,rs-ffff0000,REJECT\"\n  - \"MATCH,节点\"\n"))
-        // 没有加载订阅（只做共享）时策略组照样要有（规则里引用了它们）：手动选择的只有三个固定候选，自动类的只有直连，都不带 use 和筛选。
-        var shareOnly = groupedInput
-        shareOnly.engine.enabled = false
-        let shareOnlyYAML = CoreConfigBuilder.yaml(shareOnly)
-        XCTAssertTrue(shareOnlyYAML.contains("  - name: \"流媒体\"\n    type: select\n    proxies: [\"节点\", \"自动选择\", \"DIRECT\"]\n  - name: \"自动香港\"\n"))
-        XCTAssertTrue(shareOnlyYAML.contains("  - name: \"自动香港\"\n    type: url-test\n    url: \"https://cp.cloudflare.com/generate_204\"\n    interval: 600\n    tolerance: 80\n    lazy: true\n    proxies: [\"DIRECT\"]\n"))
-        XCTAssertTrue(shareOnlyYAML.contains("    strategy: round-robin\n    lazy: true\n    proxies: [\"DIRECT\"]\n"))
-        XCTAssertFalse(shareOnlyYAML.contains("use:"))
-        XCTAssertFalse(shareOnlyYAML.contains("filter:"))
-        XCTAssertTrue(shareOnlyYAML.contains("  - \"RULE-SET,rs-abcd1234,流媒体\"\n"))
-    }
-
-    func testEngineModels() throws {
-        XCTAssertNil(Subscription.validate(url: "https://air.example.com/sub"))
-        XCTAssertNil(Subscription.validate(url: "file:///Users/me/nodes.txt"))
-        XCTAssertEqual(Subscription(name: "f", url: "file:///Users/me/nodes.txt").filePath, "/Users/me/nodes.txt")
-        XCTAssertNil(Subscription(name: "h", url: "https://x/y").filePath)
-        XCTAssertNotNil(Subscription.validate(url: "ss://abc"))
-        XCTAssertNotNil(Subscription.validate(url: ""))
-        var fileEngine = EngineConfig()
-        fileEngine.subscriptions = [Subscription(name: "f", url: "file:///tmp/nodes.txt")]
-        let fileYAML = CoreConfigBuilder.yaml(CoreConfigBuilder.Input(engine: fileEngine, secret: "s", directory: URL(fileURLWithPath: "/tmp/core"), testURL: "https://t", rules: []))
-        XCTAssertTrue(fileYAML.contains("    type: file\n    path: \"/tmp/core/providers/\(fileEngine.subscriptions[0].providerName).yaml\"\n"))
-        XCTAssertFalse(fileYAML.contains("interval: 86400"))
-        var engine = EngineConfig()
-        XCTAssertFalse(engine.wantsCore)
-        engine.subscriptions = [Subscription(name: "a", url: "https://x/y")]
-        XCTAssertTrue(engine.wantsCore)
-        engine.enabled = false
-        XCTAssertFalse(engine.wantsCore)
-        engine.ruleSets = [RuleSet.chinaDirect(), RuleSet(name: "黑名单 + 去广告", url: RulePresets.all[1].url, policy: nil)]
-        engine.groups = [PolicyGroup(name: "流媒体", kind: .select, filter: "港")]
-        engine.finalPolicy = .group("流媒体")
-        let data = try JSONEncoder().encode(engine)
-        let decoded = try JSONDecoder().decode(EngineConfig.self, from: data)
-        XCTAssertEqual(decoded, engine)
-        XCTAssertEqual(decoded.ruleSets[1].kind, .inline)
-        XCTAssertEqual(decoded.groupNames, ["流媒体"])
-        XCTAssertEqual(try JSONDecoder().decode(EngineConfig.self, from: Data("{}".utf8)).mixedPort, 7890)
-        // 旧配置里的单一规则来源迁移成规则集：内置的照旧；规则地址按文件自己的策略，FINAL 也跟着文件。
-        XCTAssertEqual(try JSONDecoder().decode(EngineConfig.self, from: Data("{}".utf8)).ruleSets, [RuleSet.chinaDirect()])
-        XCTAssertEqual(EngineConfig().ruleSets, [RuleSet.chinaDirect()])
-        let migratedURL = try JSONDecoder().decode(EngineConfig.self, from: Data(#"{"ruleSource":{"kind":"url","url":"\#(RulePresets.all[1].url)"}}"#.utf8))
-        XCTAssertEqual(migratedURL.ruleSets.count, 1)
-        XCTAssertEqual(migratedURL.ruleSets[0].name, "黑名单 + 去广告")
-        XCTAssertEqual(migratedURL.ruleSets[0].url, RulePresets.all[1].url)
-        XCTAssertNil(migratedURL.ruleSets[0].policy)
-        XCTAssertNil(migratedURL.finalPolicy)
-        XCTAssertEqual(try JSONDecoder().decode(EngineConfig.self, from: Data(#"{"ruleSource":{"kind":"chinaDirect"}}"#.utf8)).ruleSets, [RuleSet.chinaDirect()])
-        XCTAssertTrue(try JSONDecoder().decode(EngineConfig.self, from: Data(#"{"ruleSets":[]}"#.utf8)).ruleSets.isEmpty)
-        XCTAssertFalse(String(decoding: data, as: UTF8.self).contains("ruleSource"))
-        XCTAssertEqual(try JSONDecoder().decode(RuleSource.self, from: Data(#"{"kind":"url","url":"https://a/b"}"#.utf8)), .url("https://a/b"))
-        XCTAssertEqual(try JSONDecoder().decode(RuleSource.self, from: Data(#"{"kind":"nope"}"#.utf8)), .chinaDirect)
-
-        // 内置代理的配置：HTTP 和 SOCKS 都指到内核端口。
-        let profile = Profile.engineProfile(port: 7890)
-        XCTAssertTrue(profile.engine)
-        XCTAssertEqual(profile.summary, "内置代理 · 127.0.0.1:7890")
-        let desired = DesiredProxy(profile: profile)
-        XCTAssertEqual(desired.http, DesiredProxy.Endpoint(host: "127.0.0.1", port: 7890))
-        XCTAssertEqual(desired.socks, DesiredProxy.Endpoint(host: "127.0.0.1", port: 7890))
-        let roundTrip = try JSONDecoder().decode(Profile.self, from: try JSONEncoder().encode(profile))
-        XCTAssertTrue(roundTrip.engine)
     }
 
     func testSpeedFormatter() {
@@ -936,339 +757,161 @@ final class ParsingTests: XCTestCase {
     }
 }
 
-/// 共享期间防睡眠：决定逻辑，以及真的向系统要一条断言再释放。
-final class SleepGuardTests: XCTestCase {
-    func testShouldHold() {
-        XCTAssertTrue(PowerAssertion.shouldHold(wanted: true, onBattery: false, allowOnBattery: false))
-        XCTAssertFalse(PowerAssertion.shouldHold(wanted: true, onBattery: true, allowOnBattery: false))
-        XCTAssertTrue(PowerAssertion.shouldHold(wanted: true, onBattery: true, allowOnBattery: true))
-        XCTAssertFalse(PowerAssertion.shouldHold(wanted: false, onBattery: false, allowOnBattery: true))
+/// 要登录的代理：环境变量、git、npm 的地址带上转义过的用户名和密码，系统代理交给 networksetup。
+final class CredentialsTests: XCTestCase {
+    func testProxyURLWithCredentials() {
+        var profile = Profile(name: "公司", color: "#000", kind: .http, host: "proxy.corp", port: 3128)
+        XCTAssertEqual(profile.proxyURL, "http://proxy.corp:3128")
+        XCTAssertFalse(profile.hasCredentials)
+        profile.username = "me@corp"
+        profile.password = "p@ss:w/rd"
+        XCTAssertEqual(profile.proxyURL, "http://me%40corp:p%40ss%3Aw%2Frd@proxy.corp:3128")
+        // 列表里显示的不带密码。
+        XCTAssertEqual(profile.summary, "me@corp@proxy.corp:3128")
+        XCTAssertFalse(profile.summary.contains("p@ss"))
+        profile.kind = .socks5
+        profile.password = ""
+        XCTAssertEqual(profile.proxyURL, "socks5://me%40corp@proxy.corp:3128")
+        var ipv6 = Profile(name: "v6", color: "#000", kind: .http, host: "::1", port: 8080)
+        XCTAssertEqual(ipv6.proxyURL, "http://[::1]:8080")
+        ipv6.host = "[::1]"
+        XCTAssertEqual(ipv6.serverAddress, "[::1]:8080")
     }
 
-    @MainActor
-    func testAssertionIsCreatedAndReleased() {
-        let guardian = SleepGuard()
-        guardian.update(wanted: true, allowOnBattery: true)
-        XCTAssertEqual(guardian.status, .holding)
-        XCTAssertTrue(PowerAssertion.currentNames().contains(PowerAssertion.name))
-        guardian.update(wanted: false, allowOnBattery: true)
-        XCTAssertEqual(guardian.status, .off)
-        XCTAssertFalse(PowerAssertion.currentNames().contains(PowerAssertion.name))
-        // 共享设置里的默认值：保持，但只在接电源时。
-        let share = ShareConfig()
-        XCTAssertTrue(share.keepAwake)
-        XCTAssertFalse(share.keepAwakeOnBattery)
-    }
-}
-
-/// 网址诊断：网址的整理、内核日志行的解析、结论引擎的每个场景。
-final class DiagnoseTests: XCTestCase {
-    func testTargetNormalize() {
-        XCTAssertEqual(DiagnoseTarget.normalize("youtube.com")?.absoluteString, "https://youtube.com")
-        XCTAssertEqual(DiagnoseTarget.normalize(" http://a.b/c?d=1 ")?.absoluteString, "http://a.b/c?d=1")
-        XCTAssertNil(DiagnoseTarget.normalize("ftp://x"))
-        XCTAssertNil(DiagnoseTarget.normalize(""))
-        XCTAssertNil(DiagnoseTarget.normalize("not a url"))
-        let https = DiagnoseTarget(url: DiagnoseTarget.normalize("youtube.com")!, perspective: .mac)
-        XCTAssertEqual(https.host, "youtube.com")
-        XCTAssertEqual(https.port, 443)
-        let http = DiagnoseTarget(url: DiagnoseTarget.normalize("http://example.com:8080/x")!, perspective: .device)
-        XCTAssertEqual(http.port, 8080)
-        XCTAssertEqual(DiagnoseTarget(url: DiagnoseTarget.normalize("http://example.com")!, perspective: .mac).port, 80)
+    func testNetworksetupWithCredentials() {
+        var profile = Profile(name: "公司", color: "#000", kind: .http, host: "proxy.corp", port: 3128)
+        profile.username = "me"
+        profile.password = "secret"
+        let commands = DesiredProxy(profile: profile).commands(service: "Wi-Fi")
+        XCTAssertEqual(commands.first, ["-setwebproxy", "Wi-Fi", "proxy.corp", "3128", "on", "me", "secret"])
+        XCTAssertTrue(commands.contains(["-setsecurewebproxy", "Wi-Fi", "proxy.corp", "3128", "on", "me", "secret"]))
+        XCTAssertEqual(ProxyTester.proxyDictionary(for: profile)[kCFProxyUsernameKey as String] as? String, "me")
     }
 
-    func testRouteTraceParse() throws {
-        let matched = try XCTUnwrap(RouteTrace.parse("[TCP] 192.168.1.20:52011 --> www.youtube.com:443 match DomainSuffix(youtube.com) using 节点[香港 01]"))
-        XCTAssertEqual(matched.host, "www.youtube.com")
-        XCTAssertEqual(matched.port, 443)
-        XCTAssertEqual(matched.rule, "DomainSuffix(youtube.com)")
-        XCTAssertEqual(matched.chain, "节点[香港 01]")
-        XCTAssertEqual(matched.outbound, "香港 01")
-        XCTAssertFalse(matched.isDirect)
-        XCTAssertNil(matched.error)
-        let direct = try XCTUnwrap(RouteTrace.parse("[TCP] 127.0.0.1:60000 --> cp.cloudflare.com:443 match Match using DIRECT"))
-        XCTAssertEqual(direct.rule, "Match")
-        XCTAssertTrue(direct.isDirect)
-        let mode = try XCTUnwrap(RouteTrace.parse("[TCP] 127.0.0.1:60000(Safari) --> example.com:80 using GLOBAL"))
-        XCTAssertEqual(mode.rule, "")
-        XCTAssertEqual(mode.chain, "GLOBAL")
-        XCTAssertEqual(mode.port, 80)
-        let none = try XCTUnwrap(RouteTrace.parse("[TCP] 127.0.0.1:1 --> example.com:443 doesn't match any rule using DIRECT"))
-        XCTAssertEqual(none.rule, "没有命中任何规则")
-        XCTAssertTrue(none.isDirect)
-        let failed = try XCTUnwrap(RouteTrace.parse("[TCP] dial 节点 (match Match/) 192.168.1.20:52012 --> www.youtube.com:443 error: dial tcp 1.2.3.4:443: i/o timeout"))
-        XCTAssertEqual(failed.chain, "节点")
-        XCTAssertEqual(failed.rule, "Match/")
-        XCTAssertEqual(failed.host, "www.youtube.com")
-        XCTAssertEqual(failed.error, "dial tcp 1.2.3.4:443: i/o timeout")
-        let failedNoRule = try XCTUnwrap(RouteTrace.parse("[TCP] dial DIRECT 127.0.0.1:2 --> [::1]:443 error: connection refused"))
-        XCTAssertEqual(failedNoRule.chain, "DIRECT")
-        XCTAssertEqual(failedNoRule.host, "::1")
-        XCTAssertEqual(failedNoRule.rule, "")
-        XCTAssertNil(RouteTrace.parse("[UDP] 127.0.0.1:1 --> 1.1.1.1:53 match Match using DIRECT"))
-        XCTAssertNil(RouteTrace.parse("time=... level=info msg=something else"))
+    func testCredentialsRoundTrip() throws {
+        var profile = Profile(name: "公司", color: "#000", kind: .http, host: "proxy.corp", port: 3128)
+        profile.username = "me"
+        profile.password = "secret"
+        let decoded = try JSONDecoder().decode(Profile.self, from: JSONEncoder().encode(profile))
+        XCTAssertEqual(decoded, profile)
+        let old = try JSONDecoder().decode(Profile.self, from: Data(#"{"name":"x","host":"h","port":1}"#.utf8))
+        XCTAssertEqual(old.username, "")
+        XCTAssertEqual(old.password, "")
     }
 
-    func testVerdicts() {
-        var facts = DiagnoseFacts(perspective: .mac, host: "youtube.com")
-        // 本机没开代理：直连通就是正常，不通就让开代理。
-        facts.direct = ProbeResult(ok: true, status: 200, latencyMs: 120, failure: nil)
-        XCTAssertEqual(Verdict.make(facts).headline, "直连正常，本机没开代理")
-        facts.direct = ProbeResult(ok: false, status: nil, latencyMs: nil, failure: .timeout)
-        facts.engineHasNodes = true
-        XCTAssertEqual(Verdict.make(facts).actions.first, .turnOnEngine)
-        facts.engineHasNodes = false
-        XCTAssertEqual(Verdict.make(facts).actions.first, .openNodes)
-        // 经节点访问成功：链路正常。
-        facts.engineHasNodes = true
-        facts.macRoute = .engine
-        facts.proxiedVia = "节点代理"
-        facts.proxied = ProbeResult(ok: true, status: 200, latencyMs: 310, failure: nil)
-        facts.trace = RouteTrace(host: "youtube.com", port: 443, rule: "Match", chain: "节点[香港 01]", error: nil)
-        XCTAssertEqual(Verdict.make(facts).headline, "链路正常")
-        // 规则分到直连但直连不通：让它走节点。
-        facts.proxied = ProbeResult(ok: false, status: nil, latencyMs: nil, failure: .timeout)
-        facts.trace = RouteTrace(host: "youtube.com", port: 443, rule: "GeoIP(CN)", chain: "DIRECT", error: "dial tcp 1.2.3.4:443: i/o timeout")
-        let pinned = Verdict.make(facts)
-        XCTAssertEqual(pinned.headline, "规则把它分到了直连，但直连不通")
-        XCTAssertEqual(pinned.actions.first, .pinToProxy("youtube.com"))
-        // 节点连不上：自动选择。
-        facts.trace = RouteTrace(host: "youtube.com", port: 443, rule: "Match", chain: "节点[香港 01]", error: "i/o timeout")
-        facts.nodeDelay = 0
-        XCTAssertEqual(Verdict.make(facts).actions.first, .autoSelect)
-        // 节点能通但这个网站不通：换节点。
-        facts.nodeDelay = 86
-        XCTAssertEqual(Verdict.make(facts).headline, "节点能通，但这个网站经它打不开")
-        // 转发给上游代理失败。
-        facts.trace = RouteTrace(host: "youtube.com", port: 443, rule: "Match", chain: "上游代理", error: "connection refused")
-        XCTAssertEqual(Verdict.make(facts).headline, "转发给上游代理失败")
-        // 设备视角：入口没监听；链路通但设备没有连接记录。
-        var device = DiagnoseFacts(perspective: .device, host: "youtube.com")
-        XCTAssertEqual(Verdict.make(device).actions, [.openShare])
-        device.shareListening = true
-        device.proxiedVia = "共享入口"
-        device.proxied = ProbeResult(ok: true, status: 200, latencyMs: 300, failure: nil)
-        device.deviceRecentConnections = 0
-        XCTAssertTrue(Verdict.make(device).headline.contains("设备最近没有对它的连接"))
-        device.deviceRecentConnections = 3
-        XCTAssertEqual(Verdict.make(device).headline, "链路正常")
-        XCTAssertEqual(Verdict.Action.pinToProxy("a.b").title, "让 a.b 走节点")
-    }
-
-    func testDiagnoseURLCommand() {
-        XCTAssertEqual(URLCommand.parse(URL(string: "proxi://diagnose?url=https://youtube.com&from=device")!), .diagnose(url: "https://youtube.com", device: true))
-        XCTAssertEqual(URLCommand.parse(URL(string: "proxi://diagnose")!), .diagnose(url: nil, device: false))
-        XCTAssertEqual(URLCommand.parse(URL(string: "proxi://settings?page=diagnose")!), .settings(.diagnose))
-        XCTAssertEqual(ProbeResult(ok: true, status: 204, latencyMs: 88, failure: nil).summary, "HTTP 204，88 ms")
-        XCTAssertEqual(ProbeResult(ok: false, status: nil, latencyMs: nil, failure: .reset).summary, "连接被中断（常见于被屏蔽）")
-        XCTAssertFalse(DNSProbe.resolve("localhost").isEmpty)
+    func testEnvironmentNamesAndTerminalCommands() {
+        XCTAssertEqual(EnvironmentProxy.names, ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY"])
+        let export = TerminalCommands.export(proxyURL: "socks5://127.0.0.1:1080", noProxy: "localhost")
+        XCTAssertTrue(export.contains("all_proxy='socks5://127.0.0.1:1080'"), export)
+        XCTAssertTrue(export.contains("ALL_PROXY='socks5://127.0.0.1:1080'"), export)
+        XCTAssertTrue(TerminalCommands.fish(proxyURL: "http://h:1", noProxy: "").contains("set -gx all_proxy 'http://h:1'"))
     }
 }
 
-/// 自定义规则：输入的整理、校验、生成的规则行和在配置里的位置。
-final class CustomRuleTests: XCTestCase {
-    func testNormalizeAndLines() throws {
-        XCTAssertEqual(CustomRule.normalize("https://www.YouTube.com/watch?v=1"), "www.youtube.com")
-        XCTAssertEqual(CustomRule.normalize("*.youtube.com"), "youtube.com")
-        XCTAssertEqual(CustomRule.normalize(" .Example.org. "), "example.org")
-        XCTAssertEqual(CustomRule.normalize("youtube.com:443"), "youtube.com")
-        XCTAssertEqual(CustomRule.normalize("10.0.0.0/8"), "10.0.0.0/8")
-        XCTAssertEqual(CustomRule.normalize("fe80::1"), "fe80::1")
-        XCTAssertEqual(CustomRule(pattern: "YouTube.com", policy: .proxy).line, "DOMAIN-SUFFIX,youtube.com,节点")
-        XCTAssertEqual(CustomRule(pattern: "8.8.8.8", policy: .direct).line, "IP-CIDR,8.8.8.8/32,DIRECT,no-resolve")
-        XCTAssertEqual(CustomRule(pattern: "10.0.0.0/8", policy: .reject).line, "IP-CIDR,10.0.0.0/8,REJECT,no-resolve")
-        XCTAssertEqual(CustomRule(pattern: "fe80::/10", policy: .direct).line, "IP-CIDR6,fe80::/10,DIRECT,no-resolve")
-        XCTAssertNil(CustomRule(pattern: "not a domain", policy: .proxy).line)
-        XCTAssertNil(CustomRule.validate("youtube.com"))
-        XCTAssertNil(CustomRule.validate("8.8.8.8"))
-        XCTAssertNotNil(CustomRule.validate(""))
-        XCTAssertNotNil(CustomRule.validate("not a domain"))
-        // 配置里的位置：局域网直连之后、预设规则之前；停用的不出现；全局模式下也在。
-        var engine = EngineConfig()
-        engine.customRules = [CustomRule(pattern: "youtube.com", policy: .proxy), CustomRule(pattern: "bank.example", policy: .direct)]
-        engine.customRules[1].enabled = false
-        let input = CoreConfigBuilder.Input(engine: engine, secret: "s", directory: URL(fileURLWithPath: "/tmp/core"), testURL: "https://t", rules: RuleConverter.chinaDirectRules)
-        let yaml = CoreConfigBuilder.yaml(input)
-        XCTAssertTrue(yaml.contains("  - \"IP-CIDR6,fe80::/10,DIRECT,no-resolve\"\n  - \"DOMAIN-SUFFIX,youtube.com,节点\"\n  - \"DOMAIN-SUFFIX,cn,DIRECT\"\n"))
-        XCTAssertFalse(yaml.contains("bank.example"))
-        var global = input
-        global.rules = RuleConverter.globalRules
-        XCTAssertTrue(CoreConfigBuilder.yaml(global).contains("  - \"DOMAIN-SUFFIX,youtube.com,节点\"\n  - \"MATCH,节点\"\n"))
-        // 共享给设备时同样带着自定义规则。
-        var shared = input
-        shared.share = ShareInputs(port: 7892, allowedPrefixes: ["127.0.0.0/8"], upstream: .engine)
-        XCTAssertTrue(CoreConfigBuilder.yaml(shared).contains("    - \"DOMAIN-SUFFIX,youtube.com,节点\"\n"))
-        // 存取。
-        let decoded = try JSONDecoder().decode(EngineConfig.self, from: try JSONEncoder().encode(engine))
-        XCTAssertEqual(decoded, engine)
-        XCTAssertTrue(try JSONDecoder().decode(EngineConfig.self, from: Data("{}".utf8)).customRules.isEmpty)
-    }
-}
+/// 从以前的版本更新过来：读配置时去掉以前版本的设置，找出要关掉的代理、要删的文件和后台助手。
+final class LegacyCleanupTests: XCTestCase {
+    private let builtInID = "6D2F2A1E-0000-4000-8000-0000000000AA"
+    private let plainID = "6D2F2A1E-0000-4000-8000-000000000001"
 
-/// 局域网共享：设置的解析、上游的判断、内核配置里的入口，以及连接列表的归并。
-final class ShareTests: XCTestCase {
-    func testShareConfig() throws {
-        let parsed = ShareConfig.parseClients("192.168.1.20, 192.168.2.0/24; fe80::1\n10.0.0.256 bad/8 10.0.0.0/33 192.168.1.20")
-        XCTAssertEqual(parsed.prefixes, ["192.168.1.20/32", "192.168.2.0/24", "fe80::1/128"])
-        XCTAssertEqual(parsed.invalid, ["10.0.0.256", "bad/8", "10.0.0.0/33"])
-        var share = ShareConfig()
-        XCTAssertFalse(share.enabled)
-        XCTAssertEqual(share.port, 7892)
-        XCTAssertEqual(share.allowedPrefixes, ShareConfig.loopbackPrefixes + ShareConfig.lanPrefixes)
-        XCTAssertNil(share.validate())
-        // 填了设备就只允许它们，回环仍然在（内核自己的端口也受这份名单限制）。
-        share.allowedClients = "192.168.1.20"
-        XCTAssertEqual(share.allowedPrefixes, ["127.0.0.0/8", "::1/128", "192.168.1.20/32"])
-        share.port = 80
-        XCTAssertNotNil(share.validate())
-        share.port = 7892
-        share.allowedClients = "abc"
-        XCTAssertNotNil(share.validate())
-        // 本机状态里带着共享设置；旧文件没有这一项时用默认值。
-        let old = try JSONDecoder().decode(PersistedState.self, from: Data(#"{"syncEnabled":true}"#.utf8))
-        XCTAssertEqual(old.share, ShareConfig())
-        XCTAssertTrue(old.syncEnabled)
-        var persisted = PersistedState()
-        persisted.share.enabled = true
-        persisted.share.port = 8899
-        persisted.share.allowedClients = "192.168.1.20"
-        let decoded = try JSONDecoder().decode(PersistedState.self, from: try JSONEncoder().encode(persisted))
-        XCTAssertEqual(decoded.share, persisted.share)
+    private var legacyConfig: Data {
+        Data("""
+        {"profiles":[{"id":"\(builtInID)","name":"Built-in","color":"#2563eb","kind":"http","host":"127.0.0.1","port":7890,"engine":true,"targets":["system","git"]},
+                     {"id":"\(plainID)","name":"公司代理","color":"#16a34a","kind":"http","host":"proxy.corp","port":3128}],
+         "engine":{"mode":"rule","mixedPort":7890},
+         "speedDisplay":"engine",
+         "testURL":"https://cp.cloudflare.com/generate_204",
+         "automation":{"permission":"full","networkRules":[{"match":"other","action":"mode:global"}]}}
+        """.utf8)
     }
 
-    func testShareUpstreamFollowsTheMac() {
-        let http = Profile(name: "公司", color: "#000", kind: .http, host: "proxy.corp", port: 8080)
-        let socks = Profile(name: "隧道", color: "#000", kind: .socks5, host: "127.0.0.1", port: 1080)
-        let pac = Profile(name: "PAC", color: "#000", kind: .pac, pacURL: "http://x/p.pac")
-        let engine = Profile.engineProfile(port: 7890)
-        let off = ProxySnapshot()
-        XCTAssertEqual(ShareUpstream(status: .off(next: http), snapshot: off), .direct)
-        XCTAssertEqual(ShareUpstream(status: .on(engine), snapshot: off), .engine)
-        XCTAssertEqual(ShareUpstream(status: .on(http), snapshot: off), .proxy(kind: .http, host: "proxy.corp", port: 8080))
-        XCTAssertEqual(ShareUpstream(status: .on(socks), snapshot: off), .proxy(kind: .socks5, host: "127.0.0.1", port: 1080))
-        XCTAssertNotNil(ShareUpstream(status: .on(pac), snapshot: off).warning)
-        XCTAssertEqual(ShareUpstream(status: .on(pac), snapshot: off).title, "直接连接（PAC 没法转发）")
-        // 别的程序设置的系统代理：转发给它；PAC 优先，没法转发。
-        var external = ProxySnapshot()
-        external.httpsEnabled = true
-        external.httpsHost = "10.0.0.8"
-        external.httpsPort = 8888
-        XCTAssertEqual(ShareUpstream(status: .external(external.summary), snapshot: external), .proxy(kind: .http, host: "10.0.0.8", port: 8888))
-        external.pacEnabled = true
-        external.pacURL = "http://x/p.pac"
-        XCTAssertNotNil(ShareUpstream(status: .external(external.summary), snapshot: external).warning)
-        var socksOnly = ProxySnapshot()
-        socksOnly.socksEnabled = true
-        socksOnly.socksHost = "127.0.0.1"
-        socksOnly.socksPort = 1086
-        XCTAssertEqual(ShareUpstream(status: .external(socksOnly.summary), snapshot: socksOnly), .proxy(kind: .socks5, host: "127.0.0.1", port: 1086))
-        XCTAssertEqual(ShareUpstream.proxy(kind: .socks5, host: "h", port: 1).title, "socks5://h:1")
-        XCTAssertEqual(ShareUpstream.direct.summary, "设备经这台 Mac 直连")
+    func testConfigDropsLegacySettings() throws {
+        let config = try JSONDecoder().decode(AppConfig.self, from: legacyConfig)
+        XCTAssertEqual(config.profiles.map(\.name), ["公司代理"])
+        XCTAssertEqual(config.speedDisplay, .system)
+        XCTAssertEqual(config.testURL, AppConfig.defaultTestURL)
+        XCTAssertEqual(config.automation.permission, .operate)
+        XCTAssertTrue(config.automation.networkRules.isEmpty)
+        // 写回去的配置里没有以前版本的设置。
+        let written = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(config)) as? [String: Any])
+        XCTAssertNil(written["engine"])
+        let profiles = try XCTUnwrap(written["profiles"] as? [[String: Any]])
+        XCTAssertNil(profiles.first?["engine"])
+        // 自己填的测速地址不动。
+        let custom = try JSONDecoder().decode(AppConfig.self, from: Data(#"{"testURL":"http://intranet.example/ping"}"#.utf8))
+        XCTAssertEqual(custom.testURL, "http://intranet.example/ping")
+        XCTAssertEqual(AppConfig().testURL, "http://captive.apple.com/hotspot-detect.html")
     }
 
-    func testCoreConfigWithShare() {
-        var engine = EngineConfig()
-        var input = CoreConfigBuilder.Input(engine: engine, secret: "s", directory: URL(fileURLWithPath: "/tmp/core"), testURL: "https://t", rules: RuleConverter.chinaDirectRules)
-        // 没开共享：没有入口，也没有名单。域名嗅探总是开着（设备按假 IP 来连时也能按域名分流）。
-        let plain = CoreConfigBuilder.yaml(input)
-        XCTAssertFalse(plain.contains("listeners:"))
-        XCTAssertFalse(plain.contains("lan-allowed-ips:"))
-        XCTAssertFalse(plain.contains("sub-rules:"))
-        XCTAssertTrue(plain.contains("\nsniffer:\n  enable: true\n  parse-pure-ip: true\n  override-destination: true\n"))
-        XCTAssertTrue(plain.contains("    TLS:\n      ports: [443, 8443]\n"))
-        // 只为共享而运行：本机的代理端口关掉，共享入口在 0.0.0.0，流量直连。
-        input.share = ShareInputs(port: 7892, allowedPrefixes: ["127.0.0.0/8", "192.168.0.0/16"], upstream: .direct)
-        let direct = CoreConfigBuilder.yaml(input)
-        XCTAssertTrue(direct.contains("\nmixed-port: 0\n"))
-        XCTAssertTrue(direct.contains("lan-allowed-ips:\n  - \"127.0.0.0/8\"\n  - \"192.168.0.0/16\"\n"))
-        XCTAssertTrue(direct.contains("listeners:\n  - name: \"lan-share\"\n    type: mixed\n    listen: \"0.0.0.0\"\n    port: 7892\n    rule: \"lan-share\"\n"))
-        XCTAssertTrue(direct.hasSuffix("sub-rules:\n  \"lan-share\":\n    - \"MATCH,DIRECT\"\n"))
-        XCTAssertFalse(direct.contains("proxies:\n"))
-        XCTAssertFalse(direct.contains("proxy-providers:"))
-        // 本机用公司代理：局域网直连，其余转发给它。
-        input.share?.upstream = .proxy(kind: .http, host: "proxy.corp", port: 3128)
-        let relay = CoreConfigBuilder.yaml(input)
-        XCTAssertTrue(relay.contains("proxies:\n  - name: \"上游代理\"\n    type: http\n    server: \"proxy.corp\"\n    port: 3128\n"))
-        XCTAssertTrue(relay.contains("  \"lan-share\":\n    - \"DOMAIN-SUFFIX,local,DIRECT\"\n"))
-        XCTAssertTrue(relay.contains("    - \"IP-CIDR,192.168.0.0/16,DIRECT,no-resolve\"\n    - \"IP-CIDR,169.254.0.0/16,DIRECT,no-resolve\"\n"))
-        XCTAssertTrue(relay.hasSuffix("    - \"MATCH,上游代理\"\n"))
-        input.share?.upstream = .proxy(kind: .socks5, host: "127.0.0.1", port: 1080)
-        XCTAssertTrue(CoreConfigBuilder.yaml(input).contains("    type: socks5\n    server: \"127.0.0.1\"\n    port: 1080\n"))
-        // 本机用内置代理：共享入口按和本机一样的规则分流，本机的代理端口照常开着。
-        engine.subscriptions = [Subscription(name: "a", url: "https://x/y")]
-        input.engine = engine
-        input.share?.upstream = .engine
-        let mirrored = CoreConfigBuilder.yaml(input)
-        XCTAssertTrue(mirrored.contains("\nmixed-port: 7890\n"))
-        XCTAssertTrue(mirrored.contains("proxy-providers:"))
-        XCTAssertFalse(mirrored.contains("proxies:\n"))
-        XCTAssertTrue(mirrored.contains("  \"lan-share\":\n    - \"DOMAIN-SUFFIX,local,DIRECT\"\n"))
-        XCTAssertTrue(mirrored.hasSuffix("    - \"GEOIP,CN,DIRECT\"\n    - \"MATCH,节点\"\n"))
-        XCTAssertEqual(CoreConfigBuilder.shareRules(upstream: .unsupported("x"), mainRules: ["MATCH,节点"]), ["MATCH,DIRECT"])
-        XCTAssertEqual(CoreConfigBuilder.shareRules(upstream: .engine, mainRules: ["MATCH,节点"]), ["MATCH,节点"])
-        // 内置代理停用时不加载订阅，只做共享。
-        engine.enabled = false
-        input.engine = engine
-        let disabled = CoreConfigBuilder.yaml(input)
-        XCTAssertFalse(disabled.contains("proxy-providers:"))
-        XCTAssertTrue(disabled.contains("\nmixed-port: 0\n"))
+    func testInspectFindsTheActiveBuiltInProfile() {
+        let state = Data(#"{"lastProfileID":"\#(builtInID)","enabledByUs":true,"share":{"enabled":true}}"#.utf8)
+        let findings = LegacyCleanup.inspect(configData: legacyConfig, stateData: state)
+        XCTAssertTrue(findings.hadLegacySettings)
+        XCTAssertTrue(findings.needsNotice)
+        XCTAssertEqual(findings.builtInProfiles.map(\.id.uuidString), [builtInID])
+        XCTAssertEqual(findings.activeBuiltIn?.targets, [.system, .git])
+        XCTAssertEqual(findings.activeBuiltIn?.port, 7890)
+
+        // 没开着，或者开着的是自己的配置：不用关。
+        let off = Data(#"{"lastProfileID":"\#(builtInID)","enabledByUs":false}"#.utf8)
+        XCTAssertNil(LegacyCleanup.inspect(configData: legacyConfig, stateData: off).activeBuiltIn)
+        let plain = Data(#"{"lastProfileID":"\#(plainID)","enabledByUs":true}"#.utf8)
+        XCTAssertNil(LegacyCleanup.inspect(configData: legacyConfig, stateData: plain).activeBuiltIn)
     }
 
-    func testShareClientsGrouping() throws {
-        let json = """
-        {"downloadTotal":1,"uploadTotal":1,"connections":[
-          {"id":"1","metadata":{"network":"tcp","type":"Mixed","sourceIP":"192.168.1.20","destinationIP":"1.2.3.4","sourcePort":"1","destinationPort":"443","host":"store.playstation.com","inboundName":"lan-share"},"upload":10,"download":100,"start":"2026-09-27T10:00:01Z","chains":["DIRECT"],"rule":"Match","rulePayload":""},
-          {"id":"2","metadata":{"network":"tcp","type":"Mixed","sourceIP":"192.168.1.20","destinationIP":"5.6.7.8","sourcePort":"2","destinationPort":"443","host":"","inboundName":"lan-share"},"upload":1,"download":2,"start":"2026-09-27T10:00:00Z","chains":["DIRECT"],"rule":"Match","rulePayload":""},
-          {"id":"3","metadata":{"network":"tcp","type":"Mixed","sourceIP":"192.168.1.30","destinationIP":"","sourcePort":"9","destinationPort":"80","host":"example.org","inboundName":"lan-share"},"upload":0,"download":0,"start":"2026-09-27T10:00:05Z","chains":["上游代理"],"rule":"Match","rulePayload":""},
-          {"id":"4","metadata":{"network":"tcp","type":"Mixed","sourceIP":"127.0.0.1","destinationIP":"","sourcePort":"3","destinationPort":"80","host":"example.com","inboundName":""},"upload":5,"download":5,"start":"2026-09-27T10:00:02Z","chains":["节点"],"rule":"Match","rulePayload":""}
-        ]}
-        """
-        struct Envelope: Decodable { var connections: [CoreConnection] }
-        let connections = try JSONDecoder().decode(Envelope.self, from: Data(json.utf8)).connections
-        XCTAssertEqual(connections.count, 4)
-        XCTAssertEqual(connections[1].metadata.displayHost, "5.6.7.8")
-        let clients = ShareClient.group(connections, listener: "lan-share")
-        XCTAssertEqual(clients.map(\.ip), ["192.168.1.20", "192.168.1.30"])
-        XCTAssertEqual(clients[0].connections, 2)
-        XCTAssertEqual(clients[0].upload, 11)
-        XCTAssertEqual(clients[0].download, 102)
-        XCTAssertEqual(clients[0].lastHost, "store.playstation.com")
-        XCTAssertEqual(clients[0].lastOutbound, "DIRECT")
-        XCTAssertEqual(clients[1].lastHost, "example.org")
-        XCTAssertEqual(clients[1].lastOutbound, "上游代理")
-        // 内核在没有连接时给的是 null。
-        XCTAssertTrue(ShareClient.group([], listener: "lan-share").isEmpty)
-        // 「最近的连接」里的一条：目标、出口、规则、来源。
-        let recent = ConnectionRecord(connections[0])
-        XCTAssertEqual(recent.target, "store.playstation.com:443")
-        XCTAssertEqual(recent.outbound, "DIRECT")
-        XCTAssertEqual(recent.rule, "Match")
-        XCTAssertEqual(recent.client, "192.168.1.20")
-        XCTAssertTrue(recent.isShare)
-        XCTAssertEqual(recent.source, "192.168.1.20")
-        XCTAssertEqual(recent.route, "DIRECT")
-        XCTAssertEqual(ConnectionRecord(connections[1]).target, "5.6.7.8:443")
-        let local = ConnectionRecord(connections[3])
-        XCTAssertFalse(local.isShare)
-        XCTAssertEqual(local.source, "本机")
-        XCTAssertEqual(local.route, "节点")
-        XCTAssertNil(connections[3].group)
+    func testFreshConfigNeedsNothing() throws {
+        var config = AppConfig()
+        config.profiles = [Profile(name: "Charles", color: "#000", host: "127.0.0.1", port: 8888)]
+        let findings = LegacyCleanup.inspect(configData: try JSONEncoder().encode(config), stateData: try JSONEncoder().encode(PersistedState()))
+        XCTAssertFalse(findings.needsNotice)
+        XCTAssertNil(findings.activeBuiltIn)
+        XCTAssertFalse(LegacyCleanup.inspect(configData: nil, stateData: nil).needsNotice)
     }
 
-    func testShareURLCommands() {
-        XCTAssertEqual(URLCommand.parse(URL(string: "proxi://share")!), .share(nil))
-        XCTAssertEqual(URLCommand.parse(URL(string: "proxi://share/on")!), .share(true))
-        XCTAssertEqual(URLCommand.parse(URL(string: "proxi://share/off")!), .share(false))
-        XCTAssertEqual(URLCommand.parse(URL(string: "proxi://share?state=on")!), .share(true))
-        XCTAssertEqual(URLCommand.parse(URL(string: "proxi://settings?page=share")!), .settings(.share))
+    func testRemovesLegacyData() throws {
+        let fm = FileManager.default
+        let directory = fm.temporaryDirectory.appendingPathComponent("legacy-\(UUID().uuidString)", isDirectory: true)
+        defer { try? fm.removeItem(at: directory) }
+        try fm.createDirectory(at: directory.appendingPathComponent("core/rules"), withIntermediateDirectories: true)
+        try fm.createDirectory(at: directory.appendingPathComponent("imports"), withIntermediateDirectories: true)
+        try Data("[]".utf8).write(to: directory.appendingPathComponent("journal.json"))
+        try Data("{}".utf8).write(to: directory.appendingPathComponent("config.json"))
+        XCTAssertEqual(Set(LegacyCleanup.removeLegacyData(in: directory)), ["core", "imports", "journal.json"])
+        XCTAssertFalse(fm.fileExists(atPath: directory.appendingPathComponent("core").path))
+        XCTAssertTrue(fm.fileExists(atPath: directory.appendingPathComponent("config.json").path))
+        XCTAssertTrue(LegacyCleanup.removeLegacyData(in: directory).isEmpty)
     }
 
-    func testLocalNetworkAddresses() {
-        // 只看有线、Wi‑Fi 和网桥，不含回环和链路本地地址。
-        let addresses = LocalNetwork.ipv4Addresses()
-        XCTAssertFalse(addresses.values.contains("127.0.0.1"))
-        XCTAssertFalse(addresses.values.contains { $0.hasPrefix("169.254.") })
-        XCTAssertTrue(addresses.keys.allSatisfy { $0.hasPrefix("en") || $0.hasPrefix("bridge") })
-        XCTAssertEqual(LocalNetwork.addresses().map(\.ip).sorted(), Array(addresses.values).sorted())
+    func testPersistedStateDropsLegacyKeys() throws {
+        let data = Data(#"{"lastProfileID":"\#(plainID)","enabledByUs":true,"share":{"enabled":true},"traffic":{}}"#.utf8)
+        let state = try JSONDecoder().decode(PersistedState.self, from: data)
+        XCTAssertEqual(state.lastProfileID?.uuidString, plainID)
+        XCTAssertFalse(state.noticeShown)
+        let written = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(state)) as? [String: Any])
+        XCTAssertNil(written["share"])
+        XCTAssertNil(written["traffic"])
+    }
+
+    /// 现在写出来的键都在已知的名单里，不然每次启动都会当成以前版本的设置。
+    func testKnownKeysMatchWhatIsWritten() throws {
+        var config = AppConfig()
+        config.profiles = [Profile(name: "a", color: "#000", host: "h", port: 1)]
+        let configKeys = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(config)) as? [String: Any]).keys
+        XCTAssertEqual(Set(configKeys), LegacyCleanup.knownConfigKeys)
+        var state = PersistedState()
+        state.lastProfileID = UUID()
+        state.original = ProxySnapshot()
+        let stateKeys = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(state)) as? [String: Any]).keys
+        XCTAssertTrue(Set(stateKeys).isSubset(of: LegacyCleanup.knownStateKeys), "\(stateKeys)")
+    }
+
+    func testHelperRemovalScript() {
+        let script = LegacyCleanup.helperRemovalScript
+        XCTAssertTrue(script.contains("launchctl bootout system/com.whrss9527.proxyswitch.helper"), script)
+        XCTAssertTrue(script.contains("'/Library/PrivilegedHelperTools/com.whrss9527.proxyswitch.'*"), script)
+        XCTAssertTrue(script.contains("'/Library/LaunchDaemons/com.whrss9527.proxyswitch.helper.plist'"), script)
+        XCTAssertTrue(script.contains("rm -rf '/Library/Application Support/ProxySwitch'"), script)
+        // 只删以前版本的东西，不碰用户目录。
+        XCTAssertFalse(script.contains("~"), script)
+        XCTAssertFalse(script.contains(NSHomeDirectory()), script)
     }
 }

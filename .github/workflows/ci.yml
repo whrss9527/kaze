@@ -1028,7 +1028,9 @@ jobs:
   release:
     name: 发布新版本
     needs: plan-release
-    if: needs.plan-release.outputs.tag != ''
+    # plan-release 往上的「自动合并」在直接推到 main 时是 skipped，不加 !cancelled() 的话
+    # 默认的 success() 会因为上游有 skipped 的任务把这一步一起跳过，标签就打不出来。
+    if: ${{ !cancelled() && needs.plan-release.outputs.tag != '' }}
     permissions:
       contents: write
     uses: ./.github/workflows/release.yml

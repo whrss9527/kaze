@@ -63,8 +63,17 @@ jobs:
           # （和设置 → 通用 → 界面语言选「简体中文」一样）；英文界面在下一步单独启动。
           defaults write com.whrss9527.proxyswitch AppleLanguages -array zh-Hans
           # 预置几套配置，面板里有内容可看。「开发代理」只设终端环境变量、git 和 npm（不动 runner 的系统代理），还要登录：
-          # 配置里只有 hasPassword，密码放在钥匙串里（-A：任何程序都能读，免得测试时弹出钥匙串的授权对话框）。
-          security add-generic-password -U -A -s com.whrss9527.proxyswitch -a 6D2F2A1E-0000-4000-8000-000000000003 -l "Proxi 代理密码" -w 'p@ss word'
+          # 配置里只有 hasPassword，密码放在钥匙串里。用一个临时钥匙串（知道它的密码才能设访问分区），
+          # 允许这次打包的程序读（按它的 cdhash），免得测试时弹出钥匙串的授权对话框。
+          kc="$RUNNER_TEMP/proxi-ci.keychain-db"
+          security create-keychain -p ci "$kc"
+          security unlock-keychain -p ci "$kc"
+          security set-keychain-settings "$kc"
+          echo "$(security list-keychains -d user | tr -d '"' | xargs)" > "$RUNNER_TEMP/keychains-before"
+          security list-keychains -d user -s "$kc" $(cat "$RUNNER_TEMP/keychains-before")
+          cdhash=$(codesign -dvvv dist/Proxi.app 2>&1 | awk -F= '/^CDHash=/{print $2; exit}')
+          security add-generic-password -U -A -T dist/Proxi.app/Contents/MacOS/Proxi -s com.whrss9527.proxyswitch -a 6D2F2A1E-0000-4000-8000-000000000003 -l "Proxi 代理密码" -w 'p@ss word' "$kc"
+          security set-generic-password-partition-list -S "apple-tool:,apple:,unsigned:,cdhash:$cdhash" -s com.whrss9527.proxyswitch -k ci "$kc" >/dev/null
           cat > "$support/config.json" <<'JSON'
           {"profiles":[{"id":"6D2F2A1E-0000-4000-8000-000000000001","name":"Charles","color":"#16a34a","kind":"http","host":"127.0.0.1","port":8888},
                        {"id":"6D2F2A1E-0000-4000-8000-000000000002","name":"公司代理","color":"#2563eb","kind":"http","host":"proxy.corp.example","port":3128},
@@ -172,7 +181,8 @@ jobs:
           done
           pkill -x Proxi || true
           sleep 3
-          security delete-generic-password -s com.whrss9527.proxyswitch -a 6D2F2A1E-0000-4000-8000-000000000003 >/dev/null || true
+          security list-keychains -d user -s $(cat "$RUNNER_TEMP/keychains-before")
+          security delete-keychain "$kc" || true
           ls -la screenshots
           echo "冒烟测试通过"
       - name: 从 0.12 更新过来的配置（以前版本的设置、开着的内置代理、留下的文件）

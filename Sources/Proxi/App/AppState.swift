@@ -266,7 +266,7 @@ final class AppState: ObservableObject {
         // 要登录的代理：密码从这台 Mac 的钥匙串里取；还没有（比如配置是从别的 Mac 同步来的）就请用户输入一次。
         var password = ""
         if profile.needsPassword {
-            if let saved = ProxyKeychain.password(for: profile.id) {
+            if let saved = ProxyKeychain.password(for: profile.id, allowUI: askForPassword) {
                 password = saved
             } else if askForPassword, let entered = PasswordPrompt.ask(for: profile), !entered.isEmpty {
                 do {

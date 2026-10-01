@@ -16,10 +16,17 @@ enum ProxyKeychain {
         ]
     }
 
-    /// 读出密码；没有保存过返回 nil。
-    static func password(for id: UUID) -> String? {
+    /// 读出密码；没有保存过返回 nil。allowUI 为 false 时不弹出系统的钥匙串对话框（命令行和 AI 助手调用时），读不到就算没有。
+    static func password(for id: UUID, allowUI: Bool = true) -> String? {
         var request = query(id)
         request[kSecReturnData as String] = true
+        // 登录钥匙串（文件钥匙串）的授权对话框只能用这个全局开关关掉，读完马上恢复。
+        if !allowUI {
+            _ = SecKeychainSetUserInteractionAllowed(false)
+        }
+        defer {
+            if !allowUI { _ = SecKeychainSetUserInteractionAllowed(true) }
+        }
         request[kSecMatchLimit as String] = kSecMatchLimitOne
         var item: CFTypeRef?
         let status = SecItemCopyMatching(request as CFDictionary, &item)

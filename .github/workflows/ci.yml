@@ -772,7 +772,8 @@ jobs:
           pkill -x Proxi || true
           sleep 2
           security delete-keychain "$keychain"
-          # 公证脚本的流程：用假的 xcrun（只模拟 notarytool 和 stapler）走一遍通过、没通过、没有凭据三种情况。
+          # 公证脚本的流程：用假的 xcrun（只模拟 notarytool 和 stapler）和假的 spctl 走一遍通过、没通过、没有凭据，
+          # 以及公证通过但系统检查说没公证（照常发布、记警告）、系统检查因为别的原因不通过（失败）。
           fake="$work/fakebin"
           mkdir -p "$fake"
           cat > "$fake/xcrun" <<'EOF'
@@ -785,7 +786,14 @@ jobs:
             *) echo "fake xcrun: unexpected $*" >&2; exit 1 ;;
           esac
           EOF
-          printf '#!/bin/bash\necho "$*: accepted"\n' > "$fake/spctl"
+          cat > "$fake/spctl" <<'EOF'
+          #!/bin/bash
+          case "${FAKE_SPCTL:-accepted}" in
+            accepted) echo "${@: -1}: accepted"; echo "source=Notarized Developer ID" ;;
+            unnotarized) echo "${@: -1}: rejected" >&2; echo "source=Unnotarized Developer ID" >&2; exit 3 ;;
+            *) echo "${@: -1}: rejected" >&2; echo "source=no usable signature" >&2; exit 3 ;;
+          esac
+          EOF
           chmod +x "$fake/xcrun" "$fake/spctl"
           cp dist/Proxi-macos-arm64.zip "$work/test.zip"
           PATH="$fake:$PATH" NOTARY_APPLE_ID=ci@example.com NOTARY_PASSWORD=x NOTARY_TEAM_ID=ABCDE12345 Scripts/notarize.sh "$work/test.zip"
@@ -796,10 +804,19 @@ jobs:
             cat "$work/invalid.log"; echo "公证没通过时脚本应该失败"; exit 1
           fi
           grep -q "fake notary issue" "$work/invalid.log" || { cat "$work/invalid.log"; echo "公证没通过时没有打印苹果的日志"; exit 1; }
+          if ! PATH="$fake:$PATH" FAKE_SPCTL=unnotarized SPCTL_TRIES=2 SPCTL_INTERVAL=1 NOTARY_APPLE_ID=ci@example.com NOTARY_PASSWORD=x NOTARY_TEAM_ID=ABCDE12345 \
+              Scripts/notarize.sh "$work/test.zip" > "$work/unnotarized.log" 2>&1; then
+            cat "$work/unnotarized.log"; echo "公证通过、只是系统检查说没公证时应该照常发布"; exit 1
+          fi
+          grep -q "::warning::test.zip：公证已通过" "$work/unnotarized.log" || { cat "$work/unnotarized.log"; echo "系统检查说没公证时没有记警告"; exit 1; }
+          if PATH="$fake:$PATH" FAKE_SPCTL=other SPCTL_TRIES=2 SPCTL_INTERVAL=1 NOTARY_APPLE_ID=ci@example.com NOTARY_PASSWORD=x NOTARY_TEAM_ID=ABCDE12345 \
+              Scripts/notarize.sh "$work/test.zip" > "$work/rejected.log" 2>&1; then
+            cat "$work/rejected.log"; echo "系统检查因为别的原因不通过时脚本应该失败"; exit 1
+          fi
           if Scripts/notarize.sh "$work/test.zip" > "$work/nocreds.log" 2>&1; then
             cat "$work/nocreds.log"; echo "没有公证凭据时脚本应该失败"; exit 1
           fi
-          echo "公证脚本的三种情况都符合预期" | tee -a screenshots/summary.txt
+          echo "公证脚本的五种情况都符合预期" | tee -a screenshots/summary.txt
           # 公证脚本用到的命令和参数，这个 Xcode 里都有。
           for command in submit wait; do
             help=$(xcrun notarytool "$command" --help 2>&1)

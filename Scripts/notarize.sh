@@ -80,24 +80,39 @@ for zip in "$@"; do
   [ -n "$app" ] || { echo "$name 里没有 .app"; exit 1; }
   xcrun stapler staple "$app"
   xcrun stapler validate "$app"
-  # 刚钉上票据时系统可能还认不出来，隔几秒多试几次；一直不通过就把能看到的信息都打出来再失败。
+  # 刚钉上票据时系统可能还认不出来，隔几秒多试几次（次数和间隔可以用 SPCTL_TRIES、SPCTL_INTERVAL 改，CI 自测用）。
   assessed=0
-  for attempt in 1 2 3 4 5 6; do
+  tries="${SPCTL_TRIES:-6}"
+  interval="${SPCTL_INTERVAL:-10}"
+  for attempt in $(seq 1 "$tries"); do
     if spctl --assess --type execute --verbose=2 "$app"; then
       assessed=1
       break
     fi
-    echo "  第 $attempt 次检查没通过，10 秒后再试"
-    sleep 10
+    echo "  第 $attempt 次检查没通过，${interval} 秒后再试"
+    sleep "$interval"
   done
   if [ "$assessed" != 1 ]; then
-    echo "===== 系统不认这个程序（为什么没通过） ====="
-    spctl --assess --type execute -vvv "$app" 2>&1 || true
+    echo "===== 系统检查没通过，详细信息 ====="
+    assessment="$(spctl --assess --type execute -vvv "$app" 2>&1 || true)"
+    echo "$assessment"
     codesign -dvvv "$app" 2>&1 || true
-    codesign --verify --deep --strict --verbose=2 "$app" 2>&1 || true
-    xcrun stapler validate -v "$app" 2>&1 || true
-    xcrun notarytool log "$id" "${auth[@]}" || true
-    exit 1
+    if command -v syspolicy_check >/dev/null; then
+      syspolicy_check distribution "$app" 2>&1 || true
+    fi
+    # 苹果已经通过公证（上面是 Accepted）、票据钉上并核对过、签名完整，只有这台机器的系统检查说「没公证」：
+    # 发布用的 macOS 机器上有时这样（0.14.0、0.14.2 都遇到过，同一个镜像别的时候又正常），不拦发布，记一条警告。
+    # 别的原因（签名坏了、证书被吊销、票据核对不过……）照样失败。
+    if grep -q "source=Unnotarized Developer ID" <<< "$assessment" \
+       && codesign --verify --deep --strict "$app" 2>/dev/null \
+       && xcrun stapler validate "$app" >/dev/null 2>&1; then
+      echo "::warning::${name}：公证已通过、票据已钉上，但这台机器的系统检查仍说没有公证，照常发布"
+    else
+      codesign --verify --deep --strict --verbose=2 "$app" 2>&1 || true
+      xcrun stapler validate -v "$app" 2>&1 || true
+      xcrun notarytool log "$id" "${auth[@]}" || true
+      exit 1
+    fi
   fi
   target="$(cd "$(dirname "$zip")" && pwd)/$name"
   rm -f "$target"

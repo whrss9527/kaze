@@ -25,15 +25,42 @@ jobs:
       - name: 检查界面文字的翻译
         # 代码里的中文都经过 L()，英文和简体中文的翻译表和代码一致。
         run: python3 Scripts/check-localization.py
+      - name: 公开的文字里不提可选扩展的内容
+        run: |
+          # README、docs（docs/extension.md 除外）、CHANGELOG 最上面一节（发布说明就是它）、扩展关着时也会显示的界面文字（Proxi 的翻译表和 Info.plist）。
+          words='机场|翻墙|科学上网|GFW|VPN|netflix|youtube|chatgpt|telegram|流媒体'
+          awk '/^## /{n++} n==1' CHANGELOG.md > "$RUNNER_TEMP/changelog-top.md"
+          files=(README.md README.zh-CN.md "$RUNNER_TEMP/changelog-top.md" Resources/en.lproj/*.strings Resources/zh-Hans.lproj/*.strings Resources/Info.plist)
+          for f in docs/*.md; do [ "$f" = docs/extension.md ] || files+=("$f"); done
+          if grep -n -i -E "$words" "${files[@]}"; then echo "上面这些公开的文字里不该出现这些词"; exit 1; fi
+          # 发布说明（CHANGELOG 最上面一节）只说设置里多了「扩展」页，不写它是什么。
+          if grep -n -E '代理引擎|Proxi-Engine|mihomo|内核|订阅|节点' "$RUNNER_TEMP/changelog-top.md"; then echo "发布说明里不该介绍扩展"; exit 1; fi
+          for f in README.md README.zh-CN.md docs/guide.md docs/automation.md docs/development.md; do
+            if grep -n -E 'extension\.md|代理引擎|Proxy Engine|mihomo' "$f"; then echo "$f 里不该提扩展"; exit 1; fi
+          done
+          echo "公开的文字检查通过"
       - name: 编译
-        run: swift build
+        run: |
+          # 出错时把去重后的错误打在最后（警告很多，原样输出会把错误淹没）。
+          if ! swift build > "$RUNNER_TEMP/build.log" 2>&1; then
+            grep -E "^/.*error:" "$RUNNER_TEMP/build.log" | sort -u | head -150 | tee "$RUNNER_TEMP/build-errors.txt"
+            echo "::error title=编译错误::$(head -60 "$RUNNER_TEMP/build-errors.txt" | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')"
+            exit 1
+          fi
+          grep -E "error:" "$RUNNER_TEMP/build.log" | sort -u | head -20 || true
       - name: 单元测试
         run: |
           set -o pipefail
           # 顺便把菜单栏图标各种状态的对照图画出来，最后一步打进日志。
           # Team ID 的比对必须拿 runner 上真实的 Developer ID 程序测到，不许跳过。
           mkdir -p screenshots
-          PROXI_ICON_PREVIEW_DIR="$PWD/screenshots" PROXI_REQUIRE_SIGNED_SAMPLE=1 swift test 2>&1 | tee "$RUNNER_TEMP/test.log"
+          # 代理引擎的单元测试会写它的日志：放到临时目录，不和后面冒烟测试的数据目录混在一起。
+          if ! PROXI_ENGINE_DIR="$RUNNER_TEMP/engine-tests" PROXI_ICON_PREVIEW_DIR="$PWD/screenshots" PROXI_REQUIRE_SIGNED_SAMPLE=1 swift test > "$RUNNER_TEMP/test.log" 2>&1; then
+            # 失败时只打错误和没通过的测试（编译警告很多）。
+            grep -E "^/.*error:|error: -\[|failed \(|Executed [0-9]+ tests" "$RUNNER_TEMP/test.log" | sort -u | head -150 | tee "$RUNNER_TEMP/test-errors.txt"
+            echo "::error title=单元测试失败::$(head -60 "$RUNNER_TEMP/test-errors.txt" | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')"
+            exit 1
+          fi
           grep -E "testCodeSignatureTeam|Executed [0-9]+ tests" "$RUNNER_TEMP/test.log" | tail -3 > screenshots/summary.txt || true
       - name: 打包 .app（本机架构）
         run: |
@@ -42,6 +69,23 @@ jobs:
           [ "$(lipo -archs dist/thin-arm64/Proxi.app/Contents/MacOS/Proxi)" = "arm64" ] || { echo "精简包里的程序不是单架构"; exit 1; }
           # 程序里只有 Proxi 自己一个可执行文件，没有别的打包进来的程序。
           [ "$(ls dist/Proxi.app/Contents/MacOS)" = "Proxi" ] || { ls -la dist/Proxi.app/Contents/MacOS; echo "Contents/MacOS 里多了别的文件"; exit 1; }
+          # 两个程序里都没有内核和 GeoIP 数据库（代理引擎第一次运行时才下载）。
+          engine_app="dist/Proxi Engine.app"
+          [ -d "$engine_app" ] || { echo "没有组装代理引擎"; exit 1; }
+          [ "$(ls "$engine_app/Contents/MacOS")" = "ProxiEngine" ] || { ls -la "$engine_app/Contents/MacOS"; echo "代理引擎里多了别的可执行文件"; exit 1; }
+          found=$(find dist/Proxi.app "$engine_app" \( -iname '*mihomo*' -o -iname '*.mmdb' -o -iname '*clash*' \) -print)
+          [ -z "$found" ] || { echo "程序里打包了内核或 GeoIP 数据库：$found"; exit 1; }
+          for bin in dist/Proxi.app/Contents/MacOS/* "$engine_app"/Contents/MacOS/*; do
+            if file "$bin" | grep -qi "go buildid" || strings -a "$bin" | grep -q "^go1\.[0-9]"; then echo "$bin 像是 Go 写的内核"; exit 1; fi
+          done
+          # Proxi.app 里没有代理引擎的代码：引擎特有的类型名和内核配置的写法在 Proxi 的二进制里都找不到（在代理引擎的二进制里能找到，确认这个检查有效）。
+          markers='CoreConfigBuilder|ConfigImporter|HelperDaemon|RuleConverter|proxy-groups|rule-providers|mixed-port|PolicyGroupKind'
+          if strings -a dist/Proxi.app/Contents/MacOS/Proxi | grep -E "$markers" | head -5 | grep .; then echo "Proxi.app 里有代理引擎的代码"; exit 1; fi
+          [ "$(strings -a "$engine_app/Contents/MacOS/ProxiEngine" | grep -cE "$markers")" -gt 0 ] || { echo "检查方法不对：代理引擎的二进制里也找不到这些名字"; exit 1; }
+          [ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$engine_app/Contents/Info.plist")" = "com.whrss9527.proxyswitch.engine" ] || { echo "代理引擎的标识不对"; exit 1; }
+          [ -f dist/Proxi-Engine-0.0.0.zip ] || { echo "没有生成代理引擎的压缩包"; exit 1; }
+          codesign -dv "$engine_app" 2>&1 | grep -q 'flags=.*runtime' || { echo "代理引擎没有开 hardened runtime"; exit 1; }
+          echo "程序大小：Proxi.app $(du -sh dist/Proxi.app | cut -f1)，Proxi Engine.app $(du -sh "$engine_app" | cut -f1)" | tee -a screenshots/summary.txt
           [ -f dist/Proxi.app/Contents/Resources/donate-wechat.png ] || { echo "关于页的赞赏码没有打包进去"; exit 1; }
           for lang in en zh-Hans; do
             for table in Localizable InfoPlist; do
@@ -59,6 +103,8 @@ jobs:
           exec > >(tee "$RUNNER_TEMP/smoke.log") 2>&1
           support="$HOME/Library/Application Support/Proxi"
           mkdir -p "$support" screenshots
+          # 单元测试也写过日志，从干净的日志开始。
+          : > "$support/proxi.log"
           # runner 的系统语言是英文。下面的检查和截图用中文界面：先在 Proxi 自己的偏好设置里把界面语言选成简体中文
           # （和设置 → 通用 → 界面语言选「简体中文」一样）；英文界面在下一步单独启动。
           defaults write com.whrss9527.proxyswitch AppleLanguages -array zh-Hans
@@ -113,11 +159,14 @@ jobs:
           screencapture -x screenshots/automation.png || true
           open "proxi://settings?page=general"; sleep 3
           screencapture -x screenshots/general.png || true
+          open "proxi://settings?page=extensions"; sleep 3
+          screencapture -x screenshots/extensions.png || true
           echo "===== 程序日志 ====="; cat "$support/proxi.log" || true
           grep -q "应用了来自 另一台 Mac 的配置" "$support/proxi.log" || { echo "没有从假 iCloud 拉到配置"; exit 1; }
           grep -q '界面语言 english=false setting=simplifiedChinese sample="设置…"' "$support/proxi.log" || { echo "界面选了简体中文，应该是中文"; exit 1; }
           grep -q "iCloud 来的" "$support/config.json" || { echo "拉到的配置没有写到本机"; cat "$support/config.json"; exit 1; }
-          grep -q "已显示 0.13.0 的说明" "$support/proxi.log" && { echo "新装的配置不该显示更新说明"; exit 1; }
+          grep -q "已显示扩展说明\|已显示后台助手的提示" "$support/proxi.log" && { echo "新装的配置不该显示提示"; exit 1; }
+          grep -q "扩展：代理引擎没有开启" "$support/proxi.log" || { echo "扩展默认应该关着"; exit 1; }
           # 命令行、MCP 和 URL 命令：经本机控制接口操作正在运行的程序。
           cli=dist/Proxi.app/Contents/MacOS/Proxi
           [ -S "$support/control.sock" ] || { echo "本机控制接口没有开"; cat "$support/proxi.log"; exit 1; }
@@ -166,6 +215,11 @@ jobs:
           grep -q '"name":"get_status"' "$RUNNER_TEMP/mcp.out" || { echo "MCP 没有列出工具"; exit 1; }
           grep -q '"name":"use_profile"' "$RUNNER_TEMP/mcp.out" || { echo "MCP 没有切换配置的工具"; exit 1; }
           grep -q 'iCloud 来的' "$RUNNER_TEMP/mcp.out" || { echo "MCP 调用工具失败"; exit 1; }
+          # 扩展关着（默认）：命令行和 MCP 只报告它没开，没有它的命令和工具。
+          grep -q '"extension"' "$RUNNER_TEMP/status.json" || { echo "状态里没有报告扩展"; exit 1; }
+          python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert d['extension']=={'enabled': False}, d['extension']" "$RUNNER_TEMP/status.json" || { echo "扩展应该是关着的"; exit 1; }
+          if grep -qE '"name":"(list_nodes|select_node|add_subscription|set_tun|check_url)"' "$RUNNER_TEMP/mcp.out"; then echo "扩展关着时 MCP 不该有它的工具"; exit 1; fi
+          "$cli" help | grep -qiE "subscription|节点|订阅|engine|引擎" && { echo "扩展关着时命令行的用法里不该提它"; exit 1; }
           # URL 命令经同一个接口：用改名前的写法（proxyswitch://）切到「开发代理」，它照样认。
           open "proxyswitch://use?name=%E5%BC%80%E5%8F%91%E4%BB%A3%E7%90%86"
           for i in $(seq 1 20); do [ "$(gitproxy)" = "$expected" ] && break; sleep 0.5; done
@@ -179,71 +233,254 @@ jobs:
           for file in "$support/proxi.log" "$support/config.json" "$support/state.json" "$cloud/config.json" "$RUNNER_TEMP/logs.txt" "$RUNNER_TEMP/status-on.txt"; do
             if grep -qE 'p@ss|p%40ss' "$file"; then echo "$file 里有密码"; exit 1; fi
           done
+          # 扩展关着：没有下载、没有和它有关的网络请求、没有它的文件和进程。
+          grep -q "扩展网络请求" "$support/proxi.log" && { echo "扩展关着时不该有它的网络请求"; grep "扩展网络请求" "$support/proxi.log"; exit 1; }
+          grep -qiE "mihomo|Proxi-Engine|MetaCubeX|geoip" "$support/proxi.log" && { echo "扩展关着时日志里不该出现它的下载"; exit 1; }
+          for item in Extensions engine; do
+            [ ! -e "$support/$item" ] || { echo "扩展关着时不该有 $item"; ls -la "$support/$item"; exit 1; }
+          done
+          pgrep -x ProxiEngine && { echo "扩展关着时代理引擎不该在运行"; exit 1; }
+          pgrep -x mihomo && { echo "扩展关着时内核不该在运行"; exit 1; }
           pkill -x Proxi || true
           sleep 3
           security list-keychains -d user -s $(cat "$RUNNER_TEMP/keychains-before")
           security delete-keychain "$kc" || true
           ls -la screenshots
           echo "冒烟测试通过"
-      - name: 从 0.12 更新过来的配置（以前版本的设置、开着的内置代理、留下的文件）
+      - name: 从 0.12 更新过来的配置（代理引擎的数据原样保留，问一次要不要开启扩展）
         run: |
+          exec > >(tee "$RUNNER_TEMP/migration.log") 2>&1
           support="$HOME/Library/Application Support/Proxi"
-          # 以前版本的配置：一条自动生成的配置开着（只设了 git，不动 runner 的系统代理），配置和状态里有以前版本才有的设置，
-          # 数据目录里有以前版本的子目录和文件；另外放一份假的后台助手文件（不加载），看能不能认出来。
           cp "$support/config.json" "$RUNNER_TEMP/config-backup.json"
-          cat > "$support/config.json" <<'JSON'
-          {"profiles":[{"id":"6D2F2A1E-0000-4000-8000-0000000000AA","name":"Built-in","color":"#2563eb","kind":"http","host":"127.0.0.1","port":7890,"engine":true,"targets":["git"]},
+          # 以前版本的数据：代理引擎那条配置开着（只设了 git，不动 runner 的系统代理），有订阅（本机文件，runner 上连本机端口会被「本地网络」权限拦住）、
+          # 手动节点、策略组和规则；数据目录里有 core/、imports/ 和操作记录；另外放一份假的后台助手文件（不加载），看能不能认出来。
+          mkdir -p "$RUNNER_TEMP/sub"
+          python3 - "$RUNNER_TEMP/sub/sub.txt" <<'PY'
+          import base64, sys, urllib.parse
+          uris = [f"ss://YWVzLTEyOC1nY206cGFzc3dvcmQ=@127.0.0.1:{port}#{urllib.parse.quote(name)}" for port, name in [(8388, "测试节点A"), (8389, "测试节点B")]]
+          uris.append("trojan://password@example.com:443#" + urllib.parse.quote("测试节点C"))
+          # 订阅设了「去掉 过期」：这个节点不该出现。
+          uris.append("trojan://password@example.com:443#" + urllib.parse.quote("过期节点"))
+          open(sys.argv[1], "w").write(base64.b64encode("\n".join(uris).encode()).decode())
+          PY
+          cat > "$support/config.json" <<JSON
+          {"profiles":[{"id":"6D2F2A1E-0000-4000-8000-0000000000AA","name":"节点代理","color":"#2563eb","kind":"http","host":"127.0.0.1","port":7890,"engine":true,"targets":["git"]},
                        {"id":"6D2F2A1E-0000-4000-8000-000000000002","name":"公司代理","color":"#2563eb","kind":"http","host":"proxy.corp.example","port":3128}],
-           "engine":{"mode":"rule","mixedPort":7890},"speedDisplay":"engine","automation":{"permission":"full"}}
+           "engine":{"mode":"rule","mixedPort":7890,
+                     "subscriptions":[{"id":"6D2F2A1E-0000-4000-8000-00000000000A","name":"测试订阅","url":"file://$RUNNER_TEMP/sub/sub.txt","exclude":"过期"}],
+                     "groups":[{"name":"组 A","kind":"select","filter":"A|B"}],
+                     "customRules":[{"pattern":"example.net","policy":"group:组 A"},{"kind":"app","pattern":"/Applications/Safari.app","policy":"direct"}],
+                     "manualNodes":[{"link":"trojan://password@example.com:443#%E6%89%8B%E5%8A%A8%E8%8A%82%E7%82%B9D"}],
+                     "ruleSets":[]},
+           "speedDisplay":"engine","automation":{"permission":"full"}}
           JSON
-          echo '{"lastProfileID":"6D2F2A1E-0000-4000-8000-0000000000AA","enabledByUs":true,"share":{"enabled":true,"port":7892},"traffic":{}}' > "$support/state.json"
+          echo '{"lastProfileID":"6D2F2A1E-0000-4000-8000-0000000000AA","enabledByUs":true,"share":{"enabled":false,"port":7892},"traffic":{}}' > "$support/state.json"
           git config --global http.proxy http://127.0.0.1:7890
           git config --global https.proxy http://127.0.0.1:7890
           mkdir -p "$support/core/rules" "$support/imports"
-          echo x > "$support/core/config.yaml"
+          echo "x" > "$support/core/config.yaml"
+          echo "imported" > "$support/imports/nodes.txt"
           echo '[]' > "$support/journal.json"
           sudo mkdir -p /Library/PrivilegedHelperTools
           sudo touch /Library/PrivilegedHelperTools/com.whrss9527.proxyswitch.helper
           : > "$support/proxi.log"
           dist/Proxi.app/Contents/MacOS/Proxi >/dev/null 2>&1 &
-          for i in $(seq 1 30); do grep -q "已显示 0.13.0 的说明" "$support/proxi.log" && grep -q "已关闭以前版本的内置代理" "$support/proxi.log" && break; sleep 1; done
+          for i in $(seq 1 30); do grep -q "已显示扩展说明" "$support/proxi.log" && grep -q "已关闭以前版本开着的代理引擎配置" "$support/proxi.log" && break; sleep 1; done
           sleep 3
           screencapture -x screenshots/upgrade-notice.png || true
           echo "===== 程序日志 ====="; cat "$support/proxi.log"
-          grep -q "已显示 0.13.0 的说明" "$support/proxi.log" || { echo "没有显示更新说明"; exit 1; }
-          grep -q "已关闭以前版本的内置代理" "$support/proxi.log" || { echo "没有关掉以前版本开着的代理"; exit 1; }
-          grep -q "以前版本的后台助手还在" "$support/proxi.log" || { echo "没有认出以前版本的后台助手"; exit 1; }
+          grep -q "已显示扩展说明" "$support/proxi.log" || { echo "有代理引擎的数据，应该问一次要不要开启扩展"; exit 1; }
+          grep -q "以前版本的代理引擎数据已放到" "$support/proxi.log" || { echo "没有迁移代理引擎的数据"; exit 1; }
+          grep -q "已关闭以前版本开着的代理引擎配置" "$support/proxi.log" || { echo "没有先关掉以前开着的代理引擎配置"; exit 1; }
+          grep -q "以前版本的后台助手还在，扩展没开" "$support/proxi.log" || { echo "没有认出以前版本的后台助手"; exit 1; }
           [ -z "$(git config --global --get http.proxy || true)" ] || { echo "以前版本设的 git 代理没有清掉"; exit 1; }
-          for item in core imports journal.json; do
-            [ ! -e "$support/$item" ] || { echo "以前版本留下的 $item 没有删掉"; exit 1; }
+          # 数据一个都没删：挪到了代理引擎的数据目录，配置原样复制，另有备份。
+          engine="$support/engine"
+          ls -la "$engine"
+          for item in config.json state.json config-0.12-backup.json state-0.12-backup.json core/config.yaml imports/nodes.txt journal.json; do
+            [ -e "$engine/$item" ] || { echo "代理引擎的数据里少了 $item"; exit 1; }
           done
-          cat "$support/config.json"
+          grep -q "测试订阅" "$engine/config.json" || { echo "订阅没有带到代理引擎的配置里"; exit 1; }
+          grep -q "手动节点" "$engine/config-0.12-backup.json" || grep -q "%E6%89%8B" "$engine/config-0.12-backup.json" || { echo "备份不完整"; exit 1; }
+          [ "$(cat "$engine/imports/nodes.txt")" = "imported" ] || { echo "imports 的内容不对"; exit 1; }
           python3 - "$support/config.json" "$support/state.json" <<'PY' || exit 1
           import json, sys
           config = json.load(open(sys.argv[1]))
           state = json.load(open(sys.argv[2]))
-          assert "engine" not in config, "配置里还有以前版本的设置"
+          assert "engine" not in config, "Proxi 的配置里不该再有代理引擎的设置（已经挪走）"
           assert [p["name"] for p in config["profiles"]] == ["公司代理"], config["profiles"]
           assert config["speedDisplay"] == "system" and config["automation"]["permission"] == "operate", config
-          assert not set(state) - {"lastProfileID", "enabledByUs", "original", "syncEnabled", "noticeShown"}, state
-          assert state["noticeShown"] is True and state["enabledByUs"] is False, state
+          ext = state["extension"]
+          assert ext["enabled"] is False and ext["pendingMigration"] is False and ext["restoreActive"] is True and ext["migrationChecked"] is True, ext
+          assert ext["profile"]["id"] == "6D2F2A1E-0000-4000-8000-0000000000AA" and ext["profile"]["targets"] == ["git"], ext
+          assert state["enabledByUs"] is False, state
           print("配置迁移正确")
           PY
+          # 用户还没同意：什么都不下载，没有和扩展有关的网络请求。
+          grep -q "扩展网络请求" "$support/proxi.log" && { echo "没同意说明前不该有扩展的网络请求"; exit 1; }
+          [ ! -e "$support/Extensions" ] || { echo "没同意说明前不该下载代理引擎"; exit 1; }
+          [ ! -e "$engine/bin" ] || { echo "没同意说明前不该下载内核"; exit 1; }
+          pgrep -x ProxiEngine && { echo "没同意说明前代理引擎不该在运行"; exit 1; }
           pkill -x Proxi || true
           sleep 3
-          # 第二次启动不再显示说明。
+          # 第二次启动不再问。
           : > "$support/proxi.log"
           dist/Proxi.app/Contents/MacOS/Proxi >/dev/null 2>&1 &
           for i in $(seq 1 30); do grep -q "界面语言 english=" "$support/proxi.log" && break; sleep 1; done
           sleep 3
-          grep -q "已显示 0.13.0 的说明" "$support/proxi.log" && { echo "说明显示了不止一次"; exit 1; }
+          grep -q "已显示扩展说明" "$support/proxi.log" && { echo "说明显示了不止一次"; exit 1; }
+          grep -q "扩展网络请求" "$support/proxi.log" && { echo "没同意说明前不该有扩展的网络请求"; exit 1; }
           pkill -x Proxi || true
           sleep 2
+          # 退出程序不算「暂不开启」：以前开着的配置还记着，开启扩展后开回来。
+          python3 -c "import json,sys; e=json.load(open(sys.argv[1]))['extension']; assert e['restoreActive'] and not e['enabled'], e" "$support/state.json" || { echo "退出后扩展的状态不对"; exit 1; }
           sudo rm -f /Library/PrivilegedHelperTools/com.whrss9527.proxyswitch.helper
           git config --global --unset-all https.proxy || true
+          echo "迁移测试通过"
+      - name: 开启扩展：下载代理引擎和内核，用以前的数据启动（本地假发布 + 真实的内核下载）
+        run: |
+          exec > >(tee "$RUNNER_TEMP/extension.log") 2>&1
+          support="$HOME/Library/Application Support/Proxi"
+          engine="$support/engine"
+          # 本地假发布：这次打包的代理引擎和校验和，格式和 GitHub 的发布接口一样。
+          feed="$RUNNER_TEMP/ext-feed"
+          rm -rf "$feed" && mkdir -p "$feed"
+          cp dist/Proxi-Engine-0.0.0.zip "$feed/"
+          (cd "$feed" && shasum -a 256 Proxi-Engine-0.0.0.zip > SHA256SUMS.txt && cat SHA256SUMS.txt)
+          size=$(stat -f %z "$feed/Proxi-Engine-0.0.0.zip")
+          cat > "$feed/release.json" <<JSON
+          {"tag_name":"v0.0.0","assets":[{"name":"Proxi-Engine-0.0.0.zip","size":$size,"browser_download_url":"http://127.0.0.1:8767/Proxi-Engine-0.0.0.zip"},
+                                        {"name":"SHA256SUMS.txt","size":100,"browser_download_url":"http://127.0.0.1:8767/SHA256SUMS.txt"}]}
+          JSON
+          (cd "$feed" && python3 -m http.server 8767 --bind 127.0.0.1 >/dev/null 2>&1 &)
+          for i in $(seq 1 30); do curl -sf -o /dev/null http://127.0.0.1:8767/release.json && break; sleep 0.5; done
+          # 用测试用的环境变量当作用户勾选了同意并开启（界面上的流程和截图在上一步）。
+          : > "$support/proxi.log"
+          PROXI_EXTENSION_FEED=http://127.0.0.1:8767/release.json PROXI_TEST_ACCEPT_EXTENSION=1 dist/Proxi.app/Contents/MacOS/Proxi >/dev/null 2>&1 &
+          for i in $(seq 1 90); do grep -q "扩展：代理引擎 0.0.0 已安装" "$support/proxi.log" && break; sleep 1; done
+          grep -q "扩展：代理引擎 0.0.0 已安装" "$support/proxi.log" || { echo "代理引擎没有装上"; cat "$support/proxi.log"; exit 1; }
+          grep -q "扩展网络请求 http://127.0.0.1:8767/release.json" "$support/proxi.log" || { echo "没有从发布信息找下载地址"; exit 1; }
+          app="$support/Extensions/Proxi Engine.app"
+          codesign --verify --deep --strict "$app"
+          bin="$app/Contents/MacOS/ProxiEngine"
+          # 代理引擎第一次运行：下载内核和 GeoIP 数据库（上游的正式发布，核对写死的 SHA-256），读以前的订阅，启动内核。
+          for i in $(seq 1 180); do grep -q "读取到 4 个节点" "$engine/engine.log" 2>/dev/null && break; sleep 1; done
+          echo "===== 代理引擎的日志 ====="; cat "$engine/engine.log" || true
+          grep -q "下载 https://github.com/MetaCubeX/mihomo/releases/download/v1.19.31/" "$engine/engine.log" || { echo "没有从上游的发布下载内核"; exit 1; }
+          grep -q "内核 v1.19.31 和 GeoIP 数据库已下载并校验" "$engine/engine.log" || { echo "内核没有下载校验好"; exit 1; }
+          grep -q "内核已启动" "$engine/engine.log" || { echo "内核没有启动"; exit 1; }
+          grep -q "读取到 4 个节点" "$engine/engine.log" || { echo "没有读到以前的订阅里的 3 个节点和 1 个手动节点"; exit 1; }
+          expected=$(python3 -c 'import platform; print({"arm64":"fae1f37e28ee53fcf5be7a8bb121099db1fe442e44205734ed49c62579364090"}.get(platform.machine(),"d1361fdb7f93ac500d8c936cfd61516b2445c6acfaabe982244fdd765872e077"))')
+          [ "$(shasum -a 256 "$engine/bin/mihomo" | cut -d' ' -f1)" = "$expected" ] || { echo "下载的内核和写死的校验和不一样"; exit 1; }
+          [ -f "$engine/bin/Country.mmdb" ] || { echo "没有下载 GeoIP 数据库"; exit 1; }
+          find "$app" -iname '*mihomo*' | grep . && { echo "内核不该放进程序里"; exit 1; }
+          # 以前开着的「节点代理」（只设了 git）开回来了，指向代理引擎的端口。
+          for i in $(seq 1 30); do [ "$(git config --global --includes --get http.proxy || true)" = "http://127.0.0.1:7890" ] && break; sleep 1; done
+          echo "===== 程序日志 ====="; cat "$support/proxi.log"
+          [ "$(git config --global --includes --get http.proxy || true)" = "http://127.0.0.1:7890" ] || { echo "以前开着的代理引擎配置没有开回来"; exit 1; }
+          grep -q "代理引擎运行起来了，开回以前开着的「节点代理」" "$support/proxi.log" || { echo "日志里没有开回来的记录"; exit 1; }
+          cli=dist/Proxi.app/Contents/MacOS/Proxi
+          "$cli" status --json | tee "$RUNNER_TEMP/ext-status.json"
+          python3 -c "import json,sys; e=json.load(open(sys.argv[1]))['extension']; assert e['enabled'] and e['running'] and e['port']==7890, e" "$RUNNER_TEMP/ext-status.json" || { echo "状态里的扩展不对"; exit 1; }
+          "$cli" status | tee "$RUNNER_TEMP/ext-status.txt"
+          grep -q "节点代理" "$RUNNER_TEMP/ext-status.txt" || { echo "状态里没有正在用的代理引擎配置"; exit 1; }
+          "$cli" profiles | grep -q "节点代理" || { echo "配置列表里没有代理引擎那条配置"; exit 1; }
+          grep -q '"engine"' "$support/config.json" && { echo "代理引擎那条配置不该写进 Proxi 的 config.json"; exit 1; }
+          # 经代理引擎的端口访问（假节点都连不上，自动选择会退回直连）。
+          echo "经代理引擎访问外网：$(curl -s -m 10 -x http://127.0.0.1:7890 -o /dev/null -w '%{http_code}' https://www.apple.com/library/test/success.html || true)"
+          # 代理引擎自己的命令行：经它的本机控制接口操作。
+          core="$engine/core/config.yaml"
+          "$bin" status --json | tee "$RUNNER_TEMP/engine-status.json"
+          grep -q '"engine"' "$RUNNER_TEMP/engine-status.json" || { echo "代理引擎的命令行读不到状态"; exit 1; }
+          "$bin" nodes 测试
+          "$bin" rule add example.org direct --type suffix
+          for i in $(seq 1 20); do grep -q 'DOMAIN-SUFFIX,example.org,DIRECT' "$core" && break; sleep 0.5; done
+          grep -q 'DOMAIN-SUFFIX,example.org,DIRECT' "$core" || { echo "命令行加的规则没有进内核配置"; exit 1; }
+          "$bin" undo
+          for i in $(seq 1 20); do grep -q 'DOMAIN-SUFFIX,example.org,DIRECT' "$core" || break; sleep 0.5; done
+          grep -q 'DOMAIN-SUFFIX,example.org,DIRECT' "$core" && { echo "撤销没有生效"; exit 1; }
+          grep -q 'name: "组 A"' "$core" || { echo "以前的策略组没有进内核配置"; exit 1; }
+          grep -q 'DOMAIN-SUFFIX,example.net,组 A' "$core" || { echo "以前的规则没有进内核配置"; exit 1; }
+          grep -q 'exclude-filter: "(?i)过期"' "$core" || { echo "订阅的排除没有写进内核配置"; exit 1; }
+          "$bin" check https://www.apple.com/library/test/success.html || true
+          # 截图：Proxi 的面板和扩展页，代理引擎的面板和设置。
+          open "proxi://panel"; sleep 3
+          screencapture -x screenshots/ext-panel.png || true
+          open "proxi://settings?page=extensions"; sleep 3
+          screencapture -x screenshots/ext-page.png || true
+          open "proxi://settings?page=profiles"; sleep 3
+          screencapture -x screenshots/ext-profiles.png || true
+          open -a "$app"; sleep 4
+          screencapture -x screenshots/engine-settings.png || true
+          # 特权助手：装的时候核对内核的校验和，认不出的内核不装；装好以后经它以 root 运行内核（网关模式）。
+          printf 'not the core' > "$RUNNER_TEMP/fake-core"; chmod +x "$RUNNER_TEMP/fake-core"
+          if sudo "$bin" helper install --uid "$(id -u)" --core "$RUNNER_TEMP/fake-core" > "$RUNNER_TEMP/fake-helper.txt" 2>&1; then
+            cat "$RUNNER_TEMP/fake-helper.txt"; echo "认不出的内核不该装进特权助手"; exit 1
+          fi
+          cat "$RUNNER_TEMP/fake-helper.txt"
+          grep -qE "校验和不对|checksum doesn't match" "$RUNNER_TEMP/fake-helper.txt" || { echo "没有按校验和拒绝"; exit 1; }
+          [ ! -e /Library/PrivilegedHelperTools/com.whrss9527.proxyswitch.mihomo ] || { echo "认不出的内核留在了助手的目录里"; exit 1; }
+          sudo "$bin" helper install --uid "$(id -u)" --core "$engine/bin/mihomo"
+          for i in $(seq 1 20); do "$bin" helper status && break; sleep 0.5; done
+          "$bin" helper status || { echo "特权助手没有运行"; sudo cat /Library/Logs/ProxySwitch-helper.log || true; exit 1; }
+          [ "$(stat -f %u /Library/PrivilegedHelperTools/com.whrss9527.proxyswitch.mihomo)" = "0" ] || { echo "助手里的内核不是 root 的"; exit 1; }
+          [ "$(shasum -a 256 /Library/PrivilegedHelperTools/com.whrss9527.proxyswitch.mihomo | cut -d' ' -f1)" = "$expected" ] || { echo "助手里的内核不是校验过的那份"; exit 1; }
+          fwd_before=$(sysctl -n net.inet.ip.forwarding)
+          # 虚拟网卡只接管 1.1.1.1 和 1.0.0.1（用配置补丁限定路由），免得 runner 自己和 GitHub 的连接被截下来。
+          printf '%s' '{"proxi":1,"patch":"log-level: info\ntun:\n  route-address: [\"1.1.1.1/32\", \"1.0.0.1/32\"]\n"}' > "$RUNNER_TEMP/tun-patch.json"
+          "$bin" import "$RUNNER_TEMP/tun-patch.json"
+          "$bin" gateway on
+          for i in $(seq 1 60); do ifconfig | grep -q "inet 198\.18\." && break; sleep 0.5; done
+          helper_log="/Library/Application Support/ProxySwitch/core/core.log"
+          if ! ifconfig | grep -q "inet 198\.18\."; then
+            echo "虚拟网卡没有起来"; "$bin" status --json || true; cat "$helper_log" || true; tail -30 "$engine/engine.log"; sudo tail -30 /Library/Logs/ProxySwitch-helper.log || true
+            exit 1
+          fi
+          for i in $(seq 1 20); do [ "$(sysctl -n net.inet.ip.forwarding)" = "1" ] && break; sleep 0.5; done
+          [ "$(sysctl -n net.inet.ip.forwarding)" = "1" ] || { echo "网关模式没有打开 IP 转发"; exit 1; }
+          pgrep -f "com.whrss9527.proxyswitch.mihomo" >/dev/null || { echo "助手没有运行内核"; exit 1; }
+          served=$(dig +short +time=3 +tries=2 example.org @127.0.0.1 | head -1)
+          echo "网关的 DNS 回答 example.org：$served"
+          case "$served" in 198.18.*) ;; *) echo "网关模式的 DNS 没有回答"; exit 1 ;; esac
+          "$bin" gateway off
+          for i in $(seq 1 60); do ifconfig | grep -q "inet 198\.18\." || break; sleep 0.5; done
+          ifconfig | grep -q "inet 198\.18\." && { echo "关掉网关模式后虚拟网卡还在"; exit 1; }
+          for i in $(seq 1 20); do [ "$(sysctl -n net.inet.ip.forwarding)" = "$fwd_before" ] && break; sleep 0.5; done
+          [ "$(sysctl -n net.inet.ip.forwarding)" = "$fwd_before" ] || { echo "IP 转发没有恢复"; exit 1; }
+          for i in $(seq 1 30); do pgrep -x mihomo >/dev/null && break; sleep 0.5; done
+          pgrep -x mihomo >/dev/null || { echo "关掉网关模式后内核没有回到本机进程"; exit 1; }
+          "$bin" undo
+          sudo "$bin" helper uninstall
+          [ ! -e /Library/LaunchDaemons/com.whrss9527.proxyswitch.helper.plist ] || { echo "特权助手没有卸载干净"; exit 1; }
+          # 关闭扩展（测试用的环境变量，等于在扩展页里点「关闭并移除」）：先关掉正在用的代理引擎配置、恢复设置，再退出代理引擎、删掉程序，数据留着。
+          pkill -x Proxi || true
+          sleep 3
+          pgrep -x ProxiEngine >/dev/null || { echo "Proxi 退出时代理引擎应该跟着退出（下次打开 Proxi 再启动）"; }
+          : > "$support/proxi.log"
+          PROXI_TEST_DISABLE_EXTENSION=1 dist/Proxi.app/Contents/MacOS/Proxi >/dev/null 2>&1 &
+          for i in $(seq 1 60); do grep -q "扩展：代理引擎已关闭" "$support/proxi.log" && break; sleep 1; done
+          sleep 2
+          cat "$support/proxi.log"
+          grep -q "扩展：代理引擎已关闭" "$support/proxi.log" || { echo "扩展没有关闭"; exit 1; }
+          for i in $(seq 1 20); do pgrep -x ProxiEngine >/dev/null || break; sleep 0.5; done
+          pgrep -x ProxiEngine && { echo "关闭扩展后代理引擎还在运行"; exit 1; }
+          pgrep -x mihomo && { echo "关闭扩展后内核还在运行"; exit 1; }
+          [ -z "$(git config --global --includes --get http.proxy || true)" ] || { echo "关闭扩展后 git 代理还在"; exit 1; }
+          [ ! -e "$app" ] || { echo "「关闭并移除」后程序还在"; exit 1; }
+          [ -f "$engine/config.json" ] && grep -q "测试订阅" "$engine/config.json" || { echo "关闭扩展不该删掉它的数据"; exit 1; }
+          "$cli" status --json > "$RUNNER_TEMP/off-status.json"
+          python3 -c "import json,sys; assert json.load(open(sys.argv[1]))['extension']=={'enabled': False}" "$RUNNER_TEMP/off-status.json" || { echo "关闭后状态不对"; exit 1; }
+          "$cli" profiles | grep -q "节点代理" && { echo "关闭扩展后配置列表里还有代理引擎"; exit 1; }
+          before=$(grep -c "扩展网络请求" "$support/proxi.log" || true)
+          sleep 8
+          [ "$(grep -c "扩展网络请求" "$support/proxi.log" || true)" = "$before" ] || { echo "关闭后还有扩展的网络请求"; exit 1; }
+          pkill -x Proxi || true
+          sleep 2
+          # 后面的步骤用回原来的配置。
           cp "$RUNNER_TEMP/config-backup.json" "$support/config.json"
           echo '{}' > "$support/state.json"
-          echo "迁移测试通过"
+          rm -rf "$engine" "$support/Extensions"
+          echo "扩展测试通过"
       - name: 英文界面冒烟并截图
         run: |
           support="$HOME/Library/Application Support/Proxi"
@@ -266,12 +503,17 @@ jobs:
           sleep 4
           open "proxi://panel"; sleep 3
           screencapture -x screenshots/en-panel.png || true
-          for page in profiles general automation sync about; do
+          for page in profiles general automation sync extensions about; do
             open "proxi://settings?page=$page"; sleep 3
             screencapture -x "screenshots/en-$page.png" || true
           done
           # 命令行经正在运行的程序拿到的文字也是英文。
           "$app" status
+          # 代理引擎的界面文字也有英文（Proxi 启动它时按自己的界面语言传过去；这里直接看它的命令行用法）。
+          defaults write com.whrss9527.proxyswitch.engine AppleLanguages -array en
+          "dist/Proxi Engine.app/Contents/MacOS/ProxiEngine" help | tee "$RUNNER_TEMP/engine-help-en.txt" | head -2
+          grep -q "^Usage: <engine app binary>" "$RUNNER_TEMP/engine-help-en.txt" || { echo "代理引擎的英文用法不对"; exit 1; }
+          defaults delete com.whrss9527.proxyswitch.engine AppleLanguages || true
           pkill -x Proxi || true
           sleep 3
           # 跟随系统：删掉 Proxi 自己的选择，runner 的系统语言是英文，界面就是英文。
@@ -467,7 +709,9 @@ jobs:
           grep -q "旧配置" "$support/config.json" || { echo "配置没有带过来"; cat "$support/config.json"; exit 1; }
           grep -q '"engine"' "$support/config.json" && { echo "配置里还有以前版本的设置"; cat "$support/config.json"; exit 1; }
           [ ! -e "$support/imports" ] || { echo "以前版本留下的 imports 没有删掉"; exit 1; }
-          grep -q "已显示 0.13.0 的说明" "$support/proxi.log" || { echo "没有显示更新说明"; exit 1; }
+          [ -f "$support/engine/imports/local.txt" ] || { echo "以前版本的 imports 没有原样挪到 engine/ 里"; ls -laR "$support"; exit 1; }
+          grep -q '"engine"' "$support/engine/config-0.12-backup.json" || { echo "以前版本的配置没有备份"; exit 1; }
+          grep -q "已显示扩展说明" "$support/proxi.log" && { echo "没有代理引擎的数据时不该问要不要开启扩展"; exit 1; }
           pgrep -f "$new_app/Contents/MacOS/Proxi" >/dev/null || { echo "没有从 Proxi.app 重新打开"; exit 1; }
           # 改名前的命令行工具改好了，还多了一个 proxi。
           for i in $(seq 1 20); do grep -q "$new_app/Contents/MacOS/Proxi" /usr/local/bin/proxyswitch && break; sleep 0.5; done
@@ -604,7 +848,7 @@ jobs:
             sips -Z 560 -s format jpeg -s formatOptions 65 en-panel-crop.png --out en-panel.jpg >/dev/null
           fi
           # 设置窗口居中，裁到窗口附近再缩小，日志里放得下、看得清。
-          for name in settings sync general upgrade-notice about about-after about-relocate en-profiles en-general en-automation en-sync en-about; do
+          for name in settings sync general extensions upgrade-notice ext-page ext-profiles engine-settings about about-after about-relocate en-profiles en-general en-automation en-sync en-extensions en-about; do
             [ -f "$name.png" ] || continue
             width=$(sips -g pixelWidth "$name.png" | awk '/pixelWidth/{print $2}')
             height=$(sips -g pixelHeight "$name.png" | awk '/pixelHeight/{print $2}')
@@ -614,7 +858,7 @@ jobs:
             fi
             sips -Z 1000 -s format jpeg -s formatOptions 60 "$name-crop.png" --out "$name.jpg" >/dev/null
           done
-          for name in settings sync general upgrade-notice about-after panel panel-on about panel-update about-relocate en-panel en-profiles en-general en-automation en-sync en-about; do
+          for name in settings sync general extensions upgrade-notice ext-page ext-profiles engine-settings about-after panel panel-on ext-panel about panel-update about-relocate en-panel en-profiles en-general en-automation en-sync en-extensions en-about; do
             [ -f "$name.jpg" ] || continue
             echo "=====BEGIN $name.jpg====="
             base64 -b 76 -i "$name.jpg"
@@ -683,6 +927,23 @@ jobs:
             tail -100 "$RUNNER_TEMP/update.log"
             echo "=====END 更新测试====="
           fi
+          if [ -f "$RUNNER_TEMP/migration.log" ] && ! grep -q "迁移测试通过" "$RUNNER_TEMP/migration.log"; then
+            echo "=====BEGIN 迁移测试的最后 80 行====="
+            tail -80 "$RUNNER_TEMP/migration.log"
+            echo "=====END 迁移测试====="
+          fi
+          if [ -f "$RUNNER_TEMP/extension.log" ] && ! grep -q "扩展测试通过" "$RUNNER_TEMP/extension.log"; then
+            echo "=====BEGIN 扩展测试的最后 150 行====="
+            tail -150 "$RUNNER_TEMP/extension.log"
+            echo "=====END 扩展测试====="
+          fi
+          # 没通过的步骤：最后几十行另外做成一条标注，在合并请求的检查页上直接能看到。
+          for pair in "smoke.log:冒烟测试通过" "migration.log:迁移测试通过" "extension.log:扩展测试通过" "update.log:更新测试通过" "legacy.log:从改名前的版本更新的测试通过" "selftest.log:签名流程自测通过"; do
+            file="$RUNNER_TEMP/${pair%%:*}"
+            [ -f "$file" ] || continue
+            grep -q "${pair#*:}" "$file" && continue
+            echo "::error title=${pair%%:*}::$(grep -v '^=====\|^[A-Za-z0-9+/=]\{60,\}$' "$file" | cut -c1-240 | tail -40 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')"
+          done
           if [ -f "$RUNNER_TEMP/legacy.log" ] && ! grep -q "从改名前的版本更新的测试通过" "$RUNNER_TEMP/legacy.log"; then
             echo "=====BEGIN 从改名前的版本更新的最后 120 行====="
             tail -120 "$RUNNER_TEMP/legacy.log"

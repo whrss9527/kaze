@@ -1,8 +1,11 @@
 #!/bin/bash
-# 编译并组装 Proxi.app（通用二进制），签名后打成 dist/Proxi-macos.zip。
+# 编译并组装 Proxi.app（通用二进制），签名后打成 dist/Proxi-macos.zip；
+# 另外组装可选扩展「代理引擎」dist/Proxi Engine.app，打成 dist/Proxi-Engine-<版本>.zip（不放进 Proxi.app，
+# 用户在 Proxi 里开启扩展时才下载它；两个程序里都没有内核，内核由代理引擎第一次运行时下载）。
 #   VERSION=1.0.0 Scripts/build-app.sh          发布构建
 #   CONFIG=debug ARCHS="" Scripts/build-app.sh   本机架构的调试构建
 #   THIN_ARCHIVES=1 Scripts/build-app.sh         另外打两个单架构的精简包（一键更新用，比通用包小）
+#   SKIP_ENGINE=1 Scripts/build-app.sh           不组装代理引擎
 #   CODESIGN_IDENTITY="Developer ID Application: …" Scripts/build-app.sh
 #                                                用开发者证书签名（可以是证书名字或 SHA-1），带安全时间戳，之后能提交公证（Scripts/notarize.sh）；
 #                                                不设时 ad-hoc 签名。CODESIGN_KEYCHAIN 可以指定证书所在的钥匙串。
@@ -35,6 +38,10 @@ sign() {
 
 # shellcheck disable=SC2086
 swift build -c "$CONFIG" $ARCHS --product Proxi
+if [ -z "${SKIP_ENGINE:-}" ]; then
+  # shellcheck disable=SC2086
+  swift build -c "$CONFIG" $ARCHS --product ProxiEngine
+fi
 # shellcheck disable=SC2086
 BIN_DIR="$(swift build -c "$CONFIG" $ARCHS --show-bin-path)"
 
@@ -63,6 +70,25 @@ fi
 
 (cd dist && rm -f Proxi-macos.zip && ditto -c -k --keepParent Proxi.app Proxi-macos.zip)
 echo "已生成 ${APP} 和 dist/Proxi-macos.zip（版本 ${VERSION}）"
+
+if [ -z "${SKIP_ENGINE:-}" ]; then
+  # 扩展「代理引擎」：单独的程序和标识（com.whrss9527.proxyswitch.engine），同一个证书签名。
+  ENGINE_APP="dist/Proxi Engine.app"
+  rm -rf "$ENGINE_APP"
+  mkdir -p "$ENGINE_APP/Contents/MacOS" "$ENGINE_APP/Contents/Resources"
+  sed -e "s/__VERSION__/$VERSION/g" -e "s/__BUILD__/$BUILD/g" Resources/Engine/Info.plist > "$ENGINE_APP/Contents/Info.plist"
+  cp "$BIN_DIR/ProxiEngine" "$ENGINE_APP/Contents/MacOS/ProxiEngine"
+  cp Resources/AppIcon.icns "$ENGINE_APP/Contents/Resources/AppIcon.icns"
+  for lproj in Resources/Engine/*.lproj; do
+    cp -R "$lproj" "$ENGINE_APP/Contents/Resources/"
+  done
+  printf 'APPL????' > "$ENGINE_APP/Contents/PkgInfo"
+  sign "$ENGINE_APP"
+  codesign --verify --deep --strict "$ENGINE_APP"
+  ENGINE_ZIP="Proxi-Engine-${VERSION}.zip"
+  (cd dist && rm -f Proxi-Engine-*.zip && ditto -c -k --keepParent "Proxi Engine.app" "$ENGINE_ZIP")
+  echo "已生成 ${ENGINE_APP} 和 dist/${ENGINE_ZIP}：$(du -h "dist/${ENGINE_ZIP}" | cut -f1)"
+fi
 
 if [ -n "${THIN_ARCHIVES:-}" ]; then
   # 从通用包里各取一种芯片的部分，单架构的包比通用包小。

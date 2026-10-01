@@ -75,12 +75,14 @@ for zip in "$@"; do
   dir="$work/staple-${name%.zip}"
   rm -rf "$dir" && mkdir -p "$dir"
   ditto -x -k "$zip" "$dir"
-  app="$dir/Proxi.app"
+  # 包里的程序：Proxi.app，或者可选扩展的 Proxi Engine.app。
+  app="$(find "$dir" -maxdepth 1 -name '*.app' | head -1)"
+  [ -n "$app" ] || { echo "$name 里没有 .app"; exit 1; }
   xcrun stapler staple "$app"
   xcrun stapler validate "$app"
   spctl --assess --type execute --verbose=2 "$app"
   target="$(cd "$(dirname "$zip")" && pwd)/$name"
   rm -f "$target"
-  (cd "$dir" && ditto -c -k --keepParent Proxi.app "$target")
+  (cd "$dir" && ditto -c -k --keepParent "$(basename "$app")" "$target")
   echo "${name}：已钉上公证票据"
 done

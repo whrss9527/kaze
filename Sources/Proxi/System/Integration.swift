@@ -195,4 +195,6 @@ enum AppInfo {
     static let repository = "whrss9527/proxi"
     static var repositoryURL: URL { URL(string: "https://github.com/\(repository)")! }
     static var issuesURL: URL { URL(string: "https://github.com/\(repository)/issues")! }
+    /// 扩展页里「了解更多」打开的说明。
+    static var extensionDocsURL: URL { URL(string: "https://github.com/\(repository)/blob/main/docs/extension.md")! }
 }

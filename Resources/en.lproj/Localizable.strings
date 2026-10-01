@@ -297,11 +297,7 @@
 "关闭窗口" = "Close Window";
 
 /* UI/NoticeWindow.swift */
-"Proxi 现在专注于切换代理" = "Proxi now focuses on switching proxies";
 "Proxi 设置" = "Proxi Settings";
-"从这个版本起，Proxi 只负责一键把系统代理、终端、git 和 npm 指向你指定的代理服务器，比如公司代理、内网网关，或者本机的 Charles、Proxyman、mitmproxy。以前版本里的内置代理和相关的设置都已经移除，你自己添加的代理配置都还在。" = "Starting with this version, Proxi does one thing: with one switch it points the system proxy, Terminal, git and npm at a proxy server you specify, such as a corporate proxy, an intranet gateway, or Charles, Proxyman or mitmproxy on this Mac. The built-in proxy from earlier versions and its settings have been removed. The proxy profiles you added yourself are all still here.";
-"原来开着的内置代理已经关掉，系统代理、终端、git 和 npm 的代理设置都已清除。" = "The built-in proxy that was on has been turned off, and the system, Terminal, git and npm proxy settings have been cleared.";
-"以前的版本还装过一个后台助手，现在用不上了。移除它需要输入一次管理员密码；也可以以后在「设置 → 通用」里移除。" = "An earlier version also installed a background helper that's no longer needed. Removing it asks for an administrator password once; you can also remove it later in Settings → General.";
 "后台助手已移除。" = "The background helper has been removed.";
 "以后再说" = "Later";
 "正在移除…" = "Removing…";
@@ -395,7 +391,6 @@
 "测速地址" = "Test URL";
 "测试连接时经代理访问这个地址。默认是苹果的连通性检测页，也可以换成你自己内网里的地址。" = "Connection tests fetch this address through the proxy. The default is Apple's connectivity check page; you can use an address on your own intranet instead.";
 "以前版本的后台助手" = "Background helper from an earlier version";
-"以前的版本装过一个后台助手，现在的 Proxi 用不上它了。移除它需要输入一次管理员密码。" = "An earlier version installed a background helper that Proxi no longer needs. Removing it asks for an administrator password once.";
 "通知" = "Notifications";
 "更新‖标题" = "Updates";
 "自动检查更新" = "Check for Updates Automatically";
@@ -509,3 +504,45 @@
 "点一下就行：下载" = "One click: downloads";
 "，校验后替换程序并自动重新启动，配置不会丢。" = ", verifies it, replaces the app and relaunches automatically. Your configuration is kept.";
 "打开「App 管理」设置" = "Open App Management Settings";
+
+/* 扩展 */
+"一个在本机运行的代理引擎，作为单独的程序下载安装，不包含在 Proxi 里。开启后配置列表里会多一条「代理引擎」，用同一个开关使用；它自己的设置在它的菜单栏图标里。" = "A proxy engine that runs on this Mac. It's downloaded and installed as a separate app and isn't included in Proxi. Once enabled, a “Proxy Engine” profile appears in the profile list and is turned on with the same switch; its own settings are in its menu bar icon.";
+"了解更多" = "Learn More";
+"代理引擎" = "Proxy Engine";
+"代理引擎没有运行起来：%@" = "The proxy engine didn't start: %@";
+"代理引擎还没有安装" = "The proxy engine isn't installed yet";
+"代理引擎（扩展）" = "Proxy Engine (Extension)";
+"代理引擎（扩展）：已开启，没在运行" = "Proxy Engine (extension): enabled, not running";
+"代理引擎（扩展）：运行中，本机端口 %@" = "Proxy Engine (extension): running on local port %@";
+"以前开着的「代理引擎」配置已经先关掉了，开启扩展后会自动开回来。" = "The “Proxy Engine” profile that was on has been turned off for now; it turns back on automatically after you enable the extension.";
+"以前的版本装过一个后台助手，没有开启扩展时用不上它。移除它需要输入一次管理员密码。" = "An earlier version installed a background helper, which isn't needed while the extension is off. Removing it requires an administrator password once.";
+"以前的版本还装过一个后台助手，没有开启扩展时用不上它。移除它需要输入一次管理员密码；也可以以后在「设置 → 通用」里移除。" = "An earlier version also installed a background helper, which isn't needed while the extension is off. Removing it requires an administrator password once; you can also remove it later in Settings → General.";
+"使用说明" = "Terms of Use";
+"关闭并移除…" = "Turn Off and Remove…";
+"关闭扩展会先关掉正在用的「代理引擎」配置、恢复系统设置，再退出代理引擎。「关闭并移除」还会删掉下载的程序；它的数据（%@）留着，以后再开启时还在。" = "Turning the extension off first turns off the “Proxy Engine” profile if it's in use and restores your system settings, then quits the proxy engine. “Turn Off and Remove” also deletes the downloaded app; its data (%@) is kept and will still be there if you enable it again.";
+"可选的附加功能，默认关闭；不开启时不会下载任何东西，也不会联网" = "Optional features, off by default. Nothing is downloaded and no network requests are made unless you enable them";
+"启动代理引擎失败：%@" = "Couldn't start the proxy engine: %@";
+"已于 %@ 同意使用说明。" = "Terms accepted on %@.";
+"开启" = "Enable";
+"开启代理引擎（扩展）" = "Enable Proxy Engine (Extension)";
+"开启后会从 GitHub 上这个版本的发布下载代理引擎（核对校验和与签名），它第一次运行时再下载内核。" = "Once enabled, the proxy engine is downloaded from this version's release on GitHub (its checksum and signature are verified), and it downloads its core the first time it runs.";
+"我已阅读并同意" = "I have read and agree";
+"打开代理引擎" = "Open Proxy Engine";
+"扩展" = "Extensions";
+"扩展没有开启" = "The extension isn't enabled";
+"暂不开启" = "Not Now";
+"本功能仅供学习、研究网络技术及合法的开发调试使用，不得用于任何违反所在国家或地区法律法规的用途。\n\n1. 开发者不提供任何代理服务、服务器或订阅，也不对第三方提供的内容负责；\n2. 使用者应自行确认其使用行为符合当地法律法规，并独立承担因使用本功能产生的全部责任；\n3. 请在下载后 24 小时内自行评估是否继续使用；如不同意上述条款，请勿开启本功能。\n\n开启即表示你已阅读并同意以上条款。" = "This feature is provided only for learning, for research into network technology, and for lawful development and debugging. It must not be used for any purpose that violates the laws or regulations of your country or region.\n\n1. The developer provides no proxy service, servers or subscriptions, and is not responsible for any content provided by third parties.\n2. You are responsible for making sure your use complies with local laws and regulations, and you bear full responsibility for all consequences of using this feature.\n3. Please decide within 24 hours of downloading whether to continue using it. If you do not agree to these terms, do not enable this feature.\n\nEnabling it means you have read and agree to these terms.";
+"正在下载…" = "Downloading…";
+"正在安装…" = "Installing…";
+"正在校验…" = "Verifying…";
+"正在获取下载地址…" = "Getting the download link…";
+"没在运行" = "Not running";
+"没有响应" = "No response";
+"版本" = "Version";
+"运行中，本机端口 %@" = "Running on local port %@";
+"还没有同意扩展的说明" = "The extension's terms haven't been accepted";
+"还没有安装" = "Not installed yet";
+"这个版本的发布里没有 %@" = "This version's release doesn't include %@";
+"这台 Mac 上有以前的版本留下的代理引擎设置，已经原样保留。代理引擎现在是一个可选扩展：开启后单独下载安装，之后和以前一样使用；暂不开启的话设置留着，以后可以在「设置 → 扩展」里开启。" = "This Mac has proxy engine settings from an earlier version, and they've been kept as they were. The proxy engine is now an optional extension: once enabled, it's downloaded and installed separately and works as before. If you don't enable it now, your settings are kept and you can enable it later in Settings → Extensions.";
+"这条配置由扩展「代理引擎」管理：地址是它在本机的端口，跟着它变。在「设置 → 扩展」里关闭扩展时它会一起去掉。" = "This profile is managed by the Proxy Engine extension: its address is the engine's local port and follows it. It's removed when you turn the extension off in Settings → Extensions.";
+"重新下载" = "Download Again";

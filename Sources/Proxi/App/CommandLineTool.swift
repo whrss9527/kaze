@@ -163,6 +163,13 @@ enum CommandLineTool {
             if let system = result["systemProxy"] as? String {
                 print(L("系统代理：%@", system))
             }
+            if let ext = result["extension"] as? [String: Any], (ext["enabled"] as? Bool) == true {
+                if (ext["running"] as? Bool) == true, let port = ext["port"] as? Int {
+                    print(L("代理引擎（扩展）：运行中，本机端口 %@", String(port)))
+                } else {
+                    print(L("代理引擎（扩展）：已开启，没在运行"))
+                }
+            }
         case "list_profiles":
             for profile in rows("profiles") {
                 print("\((profile["active"] as? Bool) == true ? "●" : " ") \(profile["name"] ?? "")  \(profile["summary"] ?? "")")

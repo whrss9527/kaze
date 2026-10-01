@@ -49,6 +49,8 @@ final class AppState: ObservableObject {
     let control = ControlService()
     /// 按网络自动切换。
     let network = NetworkAutomation()
+    /// 可选扩展「代理引擎」（默认关闭，见 ExtensionManager）。
+    let extensions = ExtensionManager()
     /// 更新后正在重新启动：退出时不要按「退出时关闭代理」清理。
     var relaunching = false
 
@@ -85,7 +87,24 @@ final class AppState: ObservableObject {
             Task { @MainActor in await self?.checkHealth() }
         }
         loginItemEnabled = LoginItem.isEnabled
+        extensions.readState = { [weak self] in self?.persisted.extensionState ?? ExtensionState() }
+        extensions.writeState = { [weak self] state in
+            guard let self else { return }
+            self.persisted.extensionState = state
+            Store.save(self.persisted)
+        }
+        extensions.onChange = { [weak self] in self?.extensionChanged() }
+        reconcileEngineProfile()
         finishLegacyMigration()
+        extensions.start()
+        // 测试用：启动时当作用户在扩展页里点了「关闭并移除」（CI 用，界面上不会出现）。
+        if ProcessInfo.processInfo.environment["PROXI_TEST_DISABLE_EXTENSION"] == "1", persisted.extensionState.enabled {
+            Log.info("扩展：测试环境变量 PROXI_TEST_DISABLE_EXTENSION=1，关闭并移除")
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(2))
+                await self.disableExtension(removeApp: true)
+            }
+        }
         registerHotkey()
         $config
             .map(\.toggleHotkey)
@@ -107,7 +126,12 @@ final class AppState: ObservableObject {
             NSApp.terminate(nil)
         }
         updater.startAutomaticChecks { [weak self] in self?.config.autoCheckUpdates ?? true }
-        sync.currentConfig = { [weak self] in self?.config ?? AppConfig() }
+        // 同步的配置里不带「代理引擎」那条配置（AppConfig 写文件时就去掉了，这里再去一次，比较时也不算它）。
+        sync.currentConfig = { [weak self] in
+            var config = self?.config ?? AppConfig()
+            config.profiles.removeAll { $0.engine }
+            return config
+        }
         sync.applyRemote = { [weak self] config in self?.applyRemoteConfig(config) }
         sync.onEnabledChanged = { [weak self] enabled in
             guard let self else { return }
@@ -133,33 +157,43 @@ final class AppState: ObservableObject {
 
     // MARK: - 从以前的版本更新过来
 
-    /// 第一次启动新版本时：上次开着的是以前版本内置代理的那条配置就把代理关掉（不然系统代理指向一个已经不存在的本机端口），
-    /// 删掉以前版本留下的文件，然后显示一次说明。
+    /// 第一次启动新版本时：以前版本的代理引擎数据挪到代理引擎的数据目录（一个都不删）；上次开着的是代理引擎那条配置就先把代理关掉
+    /// （不然系统代理指向一个没人监听的本机端口），记下来，等用户同意说明、开启扩展、代理引擎运行起来后再开回来。
+    /// 有代理引擎的数据时问一次要不要开启扩展；没有时什么都不显示（只有以前装过后台助手时提示可以移除）。
     private func finishLegacyMigration() {
         legacyHelperInstalled = LegacyCleanup.helperInstalled
+        var ext = persisted.extensionState
+        let firstLaunch = !ext.migrationChecked
+        if firstLaunch {
+            ext.migrationChecked = true
+            if legacy.needsMigration || legacy.hasEngineData {
+                let moved = LegacyCleanup.migrateEngineData()
+                Log.info("以前版本的代理引擎数据已放到 \(ExtensionManager.dataDirectory.path)：\(moved.isEmpty ? "没有要挪的" : moved.joined(separator: "、"))，原来的数据都保留")
+                if var profile = legacy.builtInProfiles.first {
+                    profile.engine = true
+                    ext.profile = profile
+                }
+                if legacy.hasEngineData && !ext.enabled {
+                    ext.pendingMigration = true
+                }
+                if legacy.activeBuiltIn != nil {
+                    ext.restoreActive = true
+                }
+                // 去掉以前版本的设置后写回去（代理引擎的设置已经在它自己的目录里了）。
+                Store.save(config)
+            }
+            persisted.extensionState = ext
+            Store.save(persisted)
+        }
         if legacyHelperInstalled {
-            Log.info("以前版本的后台助手还在，等用户确认后移除")
-        }
-        let removed = LegacyCleanup.removeLegacyData()
-        if !removed.isEmpty {
-            Log.info("删掉了以前版本留下的数据：\(removed.joined(separator: "、"))")
-        }
-        if legacy.needsNotice {
-            Log.info("配置里有以前版本的设置：去掉了 \(legacy.builtInProfiles.count) 条自动生成的配置")
+            Log.info(ext.enabled ? "以前版本的后台助手还在，代理引擎开着，留着" : "以前版本的后台助手还在，扩展没开，等用户确认后移除")
         }
         if config.profile(id: persisted.lastProfileID) == nil, persisted.lastProfileID != nil {
             persisted.lastProfileID = config.profiles.first?.id
             Store.save(persisted)
         }
-        // 去掉以前版本的设置后写回去。
-        if legacy.needsNotice {
-            Store.save(config)
-            Store.save(persisted)
-        }
-        var turnedOff = false
-        if let active = legacy.activeBuiltIn {
-            turnedOff = true
-            Log.info("上次开着的「\(active.name)」是以前版本的内置代理，关掉代理")
+        if firstLaunch, let active = legacy.activeBuiltIn, !ext.enabled {
+            Log.info("上次开着的「\(active.name)」是代理引擎，先关掉代理，用户开启扩展后再开回来")
             busy = true
             let mode = config.offMode
             Task {
@@ -171,29 +205,123 @@ final class AppState: ObservableObject {
                 }
                 persisted.enabledByUs = false
                 persisted.original = nil
-                persisted.lastProfileID = config.profiles.first?.id
+                persisted.lastProfileID = config.profiles.first { !$0.engine }?.id
                 Store.save(persisted)
                 busy = false
                 refresh()
                 onStatusChanged?()
                 if failures.isEmpty {
-                    Log.info("已关闭以前版本的内置代理")
+                    Log.info("已关闭以前版本开着的代理引擎配置")
                 } else {
                     let text = failures.joined(separator: L("；"))
-                    Log.error("关闭以前版本的内置代理失败：\(text)")
+                    Log.error("关闭以前版本开着的代理引擎配置失败：\(text)")
                     lastError = text
                 }
             }
         }
-        guard !persisted.noticeShown, legacy.needsNotice || legacyHelperInstalled else { return }
+        if persisted.extensionState.pendingMigration {
+            // 只问一次：不管用户点了什么（包括直接关掉窗口），下次启动都不再弹。
+            persisted.extensionState.pendingMigration = false
+            Store.save(persisted)
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(1))
+                NoticeWindowController.shared.showExtensionDisclaimer(migrating: true)
+            }
+            Log.info("已显示扩展说明（以前的版本里有代理引擎的数据）")
+            return
+        }
+        guard !persisted.noticeShown, legacyHelperInstalled, !persisted.extensionState.enabled else { return }
         persisted.noticeShown = true
         Store.save(persisted)
-        let helper = legacyHelperInstalled
         Task { @MainActor in
             try? await Task.sleep(for: .seconds(1))
-            NoticeWindowController.shared.showUpgradeNotice(turnedOff: turnedOff, helperInstalled: helper)
+            NoticeWindowController.shared.showHelperNotice()
         }
-        Log.info("已显示 0.13.0 的说明")
+        Log.info("已显示后台助手的提示")
+    }
+
+    /// 从以前的版本更新过来时的说明里，用户没有开启扩展：数据留着，以前开着的配置不再恢复；以前装过后台助手就提示可以移除。
+    func declineMigratedExtension() {
+        persisted.extensionState.restoreActive = false
+        Store.save(persisted)
+        Log.info("用户没有开启扩展，代理引擎的数据留在 \(ExtensionManager.dataDirectory.path)")
+        if legacyHelperInstalled && !persisted.noticeShown {
+            persisted.noticeShown = true
+            Store.save(persisted)
+            NoticeWindowController.shared.showHelperNotice()
+            Log.info("已显示后台助手的提示")
+        }
+    }
+
+    // MARK: - 扩展「代理引擎」
+
+    /// 用户勾选同意说明并点了开启。
+    func enableExtension() {
+        extensions.accept()
+        reconcileEngineProfile()
+        extensions.prepareAndLaunch()
+    }
+
+    /// 关闭扩展：正在用「代理引擎」那条配置就先关掉代理（恢复系统设置），再退出代理引擎、去掉那条配置。
+    func disableExtension(removeApp: Bool) async {
+        if case .on(let current) = status, current.engine {
+            turnOff()
+            for _ in 0..<100 where busy {
+                try? await Task.sleep(for: .milliseconds(100))
+            }
+        }
+        await extensions.disable(removeApp: removeApp)
+        reconcileEngineProfile()
+    }
+
+    /// 代理引擎开了、停了、换了端口：调整配置列表里的「代理引擎」；从以前的版本过来、以前开着它的，内核起来后开回来。
+    private func extensionChanged() {
+        reconcileEngineProfile()
+        if persisted.extensionState.enabled, persisted.extensionState.restoreActive, extensions.status?.coreRunning != true {
+            Log.info("扩展：等代理引擎的内核起来后开回以前开着的配置")
+        }
+        guard persisted.extensionState.enabled, persisted.extensionState.restoreActive,
+              let status = extensions.status, status.coreRunning,
+              let profile = config.profiles.first(where: { $0.engine }) else { return }
+        persisted.extensionState.restoreActive = false
+        Store.save(persisted)
+        Log.info("代理引擎运行起来了，开回以前开着的「\(profile.name)」")
+        turnOn(profile)
+    }
+
+    /// 配置列表里的「代理引擎」：扩展开着时在最前面（端口跟着代理引擎），关着时去掉。
+    func reconcileEngineProfile() {
+        let ext = persisted.extensionState
+        guard ext.enabled else {
+            if config.profiles.contains(where: { $0.engine }) {
+                config.profiles.removeAll { $0.engine }
+            }
+            if let id = persisted.lastProfileID, ext.profile?.id == id {
+                persisted.lastProfileID = config.profiles.first?.id
+                Store.save(persisted)
+            }
+            return
+        }
+        var profile = ext.profile ?? Profile.engineProfile(port: 7890)
+        profile.engine = true
+        if let port = extensions.status?.mixedPort {
+            profile.port = port
+        }
+        if ext.profile != profile {
+            persisted.extensionState.profile = profile
+            Store.save(persisted)
+        }
+        if let index = config.profiles.firstIndex(where: { $0.engine }) {
+            if config.profiles[index] != profile {
+                update(profile)
+            }
+        } else {
+            config.profiles.insert(profile, at: 0)
+            if config.profiles.count == 1 {
+                persisted.lastProfileID = profile.id
+                Store.save(persisted)
+            }
+        }
     }
 
     /// 删掉以前版本的后台助手（系统会请用户输入管理员密码）。
@@ -293,6 +421,15 @@ final class AppState: ObservableObject {
         let mode = config.offMode
         Task {
             var failures: [String] = []
+            // 代理引擎那条配置：先确认代理引擎在运行（没运行就启动它，等内核起来）。
+            if profile.engine {
+                do {
+                    _ = try await extensions.ensureRunning()
+                } catch {
+                    finish(action: L("开启 %@", profile.name), failures: [error.localizedDescription], successText: "")
+                    return
+                }
+            }
             // 上一个配置设置过、新配置没有的项先清掉。
             if let previous {
                 for target in previous.targets where !profile.targets.contains(target) {
@@ -438,6 +575,10 @@ final class AppState: ObservableObject {
         guard let index = config.profiles.firstIndex(where: { $0.id == profile.id }) else { return }
         let previous = config.profiles[index]
         config.profiles[index] = profile
+        if profile.engine, persisted.extensionState.profile != profile {
+            persisted.extensionState.profile = profile
+            Store.save(persisted)
+        }
         // 正在使用的配置改了地址：立即重新应用。
         if case .on(let current) = status, current.id == profile.id, previous != profile || passwordChanged {
             turnOn(profile)
@@ -445,6 +586,8 @@ final class AppState: ObservableObject {
     }
 
     func remove(_ profile: Profile) {
+        // 「代理引擎」那条配置跟着扩展走，在扩展页里关闭扩展才会去掉。
+        guard !profile.engine else { return }
         if case .on(let current) = status, current.id == profile.id {
             turnOff()
         }
@@ -467,7 +610,8 @@ final class AppState: ObservableObject {
             return nil
         }()
         config = remote
-        guard let active else { return }
+        reconcileEngineProfile()
+        guard let active, !active.engine else { return }
         if let updated = remote.profile(id: active.id) {
             if updated != active {
                 turnOn(updated)
@@ -552,9 +696,12 @@ final class AppState: ObservableObject {
         Notifier.shared.show(title: title, body: body, route: route, category: category)
     }
 
-    /// 退出时按设置关闭代理。
+    /// 退出时按设置关闭代理；代理引擎开着的话也让它退出（它自己停内核）。
     func handleExit() {
         control.stop()
+        for app in NSRunningApplication.runningApplications(withBundleIdentifier: ExtensionManager.bundleIdentifier) {
+            app.terminate()
+        }
         guard !relaunching, config.disableOnExit, case .on(let profile) = status else { return }
         let desired = DesiredProxy(offWithAutoDiscovery: persisted.original?.autoDiscovery ?? snapshot.autoDiscovery, bypassDomains: snapshot.exceptions)
         let semaphore = DispatchSemaphore(value: 0)

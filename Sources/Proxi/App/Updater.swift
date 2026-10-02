@@ -27,6 +27,8 @@ final class Updater: ObservableObject {
     @Published private(set) var route: NetworkRoute?
     /// 最近一次安装失败的原因，界面据此给出对应的按钮。
     @Published private(set) var lastFailure: UpdateError?
+    /// 从当前版本到发现的新版本之间每一版的更新记录，新的在前；取不到时是空的，界面上显示新版本的发布说明。
+    @Published private(set) var changes: [Changelog.Release] = []
 
     /// 自动检查发现新版本时通知（标题、正文）。
     var notify: (@MainActor (String, String) -> Void)?
@@ -41,6 +43,8 @@ final class Updater: ObservableObject {
 
     private var timer: Timer?
     private var installTask: Task<Void, Never>?
+    /// changes 是哪个标签的（每个新版本只取一次）。
+    private var changesTag: String?
 
     /// 发现的新版本（含正在安装和安装失败的），跳过的不算。
     var release: ReleaseInfo? {
@@ -117,6 +121,8 @@ final class Updater: ObservableObject {
                 phase = .upToDate
                 return nil
             }
+            // 跳过的版本也取：之后点「仍然查看」还要看。
+            await loadChanges(since: current, upTo: latest)
             if !manual, latest.version == skippedVersion {
                 Log.info("检查更新：有新版本 \(latest.version)，之前选择过跳过")
                 phase = .skipped(latest)
@@ -136,6 +142,18 @@ final class Updater: ObservableObject {
                 checkError = L("检查更新失败：%@", error.localizedDescription)
             }
             return nil
+        }
+    }
+
+    private func loadChanges(since current: String, upTo release: ReleaseInfo) async {
+        guard changesTag != release.tag else { return }
+        do {
+            changes = try await UpdateChecker.changes(since: current, upTo: release, routes: routes(for: UpdateChecker.changelogURL(tag: release.tag)))
+            changesTag = release.tag
+            Log.info("检查更新：\(current) 到 \(release.version) 之间有 \(changes.count) 个版本的更新记录")
+        } catch {
+            Log.info("取 \(release.tag) 的更新记录失败，显示这一版的发布说明：\(error.localizedDescription)")
+            changes = []
         }
     }
 

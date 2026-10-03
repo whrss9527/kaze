@@ -57,6 +57,11 @@ struct DesiredProxy: Equatable {
         bypassDomains = snapshot.exceptions
     }
 
+    /// 命令里带的密码（要登录时才带；出错时从输出里去掉）。
+    var passwords: [String] {
+        [http, https, socks].compactMap { $0 }.filter { !$0.username.trimmingCharacters(in: .whitespaces).isEmpty && !$0.password.isEmpty }.map(\.password)
+    }
+
     /// 写到一个网络服务所需的 networksetup 参数列表（不含程序名），按顺序执行。
     /// 关闭某个协议时只改开关，保留记录的地址，和系统设置界面的行为一致。
     func commands(service: String) -> [[String]] {

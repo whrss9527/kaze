@@ -138,6 +138,18 @@ final class TerminalCommandsTests: XCTestCase {
         XCTAssertTrue(fish.hasPrefix("set -gx http_proxy 'socks5://127.0.0.1:1080'; set -gx HTTP_PROXY 'socks5://127.0.0.1:1080'; "))
         XCTAssertTrue(fish.contains("set -gx no_proxy '\(Profile.defaultNoProxy)'"))
     }
+
+    func testCopyWithPasswordIsConcealed() {
+        // 带密码的命令加上剪贴板历史工具认的标记，不带的不加。
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name("proxi-test-\(UUID().uuidString)"))
+        defer { pasteboard.releaseGlobally() }
+        TerminalCommands.copy("export http_proxy='http://a:secret@h:1'", concealed: true, to: pasteboard)
+        XCTAssertEqual(pasteboard.string(forType: .string), "export http_proxy='http://a:secret@h:1'")
+        XCTAssertTrue(pasteboard.types?.contains(TerminalCommands.concealedType) == true)
+        TerminalCommands.copy("export http_proxy='http://h:1'", to: pasteboard)
+        XCTAssertEqual(pasteboard.string(forType: .string), "export http_proxy='http://h:1'")
+        XCTAssertFalse(pasteboard.types?.contains(TerminalCommands.concealedType) == true)
+    }
 }
 
 final class ParsingTests: XCTestCase {
@@ -883,6 +895,33 @@ final class CredentialsTests: XCTestCase {
         XCTAssertEqual(Redact.secrets("http://me@proxy:3128"), "http://me@proxy:3128")
         XCTAssertEqual(Redact.secrets("mail me@example.com"), "mail me@example.com")
         XCTAssertEqual(Redact.secrets("proxy=http://h:8080"), "proxy=http://h:8080")
+    }
+
+    func testRedactsKnownPasswordsInAnyForm() {
+        let password = #"p@ss wo'rd"\x"#
+        // networksetup 的参数里是原样的；授权对话框那条路上还要经过 shell 单引号和 AppleScript 字符串的转义。
+        let desired = DesiredProxy(profile: Profile(name: "公司代理", color: "#2563eb", host: "proxy.corp.example", port: 3128), password: password)
+        XCTAssertEqual(desired.passwords, [])
+        var profile = Profile(name: "公司代理", color: "#2563eb", host: "proxy.corp.example", port: 3128)
+        profile.username = "alice"
+        let withLogin = DesiredProxy(profile: profile, password: password)
+        XCTAssertEqual(Set(withLogin.passwords), [password])
+        let arguments = withLogin.commands(service: "Wi-Fi").first { $0.contains(password) } ?? []
+        XCTAssertFalse(arguments.isEmpty)
+        let raw = "networksetup " + arguments.joined(separator: " ") + " failed"
+        let shell = arguments.map(Shell.shellQuote).joined(separator: " ")
+        let script = Shell.appleScriptString(shell)
+        let url = profile.proxyURL(password: password)
+        for text in [raw, shell, script, "proxy=\(url)", "http://alice:\(password)@proxy.corp.example:3128"] {
+            let redacted = Redact.secrets(text, known: withLogin.passwords)
+            XCTAssertFalse(redacted.contains("ss wo"), redacted)
+            XCTAssertFalse(redacted.contains("p%40ss"), redacted)
+            XCTAssertTrue(redacted.contains("***"), redacted)
+        }
+        XCTAssertTrue(Redact.secrets(raw, known: withLogin.passwords).contains("alice"))
+        // 太短的不换，免得把整段话换得看不懂；网址里的照样遮住。
+        XCTAssertEqual(Redact.secrets("on alice ab failed", known: ["ab"]), "on alice ab failed")
+        XCTAssertEqual(Redact.secrets("http://alice:ab@h:1", known: ["ab"]), "http://alice:***@h:1")
     }
 
     func testGitCredentialFile() {

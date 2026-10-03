@@ -75,4 +75,23 @@ enum Redact {
         let range = NSRange(text.startIndex..., in: text)
         return userInfo.stringByReplacingMatches(in: text, range: range, withTemplate: "$1:***@")
     }
+
+    /// 另外把知道的密码换成 ***：原样的（networksetup 的参数里就是原样的），以及写进网址、shell 单引号、AppleScript 字符串后的样子。
+    /// 不到 3 个字的不换，免得把整段话换得看不懂。
+    static func secrets(_ text: String, known: [String]) -> String {
+        var result = text
+        for secret in known where secret.count >= 3 {
+            let shell = secret.replacingOccurrences(of: "'", with: "'\\''")
+            let forms = Set([secret, Profile.escapeUserInfo(secret), shell, appleScriptEscaped(secret), appleScriptEscaped(shell)])
+            // 长的先换：短的写法可能是长的一部分。
+            for form in forms.sorted(by: { $0.count > $1.count }) {
+                result = result.replacingOccurrences(of: form, with: "***")
+            }
+        }
+        return secrets(result)
+    }
+
+    private static func appleScriptEscaped(_ text: String) -> String {
+        text.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
+    }
 }

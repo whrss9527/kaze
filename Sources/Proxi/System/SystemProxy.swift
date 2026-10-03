@@ -45,18 +45,19 @@ enum SystemProxy {
         guard !services.isEmpty else { throw SystemProxyError.noServices }
         let commands = services.flatMap { desired.commands(service: $0) }
         do {
-            try await runNetworksetup(commands)
+            try await runNetworksetup(commands, secrets: desired.passwords)
         } catch SystemProxyError.needsAdmin {
             Log.info("networksetup 需要管理员权限，改用授权对话框")
-            try await runNetworksetupPrivileged(commands)
+            try await runNetworksetupPrivileged(commands, secrets: desired.passwords)
         }
         return services
     }
 
-    private static func runNetworksetup(_ commands: [[String]]) async throws {
+    /// secrets：命令里的密码，出错时从输出里去掉。
+    private static func runNetworksetup(_ commands: [[String]], secrets: [String]) async throws {
         for arguments in commands {
             let result = try await Shell.run(networksetupPath, arguments)
-            let text = result.trimmedOutput
+            let text = Redact.secrets(result.trimmedOutput, known: secrets)
             if !result.succeeded || text.contains("Error") {
                 if isAdminError(text) {
                     throw SystemProxyError.needsAdmin(text)
@@ -67,14 +68,14 @@ enum SystemProxy {
     }
 
     /// 用 AppleScript 的 do shell script ... with administrator privileges 一次执行全部命令，系统会弹一次输入密码的对话框。
-    private static func runNetworksetupPrivileged(_ commands: [[String]]) async throws {
+    private static func runNetworksetupPrivileged(_ commands: [[String]], secrets: [String]) async throws {
         let lines = commands.map { arguments in
             ([networksetupPath] + arguments).map(Shell.shellQuote).joined(separator: " ")
         }
         let script = "do shell script " + Shell.appleScriptString(lines.joined(separator: " && ")) + " with administrator privileges"
         let result = try await Shell.run(osascriptPath, ["-e", script], timeout: 180)
         if !result.succeeded {
-            throw SystemProxyError.needsAdmin(Redact.secrets(result.trimmedOutput))
+            throw SystemProxyError.needsAdmin(Redact.secrets(result.trimmedOutput, known: secrets))
         }
     }
 

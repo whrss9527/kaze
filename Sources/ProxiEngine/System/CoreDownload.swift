@@ -78,6 +78,7 @@ final class CoreDownload: ObservableObject {
     func prepare() async {
         if ProcessInfo.processInfo.environment["PROXI_CORE"]?.isEmpty == false {
             phase = .ready
+            onInstalled?()
             return
         }
         phase = .verifying

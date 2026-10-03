@@ -92,6 +92,9 @@ final class ParsingTests: XCTestCase {
         // Clash 的规则文件和 payload 列表。
         let clash = "port: 7890\nrules:\n  - DOMAIN-SUFFIX,x.com,Proxy\n  - 'GEOIP,CN,DIRECT'\n  - MATCH,Proxy\nproxies: []\n"
         XCTAssertEqual(RuleConverter.convert(clash).rules, ["DOMAIN-SUFFIX,x.com,节点", "GEOIP,CN,DIRECT", "MATCH,节点"])
+        // 带双引号的列表项按 YAML 的规则解转义：导入时写出来的规则文件里正则的 \. 是 "\\."，读回来要还原，不然正则多了个反斜杠就匹配不上。
+        let escaped = "rules:\n  - \"DOMAIN-REGEX,^.*\\\\.google\\\\.com$,DIRECT\"\n  - 'DOMAIN,it''s.example,DIRECT'\n"
+        XCTAssertEqual(RuleConverter.convert(escaped).rules, ["DOMAIN-REGEX,^.*\\.google\\.com$,DIRECT", "DOMAIN,it's.example,DIRECT"])
         let payload = "payload:\n  - '+.example.com'\n  - 'sub.example.org'\n  - '10.0.0.0/8'\n"
         XCTAssertEqual(RuleConverter.convert(payload, defaultPolicy: "DIRECT").rules, ["DOMAIN-SUFFIX,example.com,DIRECT", "DOMAIN,sub.example.org,DIRECT", "IP-CIDR,10.0.0.0/8,DIRECT,no-resolve"])
         XCTAssertEqual(RuleConverter.policy("Reject"), "REJECT")

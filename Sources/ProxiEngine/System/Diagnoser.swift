@@ -299,7 +299,7 @@ struct Verdict: Equatable {
 
         var title: String {
             switch self {
-            case .turnOnEngine: return L("开启节点代理")
+            case .turnOnEngine: return L("在 Proxi 里开启「代理引擎」")
             case .pinToProxy(let host): return L("让 %@ 走节点", host)
             case .autoSelect: return L("自动选择节点")
             case .testNodes: return L("测速全部节点")
@@ -326,7 +326,7 @@ struct Verdict: Equatable {
             }
             let reason = f.direct?.summary ?? L("没有测")
             if f.engineHasNodes {
-                return Verdict(headline: L("本机没开代理，直连又打不开"), explanation: L("直连：%@。这个网站直连访问不了，开启节点代理后再试。", reason), actions: [.turnOnEngine, .copyReport])
+                return Verdict(headline: L("本机没开代理，直连又打不开"), explanation: L("直连：%@。这个网站直连访问不了，在 Proxi 里开启「代理引擎」后再试。", reason), actions: [.turnOnEngine, .copyReport])
             }
             return Verdict(headline: L("本机没开代理，直连又打不开"), explanation: L("直连：%@。还没有可用的节点，先在「节点与订阅」页添加订阅，或者在「代理配置」里选一个代理。", reason), actions: [.openNodes, .copyReport])
         }
@@ -362,7 +362,7 @@ struct Verdict: Equatable {
         if f.macRoute == .engine || f.perspective == .device {
             return Verdict(headline: L("经代理访问失败"), explanation: L("结果：%@。内核没有记录到这次连接的判定，可能是内核这时候重启了；再测一次。", proxied.summary), actions: [.copyReport])
         }
-        return Verdict(headline: L("经 %@ 访问失败", f.proxiedVia), explanation: L("结果：%@。检查那个代理现在能不能用（Proxi 的面板里可以测速），或者换成节点代理。", proxied.summary), actions: f.engineHasNodes ? [.turnOnEngine, .copyReport] : [.copyReport])
+        return Verdict(headline: L("经 %@ 访问失败", f.proxiedVia), explanation: L("结果：%@。检查那个代理现在能不能用（Proxi 的面板里可以测速），或者在 Proxi 里换成「代理引擎」。", proxied.summary), actions: f.engineHasNodes ? [.turnOnEngine, .copyReport] : [.copyReport])
     }
 }
 
@@ -484,7 +484,7 @@ final class Diagnoser: ObservableObject {
         } else {
             switch facts.macRoute {
             case .off: set("status", .warn, L("本机没开代理，浏览器直连"))
-            case .engine: set("status", .pass, L("用的是节点代理（%@）", state.config.engine.mode.title) + (engine.effectiveNode.map { L("，当前节点 %@", $0) } ?? ""))
+            case .engine: set("status", .pass, L("用的是代理引擎（%@）", state.config.engine.mode.title) + (engine.effectiveNode.map { L("，当前节点 %@", $0) } ?? ""))
             case .profile(let text): set("status", .pass, L("用的是 %@", text))
             case .external(let text): set("status", .warn, L("系统代理由别的程序设置：%@", text))
             }
@@ -542,7 +542,7 @@ final class Diagnoser: ObservableObject {
                 set("proxied", .skipped, L("共享入口没在监听，没法测"))
             }
         case (.mac, .engine):
-            facts.proxiedVia = L("节点代理")
+            facts.proxiedVia = L("代理引擎")
             let result = await engine.traceConnection(url: target.url, host: target.host, port: target.port, viaPort: mixedPort)
             proxied = result.probe
             trace = result.trace

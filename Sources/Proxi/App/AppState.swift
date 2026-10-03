@@ -38,6 +38,8 @@ final class AppState: ObservableObject {
     @Published private(set) var health: Health = .unknown
     @Published private(set) var busy = false
     @Published var lastError: String?
+    /// 快捷键注册不上（被别的程序占用了）时的说明，快捷键页里显示。
+    @Published private(set) var hotkeyProblem: String?
     @Published var testResults: [UUID: TestResult] = [:]
     @Published var loginItemEnabled = false
     /// 以前版本装的后台助手还在（要管理员密码才能删）。
@@ -53,6 +55,9 @@ final class AppState: ObservableObject {
     let extensions = ExtensionManager()
     /// 更新后正在重新启动：退出时不要按「退出时关闭代理」清理。
     var relaunching = false
+    /// 一键更新后重新启动：代理引擎接着运行，新版本的 Proxi 下载好同版本的代理引擎、替换时才让它退出
+    /// （下载经系统代理走，这时代理引擎还得在；换语言重新启动时让它退出，好按新的语言重新打开）。
+    var relaunchingForUpdate = false
 
     private var watcher: SystemWatcher?
     private var refreshTimer: Timer?
@@ -113,6 +118,7 @@ final class AppState: ObservableObject {
             .sink { [weak self] _ in Task { @MainActor in self?.registerHotkey() } }
             .store(in: &cancellables)
         refresh()
+        restoreEnvironment()
         Task { await checkHealth() }
         updater.notify = { [weak self] title, body in
             self?.notify(title: title, body: body, problem: false, route: "about", category: Notifier.updateCategory)
@@ -123,6 +129,7 @@ final class AppState: ObservableObject {
         }
         updater.onRelaunch = { [weak self] in
             self?.relaunching = true
+            self?.relaunchingForUpdate = true
             NSApp.terminate(nil)
         }
         updater.startAutomaticChecks { [weak self] in self?.config.autoCheckUpdates ?? true }
@@ -138,9 +145,16 @@ final class AppState: ObservableObject {
             self.persisted.syncEnabled = enabled
             Store.save(self.persisted)
         }
+        // 和上次同步的比较时也不算「代理引擎」那条配置（它不同步）：不然每次从 iCloud 拿到别的 Mac 的配置、
+        // 加回这条以后都会被当成本机改了，又写回 iCloud，可能盖掉别的 Mac 刚改的。
         $config
-            .dropFirst()
+            .map { config -> AppConfig in
+                var synced = config
+                synced.profiles.removeAll { $0.engine }
+                return synced
+            }
             .removeDuplicates()
+            .dropFirst()
             .sink { [weak self] config in Task { @MainActor in self?.sync.localChanged(config) } }
             .store(in: &cancellables)
         sync.start(enabled: persisted.syncEnabled)
@@ -153,6 +167,26 @@ final class AppState: ObservableObject {
             .dropFirst()
             .sink { [weak self] mode in Task { @MainActor in self?.speed.setMode(mode) } }
             .store(in: &cancellables)
+    }
+
+    /// launchctl setenv 设的环境变量重启、注销以后就没了，系统代理、git、npm 的设置却还在，Proxi 也还显示开着：
+    /// 启动时正在用的配置包括「环境变量」就再设一次（不弹钥匙串的对话框，读不到密码就算了）。
+    private func restoreEnvironment() {
+        guard !busy, case .on(let profile) = status, profile.targets.contains(.environment), profile.supportsNonSystemTargets else { return }
+        let password = savedPassword(for: profile, allowUI: false)
+        if profile.needsPassword && password.isEmpty {
+            Log.info("启动时没有重新设置「\(profile.name)」的环境变量：钥匙串里读不到密码")
+            return
+        }
+        let url = profile.proxyURL(password: password)
+        Task {
+            do {
+                try await EnvironmentProxy.set(proxyURL: url, noProxy: profile.noProxy)
+                Log.info("启动时重新设置了「\(profile.name)」的环境变量")
+            } catch {
+                Log.error("启动时重新设置环境变量失败：\(Redact.secrets(error.localizedDescription))")
+            }
+        }
     }
 
     // MARK: - 从以前的版本更新过来
@@ -267,6 +301,8 @@ final class AppState: ObservableObject {
         guard persisted.extensionState.enabled, persisted.extensionState.restoreActive,
               let engineStatus = extensions.status, engineStatus.coreRunning,
               let profile = config.profiles.first(where: { $0.engine }) else { return }
+        // 正在开关代理时这次开启会被忽略：先不动，代理引擎下次更新状态时（最多 10 秒）再来。
+        guard !busy else { return }
         persisted.extensionState.restoreActive = false
         Store.save(persisted)
         guard case .off = status else {
@@ -353,11 +389,10 @@ final class AppState: ObservableObject {
 
     func refresh() {
         let current = SystemProxy.current()
-        let changed = current != snapshot
+        // 没变就不赋值：每次赋值都会让所有界面重画（设置窗口里的配置编辑页每次重画都要读一遍钥匙串）。
+        guard current != snapshot else { return }
         snapshot = current
-        if changed {
-            onStatusChanged?()
-        }
+        onStatusChanged?()
     }
 
     // MARK: - 开关
@@ -377,7 +412,9 @@ final class AppState: ObservableObject {
     }
 
     /// askForPassword：钥匙串里没有密码时弹窗请用户输入；命令行和 AI 助手调用时不弹窗，直接报错。
-    func turnOn(_ profile: Profile, askForPassword: Bool = true) {
+    /// replacing：重新应用正在用的配置（在设置里改了、iCloud 同步来了新的）时传改之前的那份。这时系统代理的现状已经对不上
+    /// 改过的配置，不能再从 status 推断上一个配置（改前有、改后没有的生效范围要清掉），也不能把自己设的代理当成「开启前的设置」记下来。
+    func turnOn(_ profile: Profile, askForPassword: Bool = true, replacing old: Profile? = nil) {
         guard !busy else { return }
         // 要登录的代理：密码从这台 Mac 的钥匙串里取；还没有（比如配置是从别的 Mac 同步来的）就请用户输入一次。
         var password = ""
@@ -399,11 +436,12 @@ final class AppState: ObservableObject {
             }
         }
         busy = true
-        let previous: Profile? = {
+        lastError = nil
+        let previous: Profile? = old ?? {
             if case .on(let current) = status { return current }
             return persisted.enabledByUs ? selectedProfile : nil
         }()
-        if !status.isOn || persisted.original == nil {
+        if persisted.original == nil || (old == nil && !status.isOn) {
             persisted.original = snapshot
         }
         let mode = config.offMode
@@ -438,10 +476,11 @@ final class AppState: ObservableObject {
         }
     }
 
-    func turnOff() {
+    /// clearing：要关掉的配置已经不在配置列表里了（iCloud 同步来的配置删了它）时传它，按它的生效范围清理。
+    func turnOff(clearing removed: Profile? = nil) {
         guard !busy else { return }
         busy = true
-        let current = status
+        let current = removed.map { ProxyStatus.on($0) } ?? status
         let mode = config.offMode
         Task {
             var failures: [String] = []
@@ -466,20 +505,29 @@ final class AppState: ObservableObject {
         }
     }
 
+    /// 诊断页的「清除所有代理设置」：不管现在开着什么、是谁设的，系统代理都改成直接连接（不按「恢复开启前的设置」），
+    /// 环境变量、git、npm 的代理都清掉。
+    func clearAllProxySettings() async {
+        guard !busy else { return }
+        busy = true
+        var failures: [String] = []
+        for target in ProxyTarget.allCases {
+            if let error = await clear(target: target, mode: .direct) {
+                failures.append(L("%@：%@", target.title, error))
+            }
+        }
+        persisted.enabledByUs = false
+        persisted.original = nil
+        Store.save(persisted)
+        finish(action: L("清除所有代理设置"), failures: failures, successText: L("已改为直接连接"))
+    }
+
     func use(_ profile: Profile) {
         if case .on(let current) = status, current.id == profile.id {
             turnOff()
         } else {
             turnOn(profile)
         }
-    }
-
-    func use(named name: String) -> Bool {
-        guard let profile = config.profiles.first(where: { $0.name.caseInsensitiveCompare(name) == .orderedSame }) else {
-            return false
-        }
-        turnOn(profile)
-        return true
     }
 
     private func finish(action: String, failures: [String], successText: String) {
@@ -505,7 +553,8 @@ final class AppState: ObservableObject {
         do {
             switch target {
             case .system:
-                try await SystemProxy.apply(DesiredProxy(profile: profile, password: password))
+                let written = try await SystemProxy.apply(DesiredProxy(profile: profile, password: password), also: persisted.systemServices)
+                persisted.systemServices = written
             case .environment:
                 try await EnvironmentProxy.set(proxyURL: url, noProxy: profile.noProxy)
             case .git:
@@ -519,22 +568,18 @@ final class AppState: ObservableObject {
         }
     }
 
-    /// 已经保存在钥匙串里的密码（没有就是空的）。
-    func savedPassword(for profile: Profile) -> String {
-        profile.needsPassword ? (ProxyKeychain.password(for: profile.id) ?? "") : ""
+    /// 已经保存在钥匙串里的密码（没有就是空的）。allowUI 为 false 时不弹系统的钥匙串对话框（命令行、AI 助手调用时）。
+    func savedPassword(for profile: Profile, allowUI: Bool = true) -> String {
+        profile.needsPassword ? (ProxyKeychain.password(for: profile.id, allowUI: allowUI) ?? "") : ""
     }
 
     private func clear(target: ProxyTarget, mode: OffMode) async -> String? {
         do {
             switch target {
             case .system:
-                let current = SystemProxy.current()
-                if mode == .restore, let original = persisted.original {
-                    try await SystemProxy.apply(DesiredProxy(restoring: original))
-                } else {
-                    let autoDiscovery = persisted.original?.autoDiscovery ?? current.autoDiscovery
-                    try await SystemProxy.apply(DesiredProxy(offWithAutoDiscovery: autoDiscovery, bypassDomains: current.exceptions))
-                }
+                // 开启时写过、现在没在用的网络服务也一起写（见 PersistedState.systemServices）。
+                try await SystemProxy.apply(offDesired(mode: mode), also: persisted.systemServices)
+                persisted.systemServices = []
             case .environment:
                 try await EnvironmentProxy.clear()
             case .git:
@@ -546,6 +591,15 @@ final class AppState: ObservableObject {
         } catch {
             return error.localizedDescription
         }
+    }
+
+    /// 关闭代理时系统代理要写成什么：恢复开启前的设置，或者直接连接（保留例外列表，自动发现恢复成开启前的值）。
+    private func offDesired(mode: OffMode) -> DesiredProxy {
+        if mode == .restore, let original = persisted.original {
+            return DesiredProxy(restoring: original)
+        }
+        let current = SystemProxy.current()
+        return DesiredProxy(offWithAutoDiscovery: persisted.original?.autoDiscovery ?? current.autoDiscovery, bypassDomains: current.exceptions)
     }
 
     // MARK: - 配置
@@ -562,14 +616,19 @@ final class AppState: ObservableObject {
     func update(_ profile: Profile, passwordChanged: Bool = false) {
         guard let index = config.profiles.firstIndex(where: { $0.id == profile.id }) else { return }
         let previous = config.profiles[index]
+        // 先看改之前是不是正在用它：改了地址以后，系统代理的现状就对不上新地址了。
+        let wasActive: Bool = {
+            if case .on(let current) = status { return current.id == profile.id }
+            return false
+        }()
         config.profiles[index] = profile
         if profile.engine, persisted.extensionState.profile != profile {
             persisted.extensionState.profile = profile
             Store.save(persisted)
         }
-        // 正在使用的配置改了地址：立即重新应用。
-        if case .on(let current) = status, current.id == profile.id, previous != profile || passwordChanged {
-            turnOn(profile)
+        // 正在使用的配置改了地址、生效范围或者密码：立即重新应用（只改名字和颜色不用）。
+        if wasActive, !profile.appliesSame(as: previous) || passwordChanged {
+            turnOn(profile, replacing: previous)
         }
     }
 
@@ -600,12 +659,13 @@ final class AppState: ObservableObject {
         config = remote
         reconcileEngineProfile()
         guard let active, !active.engine else { return }
+        // 换掉配置以后再算 status 就对不上了：上一个配置明确传进去。
         if let updated = remote.profile(id: active.id) {
-            if updated != active {
-                turnOn(updated)
+            if !updated.appliesSame(as: active) {
+                turnOn(updated, replacing: active)
             }
         } else {
-            turnOff()
+            turnOff(clearing: active)
         }
     }
 
@@ -636,8 +696,8 @@ final class AppState: ObservableObject {
 
     // MARK: - 测速与健康
 
-    func test(_ profile: Profile) async {
-        let result = await ProxyTester.test(profile: profile, password: savedPassword(for: profile), testURL: config.testURL)
+    func test(_ profile: Profile, askForPassword: Bool = true) async {
+        let result = await ProxyTester.test(profile: profile, password: savedPassword(for: profile, allowUI: askForPassword), testURL: config.testURL)
         testResults[profile.id] = result
     }
 
@@ -685,17 +745,22 @@ final class AppState: ObservableObject {
     }
 
     /// 退出时按设置关闭代理；代理引擎开着的话也让它退出（它自己停内核）。
+    /// 正在用「代理引擎」那条配置时，不管「退出时关闭代理」开没开都关掉：代理引擎跟着退出，不关的话系统代理、终端、git、npm
+    /// 都指向一个没人监听的端口，再打开 Proxi 之前上不了网。重新启动（一键更新、换语言）时不关，新的实例接着用。
     func handleExit() {
         control.stop()
-        for app in NSRunningApplication.runningApplications(withBundleIdentifier: ExtensionManager.bundleIdentifier) {
-            app.terminate()
+        if !relaunchingForUpdate {
+            for app in NSRunningApplication.runningApplications(withBundleIdentifier: ExtensionManager.bundleIdentifier) {
+                app.terminate()
+            }
         }
-        guard !relaunching, config.disableOnExit, case .on(let profile) = status else { return }
-        let desired = DesiredProxy(offWithAutoDiscovery: persisted.original?.autoDiscovery ?? snapshot.autoDiscovery, bypassDomains: snapshot.exceptions)
+        guard !relaunching, case .on(let profile) = status, config.disableOnExit || profile.engine else { return }
+        let desired = offDesired(mode: config.offMode)
+        let services = persisted.systemServices
         let semaphore = DispatchSemaphore(value: 0)
         Task.detached {
             if profile.targets.contains(.system) {
-                try? await SystemProxy.apply(desired)
+                try? await SystemProxy.apply(desired, also: services)
             }
             if profile.targets.contains(.environment) {
                 try? await EnvironmentProxy.clear()
@@ -709,15 +774,24 @@ final class AppState: ObservableObject {
             semaphore.signal()
         }
         _ = semaphore.wait(timeout: .now() + 10)
+        // 记下代理已经关了：不然只设了终端、git、npm 的配置下次打开时还显示开着，下次开启时也会把这时的设置当成「开启前的设置」。
+        persisted.enabledByUs = false
+        persisted.original = nil
+        persisted.systemServices = []
+        Store.save(persisted)
+        Log.info("退出时关闭了「\(profile.name)」")
     }
 
     private func registerHotkey() {
         HotkeyCenter.shared.unregister(id: 1)
+        hotkeyProblem = nil
         guard let binding = config.toggleHotkey else { return }
         if !HotkeyCenter.shared.register(id: 1, binding: binding, action: { [weak self] in
             Task { @MainActor in self?.toggle() }
         }) {
-            lastError = L("快捷键 %@ 已被其他程序占用，请换一个", binding.display)
+            let problem = L("快捷键 %@ 已被其他程序占用，请换一个", binding.display)
+            hotkeyProblem = problem
+            lastError = problem
         }
     }
 }

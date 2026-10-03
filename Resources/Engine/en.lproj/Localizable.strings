@@ -234,7 +234,7 @@
 "完全控制" = "Full Control";
 "命令行和 AI 助手都连不上" = "Neither the command line nor AI assistants can connect";
 "查看状态、节点、规则和连接，不能改动任何东西" = "View status, nodes, rules and connections, but change nothing";
-"另外可以开关代理、切换节点和模式、测速、断开连接" = "Also turn the proxy on and off, switch nodes and modes, test latency and close connections";
+"另外可以切换节点和模式、测速、更新订阅和规则、断开连接，开关局域网共享、增强模式和网关模式" = "Also switch nodes and modes, run latency tests, update subscriptions and rules, close connections, and turn LAN sharing, enhanced mode and gateway mode on or off";
 "另外可以加规则、加订阅、导入配置；每次改动都记在操作记录里，可以撤销" = "Also add rules and subscriptions and import configurations. Every change is recorded in the change history and can be undone.";
 "Wi‑Fi「%@」" = "Wi‑Fi “%@”";
 "路由器 %@" = "Router %@";
@@ -368,7 +368,7 @@
 "git clone、pull 等（全局 http.proxy）" = "git clone, pull, etc. (global http.proxy)";
 "写入用户目录的 .npmrc" = "Writes .npmrc in your home folder";
 "新配置" = "New Profile";
-"节点代理" = "Node Proxy";
+"代理引擎" = "Proxy Engine";
 "代理引擎 · %@" = "Proxy engine · %@";
 "请填写配置名称" = "Enter a profile name";
 "PAC 地址要以 http://、https:// 或 file:// 开头" = "The PAC URL must start with http://, https:// or file://";
@@ -530,6 +530,8 @@
 "%@ 条自定义规则" = "%@ custom rules";
 "已导入" = "Imported ";
 "组" = " Group";
+"这些策略组默认就是直连或拦截，没有建成组，用到它们的规则直接直连或拦截：%@" = "These policy groups default to Direct or Reject, so they weren't created as groups and rules that use them go direct or are rejected: %@";
+"策略组「%@」没有导入：%@" = "Policy group “%@” wasn't imported: %@";
 
 /* System/ConfigPatch.swift */
 "补丁要是「键: 值」形式的 YAML" = "The patch must be YAML in “key: value” form";
@@ -670,7 +672,7 @@
 "，%@ ms" = ", %@ ms";
 "失败" = "Failed";
 "没有命中任何规则" = "Didn't match any rule";
-"开启节点代理" = "Turn On Node Proxy";
+"在 Proxi 里开启「代理引擎」" = "Turn On “Proxy Engine” in Proxi";
 "让 %@ 走节点" = "Send %@ Through a Node";
 "自动选择节点" = "Auto-Select a Node";
 "测速全部节点" = "Test All Nodes";
@@ -683,7 +685,7 @@
 "这个网站直连就能打开（%@）。如果浏览器里仍然打不开，多半是网站本身或浏览器的问题，和代理无关。" = "This site opens directly (%@). If it still won't open in the browser, it's most likely a problem with the site or the browser, not the proxy.";
 "没有测" = "not tested";
 "本机没开代理，直连又打不开" = "This Mac has no proxy on, and the direct connection fails";
-"直连：%@。这个网站直连访问不了，开启节点代理后再试。" = "Direct: %@. This site can't be reached directly; turn on the node proxy and try again.";
+"直连：%@。这个网站直连访问不了，在 Proxi 里开启「代理引擎」后再试。" = "Direct: %@. This site can't be reached directly; turn on “Proxy Engine” in Proxi and try again.";
 "直连：%@。还没有可用的节点，先在「节点与订阅」页添加订阅，或者在「代理配置」里选一个代理。" = "Direct: %@. There are no nodes yet; add a subscription on the Nodes & Subscriptions page, or choose a proxy in Proxy Profiles.";
 "经 %@ 访问成功：%@。" = "Reached through %@: %@. ";
 "内核让它走了 %@。" = "The core sent it through %@. ";
@@ -709,7 +711,7 @@
 "经代理访问失败" = "Access through the proxy failed";
 "结果：%@。内核没有记录到这次连接的判定，可能是内核这时候重启了；再测一次。" = "Result: %@. The core didn't record a decision for this connection; it may have restarted just then. Test again.";
 "经 %@ 访问失败" = "Access through %@ failed";
-"结果：%@。检查那个代理现在能不能用（Proxi 的面板里可以测速），或者换成节点代理。" = "Result: %@. Check whether that proxy works right now (you can test it in Proxi's panel), or switch to the node proxy.";
+"结果：%@。检查那个代理现在能不能用（Proxi 的面板里可以测速），或者在 Proxi 里换成「代理引擎」。" = "Result: %@. Check whether that proxy works right now (you can test it in Proxi's panel), or switch to “Proxy Engine” in Proxi.";
 "共享状态" = "Sharing Status";
 "本机代理" = "Proxy on This Mac";
 "域名解析" = "DNS Lookup";
@@ -724,7 +726,7 @@
 "共享入口在监听端口 %@，%@" = "The sharing entry is listening on port %@, %@";
 "局域网共享没有开启" = "LAN sharing isn't on";
 "本机没开代理，浏览器直连" = "This Mac has no proxy on; the browser connects directly";
-"用的是节点代理（%@）" = "Using the node proxy (%@)";
+"用的是代理引擎（%@）" = "Using the proxy engine (%@)";
 "，当前节点 %@" = ", current node %@";
 "用的是 %@" = "Using %@";
 "正在解析…" = "Resolving…";
@@ -776,7 +778,6 @@
 "完成" = "Done";
 
 /* System/NetworkRoute.swift */
-"代理引擎" = "Proxy Engine";
 
 /* System/PrivilegedHelper.swift */
 "文件名不对：%@" = "Invalid file name: %@";
@@ -974,7 +975,7 @@
 "按域名、程序、设备、规则或节点筛选" = "Filter by domain, app, device, rule or node";
 "正在断开…" = "Closing…";
 "全部断开" = "Close All";
-"内核没有运行。开启节点代理或局域网共享后，经内核的连接会列在这里。" = "The core isn't running. Once the node proxy or LAN sharing is on, connections through the core are listed here.";
+"内核没有运行。在「节点与订阅」页启用代理引擎，或者打开局域网共享后，经内核的连接会列在这里。" = "The core isn't running. Once you enable the proxy engine on the Nodes & Subscriptions page or turn on LAN sharing, connections through the core appear here.";
 "现在没有开着的连接。" = "No open connections right now.";
 "没有匹配的连接。" = "No matching connections.";
 "还有 %@ 条没有列出，用筛选缩小范围。" = "%@ more not listed; filter to narrow it down.";
@@ -1031,7 +1032,7 @@
 "把备份里的订阅、节点、策略组、规则、代理配置加进现有设置，同名的更新。" = "Add the backup's subscriptions, nodes, policy groups, rules and proxy profiles to the current settings; items with the same name are updated.";
 "加进现有设置：同名的策略组、同地址的订阅和规则集会被更新，其余的保留。" = "Add to the current settings: policy groups with the same name and subscriptions and rule sets with the same URL are updated; everything else is kept.";
 "导入的内容替换同一类的现有设置（比如导入了策略组，原来的策略组都换掉）；没导入的类别不动。" = "The imported content replaces current settings of the same kind (for example, importing policy groups replaces all existing policy groups); kinds that aren't imported stay untouched.";
-"内核会自动重新加载。改错了可以到「自动化」页的操作记录里撤销。" = "The core reloads automatically. If something goes wrong, undo it in the change history on the Automation page.";
+"内核会自动重新加载。改错了可以在终端里运行代理引擎的 undo 命令撤销（用法见「通用」页）。" = "The core reloads automatically. If something went wrong, run the proxy engine's undo command in Terminal to revert it (see the General page for how).";
 "返回修改" = "Back to Edit";
 "取消" = "Cancel";
 "导入" = "Import";
@@ -1050,6 +1051,7 @@
 "窗口" = "Window";
 "最小化" = "Minimize";
 "关闭窗口" = "Close Window";
+"在 Proxi 里停用代理引擎…" = "Turn Off Proxy Engine in Proxi…";
 
 /* UI/NodeViews.swift */
 "订阅里没有解析出节点" = "No nodes were parsed from the subscriptions";
@@ -1097,7 +1099,7 @@
 "加了 %@ 个节点" = "Added %@ nodes";
 "剪贴板里没有节点链接，也没有二维码图片" = "The clipboard has no node links and no QR code image";
 "屏幕上没有找到二维码：把二维码放大一点、不要被挡住再试" = "No QR code found on screen: make it larger and make sure it isn't covered, then try again";
-"扫描屏幕失败：%@。在「系统设置 → 隐私与安全性 → 屏幕录制」里允许 Proxi 后再试。" = "Screen scan failed: %@. Allow Proxi in System Settings → Privacy & Security → Screen Recording, then try again.";
+"扫描屏幕失败：%@。在「系统设置 → 隐私与安全性 → 屏幕录制」里允许 Proxi Engine 后再试。" = "Screen scan failed: %@. Allow Proxi Engine in System Settings → Privacy & Security → Screen Recording, then try again.";
 "选择节点二维码的图片" = "Choose a node QR code image";
 "不用（直接连节点）" = "None (connect to nodes directly)";
 "订阅设置" = "Subscription Settings";
@@ -1116,7 +1118,7 @@
 "只用这些来源的节点（都不选就是全部）" = "Only use nodes from these sources (none selected means all)";
 "也放进来的策略组" = "Also Include These Groups";
 "测速地址" = "Test URL";
-"空为通用设置里的：%@" = "Empty uses the one in General: %@";
+"空为默认的：%@" = "Empty uses the default: %@";
 "间隔（秒）" = "Interval (seconds)";
 "默认 %@" = "Default %@";
 "容差（毫秒）" = "Tolerance (ms)";
@@ -1154,7 +1156,7 @@
 "管理分流规则" = "Manage Routing Rules";
 "代理端口" = "Proxy Port";
 "API 端口" = "API Port";
-"改端口后内核会重启，配置列表里「节点代理」的端口会跟着改。默认代理端口 7890、API 端口 9097。" = "The core restarts after changing ports, and the port of “Node Proxy” in the profile list follows. Defaults: proxy port 7890, API port 9097.";
+"改端口后内核会重启，Proxi 配置列表里「代理引擎」的端口会跟着改。默认代理端口 7890、API 端口 9097。" = "Changing a port restarts the core, and the port of the “Proxy Engine” profile in Proxi follows it. Defaults: proxy port 7890, API port 9097.";
 "内核日志" = "Core Log";
 "还没有日志" = "No logs yet";
 "完整日志在配置目录的 core/core.log。" = "The full log is core/core.log in the configuration folder.";
@@ -1218,7 +1220,7 @@
 "按域名后缀和 IP 归属地判断，不用下载" = "Matched by domain suffix and IP location; no download needed";
 "还没有下载" = "Not downloaded yet";
 "规则库" = "Rule Library";
-"blackmatrix7、MetaCubeX、ACL4SSR 和 johnshall 维护的公开规则，点「添加」加进规则集，去向可以再改" = "Public rules maintained by blackmatrix7, MetaCubeX, ACL4SSR and johnshall. Click “Add” to add one as a rule set; you can change its target later";
+"MetaCubeX 和 ACL4SSR 维护的公开规则，点「添加」加进规则集，去向可以再改" = "Public rules maintained by MetaCubeX and ACL4SSR. Click “Add” to add one as a rule set; you can change its target later";
 "已添加" = "Added";
 "复制内容" = "Copy Value";
 "删除规则" = "Delete Rule";
@@ -1240,7 +1242,7 @@
 "保持唤醒" = "Stay Awake";
 "共享期间不让 Mac 睡眠（显示器可以关）" = "Keep the Mac from sleeping while sharing (the display can turn off)";
 "电池供电时也保持" = "Also on Battery Power";
-"Mac 一睡，设备的网就断了，所以共享开着时阻止空闲睡眠；默认只在接电源时保持，免得忘了关把电用光。合盖仍然会睡眠：接上电源和外接显示器（合盖模式）可以合着盖子用。程序退出或关掉共享后恢复正常，「活动监视器 → 能耗」里能看到是 Proxi 在阻止睡眠。" = "When the Mac sleeps, devices lose their connection, so idle sleep is prevented while sharing is on. By default this only applies on power, so a forgotten share doesn't drain the battery. Closing the lid still sleeps the Mac; with power and an external display connected (clamshell mode) you can use it closed. Things go back to normal when Proxi quits or sharing is turned off, and Activity Monitor → Energy shows that Proxi is preventing sleep.";
+"Mac 一睡，设备的网就断了，所以共享开着时阻止空闲睡眠；默认只在接电源时保持，免得忘了关把电用光。合盖仍然会睡眠：接上电源和外接显示器（合盖模式）可以合着盖子用。程序退出或关掉共享后恢复正常，「活动监视器 → 能耗」里能看到是 Proxi Engine 在阻止睡眠。" = "When the Mac sleeps, devices lose their connection, so idle sleep is prevented while sharing is on. By default this only applies on power, so a forgotten share doesn't drain the battery. Closing the lid still sleeps the Mac; with power and an external display connected (clamshell mode) you can use it closed. Things go back to normal when the proxy engine quits or sharing is turned off, and Activity Monitor → Energy shows that Proxi Engine is preventing sleep.";
 "正在保持唤醒" = "Staying awake";
 "电池供电，已暂停保持唤醒" = "On battery; staying awake is paused";
 "未保持" = "Not active";
@@ -1380,7 +1382,6 @@
 "还没有下载内核，到「内核」页下载" = "The core hasn't been downloaded yet; download it on the Core page";
 "还没有下载内核，到设置的「内核」页下载" = "The core hasn't been downloaded yet; download it on the Core page in Settings";
 "还没有订阅。把服务提供方给你的订阅地址粘到下面，节点由内核下载和解析。" = "No subscriptions yet. Paste the subscription URL from your provider below; the core downloads and parses the nodes.";
-"退出代理引擎" = "Quit Proxy Engine";
 "选一个应用，或者填它的完整路径，比如 /Applications/Safari.app" = "Choose an app, or enter its full path, e.g. /Applications/Safari.app";
 "通知、本机控制接口" = "Notifications and the local control interface";
 "重新下载" = "Download Again";

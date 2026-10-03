@@ -119,26 +119,27 @@ struct AppConfig: Codable, Equatable {
         case profiles, clickAction, toggleHotkey, offMode, notifyLevel, healthCheck, disableOnExit, testURL, autoCheckUpdates, engine, speedDisplay, speedSide, speedColorFollowsStatus, automation
     }
 
+    /// 每一项单独容错：哪一项读不出来（新版本加的取值、手改坏了）就用默认值，不让整个配置读失败、订阅和规则都没了。
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        profiles = try container.decodeIfPresent([Profile].self, forKey: .profiles) ?? []
-        clickAction = try container.decodeIfPresent(ClickAction.self, forKey: .clickAction) ?? .panel
+        profiles = (try? container.decodeIfPresent(LossyArray<Profile>.self, forKey: .profiles))?.elements ?? []
+        clickAction = (try? container.decodeIfPresent(ClickAction.self, forKey: .clickAction)) ?? .panel
         if container.contains(.toggleHotkey) {
-            toggleHotkey = try container.decodeIfPresent(HotkeyBinding.self, forKey: .toggleHotkey)
+            toggleHotkey = try? container.decodeIfPresent(HotkeyBinding.self, forKey: .toggleHotkey)
         } else {
             toggleHotkey = HotkeyBinding.defaultToggle
         }
-        offMode = try container.decodeIfPresent(OffMode.self, forKey: .offMode) ?? .direct
-        notifyLevel = try container.decodeIfPresent(NotifyLevel.self, forKey: .notifyLevel) ?? .all
-        healthCheck = try container.decodeIfPresent(Bool.self, forKey: .healthCheck) ?? true
-        disableOnExit = try container.decodeIfPresent(Bool.self, forKey: .disableOnExit) ?? false
-        testURL = try container.decodeIfPresent(String.self, forKey: .testURL) ?? AppConfig.defaultTestURL
-        autoCheckUpdates = try container.decodeIfPresent(Bool.self, forKey: .autoCheckUpdates) ?? true
-        engine = try container.decodeIfPresent(EngineConfig.self, forKey: .engine) ?? EngineConfig()
-        speedDisplay = try container.decodeIfPresent(SpeedDisplay.self, forKey: .speedDisplay) ?? .system
-        speedSide = try container.decodeIfPresent(SpeedSide.self, forKey: .speedSide) ?? .left
-        speedColorFollowsStatus = try container.decodeIfPresent(Bool.self, forKey: .speedColorFollowsStatus) ?? true
-        automation = try container.decodeIfPresent(AutomationConfig.self, forKey: .automation) ?? AutomationConfig()
+        offMode = (try? container.decodeIfPresent(OffMode.self, forKey: .offMode)) ?? .direct
+        notifyLevel = (try? container.decodeIfPresent(NotifyLevel.self, forKey: .notifyLevel)) ?? .all
+        healthCheck = (try? container.decodeIfPresent(Bool.self, forKey: .healthCheck)) ?? true
+        disableOnExit = (try? container.decodeIfPresent(Bool.self, forKey: .disableOnExit)) ?? false
+        testURL = (try? container.decodeIfPresent(String.self, forKey: .testURL)) ?? AppConfig.defaultTestURL
+        autoCheckUpdates = (try? container.decodeIfPresent(Bool.self, forKey: .autoCheckUpdates)) ?? true
+        engine = (try? container.decodeIfPresent(EngineConfig.self, forKey: .engine)) ?? EngineConfig()
+        speedDisplay = (try? container.decodeIfPresent(SpeedDisplay.self, forKey: .speedDisplay)) ?? .system
+        speedSide = (try? container.decodeIfPresent(SpeedSide.self, forKey: .speedSide)) ?? .left
+        speedColorFollowsStatus = (try? container.decodeIfPresent(Bool.self, forKey: .speedColorFollowsStatus)) ?? true
+        automation = (try? container.decodeIfPresent(AutomationConfig.self, forKey: .automation)) ?? AutomationConfig()
     }
 
     func encode(to encoder: Encoder) throws {
@@ -195,5 +196,26 @@ struct PersistedState: Codable, Equatable {
         share = try container.decodeIfPresent(ShareConfig.self, forKey: .share) ?? ShareConfig()
         traffic = try container.decodeIfPresent(TrafficStats.self, forKey: .traffic) ?? TrafficStats()
         tun = (try? container.decodeIfPresent(TunConfig.self, forKey: .tun)) ?? TunConfig()
+    }
+}
+
+/// 一个个元素地读的数组：读不出来的元素跳过，不让整个数组（和外面的整个配置）读失败。
+struct LossyArray<Element: Decodable>: Decodable {
+    var elements: [Element] = []
+
+    /// 什么都接受的占位：读失败的元素要用它跳过去，不然解码器停在原地。
+    private struct Skip: Decodable {
+        init(from decoder: Decoder) throws {}
+    }
+
+    init(from decoder: Decoder) throws {
+        var container = try decoder.unkeyedContainer()
+        while !container.isAtEnd {
+            if let element = try? container.decode(Element.self) {
+                elements.append(element)
+            } else {
+                _ = try? container.decode(Skip.self)
+            }
+        }
     }
 }

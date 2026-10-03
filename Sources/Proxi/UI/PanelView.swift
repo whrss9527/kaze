@@ -51,8 +51,9 @@ struct PanelView: View {
 
     // MARK: - 状态
 
+    /// 别的程序设置的系统代理也算开着（和菜单栏图标一致）：这时拨开关就是把它关掉。
     private var isOn: Binding<Bool> {
-        Binding(get: { state.status.isOn }, set: { _ in state.toggle() })
+        Binding(get: { state.status.isOn || isExternal }, set: { _ in state.toggle() })
     }
 
     private var statusCard: some View {
@@ -73,7 +74,7 @@ struct PanelView: View {
                 ProgressView()
                     .controlSize(.small)
             } else {
-                Toggle("", isOn: isOn)
+                Toggle(L("开 / 关代理"), isOn: isOn)
                     .toggleStyle(.switch)
                     .labelsHidden()
                     .disabled(state.config.profiles.isEmpty && !state.status.isOn && !isExternal)
@@ -129,7 +130,23 @@ struct PanelView: View {
 
     // MARK: - 配置列表
 
+    /// 配置多了以后面板里的列表在这么多行以内滚动，面板不会高过屏幕。
+    private static let maxVisibleRows = 8
+
     private var profileList: some View {
+        Group {
+            if state.config.profiles.count > Self.maxVisibleRows {
+                ScrollView { profileRows }
+                    .frame(height: CGFloat(Self.maxVisibleRows) * 43)
+            } else {
+                profileRows
+            }
+        }
+        .padding(6)
+        .glassCard()
+    }
+
+    private var profileRows: some View {
         VStack(spacing: 2) {
             ForEach(state.config.profiles) { profile in
                 Button {
@@ -140,8 +157,6 @@ struct PanelView: View {
                 .buttonStyle(HoverRowStyle())
             }
         }
-        .padding(6)
-        .glassCard()
     }
 
     private func isActive(_ profile: Profile) -> Bool {
@@ -204,6 +219,7 @@ struct PanelView: View {
             }
             .buttonStyle(IconButtonStyle())
             .help(L("测试全部配置的连接和延迟"))
+            .accessibilityLabel(L("测试全部配置的连接和延迟"))
             .disabled(state.config.profiles.isEmpty || testing)
 
             if case .on(let profile) = state.status, profile.kind != .pac {
@@ -218,6 +234,7 @@ struct PanelView: View {
                 .frame(width: 30, height: 30)
                 .background(Circle().fill(Color.primary.opacity(0.05)))
                 .help(L("复制在当前终端里使用代理的命令"))
+                .accessibilityLabel(L("复制在当前终端里使用代理的命令"))
             }
 
             Spacer()
@@ -236,6 +253,7 @@ struct PanelView: View {
                 }
                 .buttonStyle(IconButtonStyle())
                 .help(L("代理引擎设置"))
+                .accessibilityLabel(L("代理引擎设置"))
             }
 
             Button {
@@ -245,6 +263,7 @@ struct PanelView: View {
             }
             .buttonStyle(IconButtonStyle())
             .help(L("设置"))
+            .accessibilityLabel(L("设置"))
 
             Button {
                 actions.quit()
@@ -253,6 +272,7 @@ struct PanelView: View {
             }
             .buttonStyle(IconButtonStyle())
             .help(L("退出 Proxi"))
+            .accessibilityLabel(L("退出 Proxi"))
         }
         .padding(.horizontal, 2)
     }

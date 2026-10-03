@@ -33,46 +33,17 @@ struct ProfilesPage: View {
         }
     }
 
+    /// 配置多了以后列表在这么多行以内滚动，不把「新建」「自动检测」挤出窗口。
+    private static let maxVisibleRows = 9
+
     private var profileList: some View {
         VStack(spacing: 8) {
-            VStack(spacing: 2) {
-                if state.config.profiles.isEmpty {
-                    Text(L("还没有配置"))
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                        .padding(20)
-                }
-                ForEach(state.config.profiles) { profile in
-                    Button {
-                        navigation.selectedProfileID = profile.id
-                    } label: {
-                        HStack(spacing: 10) {
-                            ColorDot(hex: profile.color)
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text(profile.name)
-                                    .font(.system(size: 12, weight: .medium))
-                                    .lineLimit(1)
-                                Text(profile.summary)
-                                    .font(.system(size: 10))
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                                    .truncationMode(.middle)
-                            }
-                            Spacer()
-                            if case .on(let current) = state.status, current.id == profile.id {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .foregroundStyle(Color(hex: profile.color))
-                            }
-                        }
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 7)
-                        .contentShape(Rectangle())
-                        .background(
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .fill(navigation.selectedProfileID == profile.id ? Color.accentColor.opacity(0.18) : Color.clear)
-                        )
-                    }
-                    .buttonStyle(HoverRowStyle())
+            Group {
+                if state.config.profiles.count > Self.maxVisibleRows {
+                    ScrollView { profileRows }
+                        .frame(height: CGFloat(Self.maxVisibleRows) * 45)
+                } else {
+                    profileRows
                 }
             }
             .padding(6)
@@ -95,6 +66,49 @@ struct ProfilesPage: View {
             }
             .controlSize(.small)
             Spacer()
+        }
+    }
+
+    private var profileRows: some View {
+        VStack(spacing: 2) {
+            if state.config.profiles.isEmpty {
+                Text(L("还没有配置"))
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .padding(20)
+            }
+            ForEach(state.config.profiles) { profile in
+                Button {
+                    navigation.selectedProfileID = profile.id
+                } label: {
+                    HStack(spacing: 10) {
+                        ColorDot(hex: profile.color)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(profile.name)
+                                .font(.system(size: 12, weight: .medium))
+                                .lineLimit(1)
+                            Text(profile.summary)
+                                .font(.system(size: 10))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        }
+                        Spacer()
+                        if case .on(let current) = state.status, current.id == profile.id {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(Color(hex: profile.color))
+                        }
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 7)
+                    .contentShape(Rectangle())
+                    .background(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(navigation.selectedProfileID == profile.id ? Color.accentColor.opacity(0.18) : Color.clear)
+                    )
+                }
+                .buttonStyle(HoverRowStyle())
+            }
         }
     }
 
@@ -139,13 +153,15 @@ struct ProfileEditor: View {
     let original: Profile
     let onDelete: () -> Void
     @State private var portText: String
-    /// 钥匙串里的密码（编辑时显示在密码框里，保存时写回钥匙串）。
-    @State private var passwordText: String
-    private let originalPassword: String
+    /// 钥匙串里的密码（编辑时显示在密码框里，保存时写回钥匙串）。打开编辑页时读一次，不在每次重画时读。
+    @State private var passwordText = ""
+    @State private var originalPassword = ""
+    @State private var passwordLoaded = false
     @State private var problem: String?
     @State private var testing = false
     @State private var result: TestResult?
     @State private var saved = false
+    @State private var confirmingDelete = false
 
     init(state: AppState, profile: Profile, onDelete: @escaping () -> Void) {
         self.state = state
@@ -153,9 +169,14 @@ struct ProfileEditor: View {
         self.onDelete = onDelete
         _draft = State(initialValue: profile)
         _portText = State(initialValue: String(profile.port))
-        let saved = profile.hasPassword ? (ProxyKeychain.password(for: profile.id) ?? "") : ""
+    }
+
+    private func loadPassword() {
+        guard !passwordLoaded else { return }
+        passwordLoaded = true
+        let saved = original.hasPassword ? (ProxyKeychain.password(for: original.id) ?? "") : ""
         originalPassword = saved
-        _passwordText = State(initialValue: saved)
+        passwordText = saved
     }
 
     private var dirty: Bool { draft != original || passwordText != originalPassword }
@@ -202,8 +223,12 @@ struct ProfileEditor: View {
                         TextField(L("PAC 地址"), text: $draft.pacURL, prompt: Text("http://proxy.corp.example/proxy.pac"))
                     } else {
                         TextField(L("主机"), text: $draft.host, prompt: Text("proxy.corp.example"))
-                            .onChange(of: draft.host) { _, value in
-                                splitPastedAddress(value)
+                            .onChange(of: draft.host) { old, value in
+                                // 一次多出好几个字是粘贴进来的整段地址，马上拆开；一个个字打的等保存、测试时再拆，
+                                // 不然打到「127.0.0.1:8」就被拆成端口 8，后面的数字跑到主机里。
+                                if value.count - old.count > 1 {
+                                    splitPastedAddress(value)
+                                }
                             }
                         TextField(L("端口"), text: $portText, prompt: Text("8080"))
                             .onChange(of: portText) { _, value in
@@ -272,17 +297,30 @@ struct ProfileEditor: View {
             .formStyle(.grouped)
             .scrollContentBackground(.hidden)
             .onSubmit { save() }
+            .onAppear(perform: loadPassword)
+            // 别处改了这条配置（iCloud 同步、代理引擎换了端口）、这里又没有没保存的改动时跟着更新，免得保存时把旧的写回去。
+            .onChange(of: original) { old, new in
+                if draft == old {
+                    draft = new
+                    portText = String(new.port)
+                }
+            }
 
             Divider()
                 .padding(.horizontal, 20)
 
             HStack(spacing: 10) {
                 Button(role: .destructive) {
-                    onDelete()
+                    confirmingDelete = true
                 } label: {
                     Label(L("删除"), systemImage: "trash")
                 }
                 .disabled(draft.engine)
+                .confirmationDialog(L("删除「%@」？", original.name), isPresented: $confirmingDelete) {
+                    Button(L("删除"), role: .destructive) { onDelete() }
+                } message: {
+                    Text(L("配置和它在钥匙串里的密码都会删掉；开着 iCloud 同步时别的 Mac 上也会删掉。"))
+                }
                 Button {
                     test()
                 } label: {
@@ -314,7 +352,7 @@ struct ProfileEditor: View {
         .glassCard()
     }
 
-    /// 粘贴了带类型或端口的整段地址时拆到各个字段。
+    /// 粘贴了带类型、端口或者用户名密码的整段地址时拆到各个字段。
     private func splitPastedAddress(_ text: String) {
         guard let address = ProxyAddress.parse(text), address.splitsFields else { return }
         if let kind = address.kind {
@@ -324,10 +362,19 @@ struct ProfileEditor: View {
             draft.port = port
             portText = String(port)
         }
+        if !address.username.isEmpty {
+            draft.username = address.username
+            if let password = address.password {
+                passwordText = password
+            }
+        }
         draft.host = address.host
     }
 
     private func save() {
+        if draft.kind != .pac {
+            splitPastedAddress(draft.host)
+        }
         draft.name = draft.name.trimmingCharacters(in: .whitespaces)
         draft.host = draft.host.trimmingCharacters(in: .whitespaces)
         draft.username = draft.username.trimmingCharacters(in: .whitespaces)
@@ -346,9 +393,16 @@ struct ProfileEditor: View {
         problem = nil
         let passwordChanged = passwordText != originalPassword
         let user = draft.username.trimmingCharacters(in: .whitespaces)
-        if draft.kind == .pac || user.isEmpty || passwordText.isEmpty {
+        if draft.kind == .pac || user.isEmpty {
             ProxyKeychain.delete(for: draft.id)
             draft.hasPassword = false
+        } else if passwordText.isEmpty {
+            // 密码框空着：原来有密码、被用户清空了才删。这台 Mac 的钥匙串里本来就没有（配置是从别的 Mac 同步来的）时
+            // 保留「有密码」的标记，开启时再问，不然这个标记同步回去，别的 Mac 开启时也不带密码了。
+            if !originalPassword.isEmpty {
+                ProxyKeychain.delete(for: draft.id)
+                draft.hasPassword = false
+            }
         } else if passwordText != originalPassword || !draft.hasPassword {
             do {
                 try ProxyKeychain.set(passwordText, for: draft.id)
@@ -359,11 +413,15 @@ struct ProfileEditor: View {
             }
         }
         state.update(draft, passwordChanged: passwordChanged)
+        originalPassword = draft.hasPassword ? passwordText : ""
         saved = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) { saved = false }
     }
 
     private func test() {
+        if draft.kind != .pac {
+            splitPastedAddress(draft.host)
+        }
         if let error = draft.validate() {
             problem = error
             return

@@ -31,9 +31,17 @@ enum SystemProxy {
         return ProxySnapshot(dictionary: dictionary)
     }
 
-    /// 写入代理设置。
-    static func apply(_ desired: DesiredProxy) async throws {
-        let services = NetworkServices.targetServiceNames()
+    /// 写入代理设置，返回写了哪些网络服务。also：除了正在使用的服务，还要写的服务（关闭代理时传开启时写过的那些，
+    /// 免得开启时在用、现在没在用的服务（比如拔掉的网线）一直留着代理，下次用它上网时还指向原来的代理）；已经不存在的服务跳过。
+    @discardableResult
+    static func apply(_ desired: DesiredProxy, also extra: [String] = []) async throws -> [String] {
+        var services = NetworkServices.targetServiceNames()
+        if !extra.isEmpty {
+            let existing = Set(NetworkServices.all().map(\.name))
+            for name in extra where existing.contains(name) && !services.contains(name) {
+                services.append(name)
+            }
+        }
         guard !services.isEmpty else { throw SystemProxyError.noServices }
         let commands = services.flatMap { desired.commands(service: $0) }
         do {
@@ -42,6 +50,7 @@ enum SystemProxy {
             Log.info("networksetup 需要管理员权限，改用授权对话框")
             try await runNetworksetupPrivileged(commands)
         }
+        return services
     }
 
     private static func runNetworksetup(_ commands: [[String]]) async throws {

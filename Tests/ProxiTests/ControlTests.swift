@@ -123,6 +123,9 @@ final class CommandLineTests: XCTestCase {
         XCTAssertTrue(CommandLineTool.shouldHandle(["Proxi", "status"]))
         XCTAssertTrue(CommandLineTool.shouldHandle(["Proxi", "mcp"]))
         XCTAssertTrue(CommandLineTool.shouldHandle(["Proxi", "--help"]))
+        // --json 写在子命令前面也是命令行，不能再打开一个图形界面（会抢走控制接口的套接字）。
+        XCTAssertTrue(CommandLineTool.shouldHandle(["Proxi", "--json", "status"]))
+        XCTAssertFalse(CommandLineTool.shouldHandle(["Proxi", "--json"]))
         XCTAssertFalse(CommandLineTool.shouldHandle(["Proxi"]))
         // 系统启动程序时可能带的参数不算命令。
         XCTAssertFalse(CommandLineTool.shouldHandle(["Proxi", "-psn_0_12345"]))

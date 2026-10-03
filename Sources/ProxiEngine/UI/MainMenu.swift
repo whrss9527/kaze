@@ -13,7 +13,10 @@ enum MainMenu {
         appMenu.addItem(withTitle: L("设置…"), action: #selector(MenuActions.showSettings(_:)), keyEquivalent: ",").target = MenuActions.shared
         appMenu.addItem(.separator())
         appMenu.addItem(withTitle: L("隐藏代理引擎"), action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
-        appMenu.addItem(withTitle: L("退出代理引擎"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        // 代理引擎由 Proxi 启动和退出：这里退出的话，Proxi 里开着的「代理引擎」配置就指向一个没人监听的端口（Proxi 过一会儿又会把它打开）。
+        // 要停用就到 Proxi 的扩展页去关；⌘Q 只关窗口。
+        appMenu.addItem(withTitle: L("在 Proxi 里停用代理引擎…"), action: #selector(MenuActions.openProxiExtensions(_:)), keyEquivalent: "").target = MenuActions.shared
+        appMenu.addItem(withTitle: L("关闭窗口"), action: #selector(NSWindow.performClose(_:)), keyEquivalent: "q")
         let appItem = NSMenuItem()
         appItem.submenu = appMenu
         mainMenu.addItem(appItem)
@@ -55,5 +58,9 @@ final class MenuActions: NSObject {
 
     @objc func showAbout(_ sender: Any?) {
         SettingsWindowController.shared.show(page: .about)
+    }
+
+    @objc func openProxiExtensions(_ sender: Any?) {
+        NSWorkspace.shared.open(URL(string: "proxi://settings?page=extensions")!)
     }
 }

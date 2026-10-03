@@ -121,7 +121,7 @@ struct PolicyGroup: Codable, Identifiable, Equatable, Hashable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
         name = try container.decodeIfPresent(String.self, forKey: .name) ?? ""
-        kind = try container.decodeIfPresent(PolicyGroupKind.self, forKey: .kind) ?? .select
+        kind = (try? container.decodeIfPresent(PolicyGroupKind.self, forKey: .kind)) ?? .select
         filter = try container.decodeIfPresent(String.self, forKey: .filter) ?? ""
         exclude = try container.decodeIfPresent(String.self, forKey: .exclude) ?? ""
         includeGroups = try container.decodeIfPresent([String].self, forKey: .includeGroups) ?? []

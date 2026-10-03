@@ -1,11 +1,13 @@
 name: ci
 
-# 推送代码和合并请求时：编译、单元测试、打包 .app，启动一次并截图（产物里有截图，日志里也有 base64 版本）。
+# 合并请求和推到 main 时：编译、单元测试、打包 .app，启动一次并截图（产物里有截图，日志里也有 base64 版本）。
 # 本仓库分支开的合并请求测试通过后自动合并进 main；合并后（或者直接推 main 测试通过后）
-# CHANGELOG.md 最上面的版本还没有标签，就自动打标签、打包并发布。
+# CHANGELOG.md 最上面的版本还没有发布，就自动打标签、打包并发布。
+# 分支上的推送不单独跑：合并请求那次已经测了，再跑一次的话同一个提交上会有两个「编译、测试、打包」，
+# 自动合并时另一个还在排队，分支保护就不让合并。
 on:
   push:
-    branches: ["**"]
+    branches: ["main"]
   pull_request:
     # 草稿转成正式的合并请求时也要跑，才能自动合并。
     types: [opened, synchronize, reopened, ready_for_review]
@@ -461,8 +463,12 @@ jobs:
           [ ! -e /Library/LaunchDaemons/com.whrss9527.proxyswitch.helper.plist ] || { echo "特权助手没有卸载干净"; exit 1; }
           # 关闭扩展（测试用的环境变量，等于在扩展页里点「关闭并移除」）：先关掉正在用的代理引擎配置、恢复设置，再退出代理引擎、删掉程序，数据留着。
           pkill -x Proxi || true
-          sleep 3
-          pgrep -x ProxiEngine >/dev/null || { echo "Proxi 退出时代理引擎应该跟着退出（下次打开 Proxi 再启动）"; }
+          for i in $(seq 1 30); do pgrep -x Proxi >/dev/null || break; sleep 0.5; done
+          for i in $(seq 1 20); do pgrep -x ProxiEngine >/dev/null || break; sleep 0.5; done
+          pgrep -x ProxiEngine >/dev/null && { echo "Proxi 退出时代理引擎应该跟着退出（下次打开 Proxi 再启动）"; exit 1; }
+          # 代理引擎跟着退出了：正在用的「代理引擎」配置也要关掉，不然 git、系统代理都指向一个没人监听的端口。
+          [ -z "$(git config --global --includes --get http.proxy || true)" ] || { echo "退出 Proxi 时没有关掉正在用的代理引擎配置（git 还指着它）"; cat "$support/proxi.log"; exit 1; }
+          grep -q "退出时关闭了「节点代理」" "$support/proxi.log" || { echo "日志里没有退出时关闭代理引擎配置的记录"; exit 1; }
           : > "$support/proxi.log"
           PROXI_TEST_DISABLE_EXTENSION=1 dist/Proxi.app/Contents/MacOS/Proxi >/dev/null 2>&1 &
           for i in $(seq 1 60); do grep -q "扩展：代理引擎已关闭" "$support/proxi.log" && break; sleep 1; done
@@ -1037,10 +1043,15 @@ jobs:
           ref: ${{ needs.auto-merge.outputs.sha || github.sha }}
       - name: 读 CHANGELOG.md 最上面的版本
         id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          version=$(sed -n 's/^## \([0-9][0-9.]*[0-9]\).*/\1/p' CHANGELOG.md | head -1)
-          [ -n "$version" ] || { echo "::error::CHANGELOG.md 里找不到版本号（格式是「## 0.8.0（2026-09-28）」）"; exit 1; }
-          if git ls-remote --exit-code --tags origin "refs/tags/v${version}" >/dev/null; then
+          # 只认最上面一节，标题必须是「## 0.8.0（2026-09-28）」：写错了（v0.8.0、0.8.0-beta）就报错，不悄悄发错版本或者不发。
+          first=$(grep -m1 '^## ' CHANGELOG.md || true)
+          version=$(printf '%s\n' "$first" | sed -n 's/^## \([0-9]\{1,\}\.[0-9]\{1,\}\.[0-9]\{1,\}\)（.*/\1/p')
+          [ -n "$version" ] || { echo "::error::CHANGELOG.md 最上面一节的标题要写成「## 0.8.0（2026-09-28）」，现在是：${first}"; exit 1; }
+          # 发布过（有正式的 Release，不是草稿）才算：标签在、发布却失败了的版本下次合并时再发。
+          if [ "$(gh release view "v${version}" --repo "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft' 2>/dev/null || true)" = "false" ]; then
             echo "v${version} 已经发布过，这次不发版。要发版就在 CHANGELOG.md 最上面加一节新版本。"
             exit 0
           fi

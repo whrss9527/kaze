@@ -28,6 +28,8 @@ final class SpeedMeter: ObservableObject {
                 Task { @MainActor in self?.sampleSystem() }
             }
         }
+        // 换了显示方式要重画菜单栏图标：网速本来就是 0 时 publish 不会通知，「不显示」以后还留着 0.00B。
+        onUpdate?()
     }
 
     private func stop() {

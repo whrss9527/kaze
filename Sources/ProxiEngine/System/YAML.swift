@@ -107,6 +107,14 @@ enum YAMLParser {
         return try parser.parseDocument()
     }
 
+    /// 整个是一个带引号的标量（"…" 或 '…'）时，按 YAML 的规则解转义后的内容（"\\." 是 \.，'it''s' 是 it's）；不是时返回 nil。
+    static func unquote(_ text: String) -> String? {
+        let characters = Array(text)
+        guard let first = characters.first, first == "\"" || first == "'",
+              let result = try? Parser.readQuoted(characters, from: 0), result.1 == characters.count else { return nil }
+        return result.0
+    }
+
     private struct Line {
         var number: Int
         var indent: Int
@@ -486,14 +494,17 @@ enum YAMLParser {
         private func inlineValue(_ text: String, line: Line) throws -> YAMLNode {
             var value = text
             if value.hasPrefix("[") || value.hasPrefix("{") {
-                // 流式写法可以跨行：一直读到括号配对为止。
-                while !Parser.balanced(value) {
+                // 流式写法可以跨行：一直读到括号配对为止（接着上一行数，不每次从头数，订阅很大时也快）。
+                var balance = FlowBalance()
+                balance.feed(value)
+                while !balance.isBalanced {
                     guard index < raw.count else {
                         throw YAMLError(line: line.number, message: L("括号没有闭合"))
                     }
-                    let next = Parser.stripComment(raw[index].trimmingCharacters(in: .whitespaces))
+                    let next = " " + Parser.stripComment(raw[index].trimmingCharacters(in: .whitespaces))
                     index += 1
-                    value += " " + next
+                    value += next
+                    balance.feed(next)
                 }
             }
             var scanner = FlowScanner(characters: Array(value), line: line.number, anchors: anchors)
@@ -502,25 +513,57 @@ enum YAMLParser {
             return node
         }
 
-        static func balanced(_ text: String) -> Bool {
-            var depth = 0
-            var quote: Character?
-            var previous: Character = " "
-            for character in text {
-                if let open = quote {
-                    if character == open && !(open == "\"" && previous == "\\") {
-                        quote = nil
+        /// 流式写法里数括号：引号里的括号不算。引号只在一个值的开头才算引号（{name: Joe's HK} 里的 ' 是名字的一部分），
+        /// 双引号里的 \\ 和 \" 是转义，单引号里的 '' 是一个 '。
+        struct FlowBalance {
+            private(set) var depth = 0
+            private var quote: Character?
+            private var escaped = false
+            /// 刚读完一个单引号的值：紧跟着的 ' 说明前面那个是 ''，值还没完。
+            private var closedSingle = false
+            /// 引号外上一个不是空白的字符。
+            private var last: Character?
+
+            var isBalanced: Bool { depth <= 0 }
+
+            mutating func feed(_ text: String) {
+                for character in text {
+                    if closedSingle {
+                        closedSingle = false
+                        if character == "'" {
+                            quote = "'"
+                            continue
+                        }
                     }
-                } else if character == "\"" || character == "'" {
-                    quote = character
-                } else if character == "[" || character == "{" {
-                    depth += 1
-                } else if character == "]" || character == "}" {
-                    depth -= 1
+                    if let open = quote {
+                        if escaped {
+                            escaped = false
+                        } else if open == "\"" && character == "\\" {
+                            escaped = true
+                        } else if character == open {
+                            quote = nil
+                            last = character
+                            closedSingle = open == "'"
+                        }
+                        continue
+                    }
+                    if character == "\"" || character == "'" {
+                        if let last, !"[{,:".contains(last) {
+                            // 普通值中间的引号（Joe's），不是引号的开头。
+                        } else {
+                            quote = character
+                            continue
+                        }
+                    } else if character == "[" || character == "{" {
+                        depth += 1
+                    } else if character == "]" || character == "}" {
+                        depth -= 1
+                    }
+                    if character != " " && character != "\t" {
+                        last = character
+                    }
                 }
-                previous = character
             }
-            return depth <= 0
         }
 
         /// 读一个带引号的标量，返回内容和结束后的位置。

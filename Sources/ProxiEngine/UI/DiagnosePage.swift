@@ -192,9 +192,10 @@ struct DiagnosePage: View {
     private func perform(_ action: Verdict.Action) {
         switch action {
         case .turnOnEngine:
-            state.selectEngineProfile()
-            if let profile = state.engineProfile {
-                state.turnOn(profile)
+            // 系统代理、终端、git、npm 由 Proxi 设置：打开 Proxi 的面板，在那里开启「代理引擎」那条配置。
+            // 代理引擎自己不改这些设置，不然和 Proxi 记的状态对不上。
+            if state.config.engine.wantsCore {
+                NSWorkspace.shared.open(URL(string: "proxi://panel")!)
             } else {
                 navigation.page = .nodes
             }

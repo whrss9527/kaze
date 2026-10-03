@@ -173,6 +173,8 @@
 "写不了 %@" = "Couldn't write %@";
 "git config %@ 失败：%@" = "git config %@ failed: %@";
 "git config --unset %@ 失败：%@" = "git config --unset %@ failed: %@";
+"读不了 %@，没有改它：%@" = "Couldn't read %@, so it wasn't changed: %@";
+"写不了 %@：%@" = "Couldn't write %@: %@";
 
 /* System/Hotkeys.swift */
 "键 %@" = "Key %@";
@@ -360,6 +362,8 @@
 "没有找到正在运行的代理软件。请先启动代理软件，或者手动填写地址。" = "No running proxy apps found. Start your proxy app first, or enter the address manually.";
 "重新检测" = "Detect Again";
 "关闭‖按钮" = "Close";
+"删除「%@」？" = "Delete “%@”?";
+"配置和它在钥匙串里的密码都会删掉；开着 iCloud 同步时别的 Mac 上也会删掉。" = "The profile and its password in the keychain will be deleted. With iCloud sync on, it's deleted on your other Macs too.";
 
 /* UI/SettingsWindowController.swift */
 "通用" = "General";
@@ -398,7 +402,6 @@
 "在任何程序里按下它就能开关代理" = "Press it in any app to turn the proxy on or off";
 "开 / 关代理" = "Proxy On / Off";
 "清除" = "Clear";
-"点击方框后按下新的组合键，至少包含 ⌃、⌥、⇧、⌘ 中的一个。" = "Click the box and press a new key combination that includes at least one of ⌃, ⌥, ⇧ or ⌘.";
 "命令行与快捷指令" = "Command Line & Shortcuts";
 "更多的命令、给 AI 助手用的接口和按网络自动切换在「自动化」页。终端里也可以用 open 命令控制：" = "More commands, the interface for AI assistants and switching by network are on the Automation page. You can also control Proxi with the open command in Terminal:";
 "open \"proxi://use?name=配置名\"" = "open \"proxi://use?name=ProfileName\"";
@@ -430,6 +433,7 @@
 "微信赞赏码：请我喝杯咖啡" = "WeChat tip code: buy me a coffee";
 "觉得好用的话，\n微信扫一扫请我喝杯咖啡" = "If you find it useful,\nscan with WeChat to buy me a coffee";
 "点图片可以放大" = "Click the image to enlarge it";
+"点击方框后按下新的组合键，至少包含 ⌃ 或 ⌘（F1~F20 可以单独用）。" = "Click the box, then press a new key combination that includes ⌃ or ⌘ (F1–F20 can be used on their own).";
 
 /* UI/StatusItemController.swift */
 "Proxi\n已开启：%@\n代理服务器连不上" = "Proxi\nOn: %@\nCan't reach the proxy server";
@@ -437,8 +441,6 @@
 "Proxi\n系统代理由其他程序设置\n%@" = "Proxi\nSystem proxy set by another app\n%@";
 "Proxi\n已关闭，下次开启：%@" = "Proxi\nOff, next: %@";
 "Proxi\n还没有代理配置" = "Proxi\nNo proxy profiles yet";
-"没有找到配置" = "Profile not found";
-"没有叫「%@」的配置" = "No profile named “%@”";
 "没有这个命令" = "No such command";
 "命令没有执行" = "Command not run";
 "系统代理由其他程序设置：%@" = "System proxy set by another app: %@";
@@ -456,7 +458,6 @@
 "这台 Mac 没有开启 iCloud 云盘。到系统设置的 Apple 账户 → iCloud 里打开「iCloud 云盘」，再回来开启同步。" = "iCloud Drive isn't on for this Mac. Turn on “iCloud Drive” in System Settings → Apple Account → iCloud, then come back and turn on sync.";
 "打开系统设置" = "Open System Settings";
 "会同步什么" = "What's Synced";
-"全部代理配置，以及「通用」和「快捷键」页里的设置。登录时启动、上次使用的配置、更新提醒这些本机状态不同步。" = "All proxy profiles, plus the settings on the General and Hotkey pages. Local state such as Launch at Login, the last used profile and update reminders isn't synced.";
 "文件放在 iCloud 云盘的 Proxi 文件夹里。别的 Mac 上开启同步时会读到它，可以选择用 iCloud 的、用本机的，或者把两边合并。之后任何一台的改动几秒内就会出现在其他 Mac 上；两台同时改动时，以改动时间晚的为准。" = "The file lives in the Proxi folder in iCloud Drive. When sync is turned on on another Mac, it reads this file and you can choose to use iCloud's, use the local one, or merge both. After that, changes on any Mac show up on the others within seconds; when two Macs change at the same time, the later change wins.";
 "第一次开启时系统可能会询问是否允许 Proxi 访问 iCloud 云盘，需要允许。" = "The first time you turn it on, macOS may ask whether Proxi can access iCloud Drive; allow it.";
 "iCloud 里已经有配置" = "iCloud Already Has a Configuration";
@@ -469,6 +470,7 @@
 "最近一次改动来自「%@」，%@" = "Latest change from “%@”, %@";
 "打开隐私设置" = "Open Privacy Settings";
 "如果是拒绝过访问 iCloud 云盘，在「文件和文件夹」里允许 Proxi 访问 iCloud 云盘。" = "If access to iCloud Drive was denied before, allow Proxi to access iCloud Drive in “Files and Folders”.";
+"全部代理配置，以及「通用」「快捷键」和「自动化」页里的设置。登录时启动、上次使用的配置、更新提醒这些本机状态不同步。" = "All proxy profiles, plus the settings on the General, Hotkey and Automation pages. Local state such as Launch at Login, the last used profile and update reminders isn't synced.";
 
 /* UI/UpdateViews.swift */
 "查看更新内容" = "View Release Notes";
@@ -545,3 +547,7 @@
 "这个版本的发布里没有 %@" = "This version's release doesn't include %@";
 "这条配置由扩展「代理引擎」管理：地址是它在本机的端口，跟着它变。在「设置 → 扩展」里关闭扩展时它会一起去掉。" = "This profile is managed by the Proxy Engine extension: its address is the engine's local port and follows it. It's removed when you turn the extension off in Settings → Extensions.";
 "重新下载" = "Download Again";
+"代理引擎多次意外退出，没有再启动它" = "The proxy engine quit unexpectedly several times, so it wasn't started again";
+"关闭并移除代理引擎？" = "Turn off and remove the proxy engine?";
+"关闭并移除" = "Turn Off and Remove";
+"会先关掉正在用的「代理引擎」配置、恢复系统设置，再退出代理引擎、删掉下载的程序。它的数据留着，以后再开启时还在。" = "This first turns off the “Proxy Engine” profile if it's in use and restores your system settings, then quits the proxy engine and deletes the downloaded app. Its data is kept and will still be there if you enable it again.";

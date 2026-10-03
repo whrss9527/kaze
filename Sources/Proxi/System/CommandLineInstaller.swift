@@ -82,10 +82,23 @@ enum CommandLineInstaller {
         if let text = contents(legacyPath), isOurScript(text) {
             files.append(legacyPath)
         }
-        if let text = contents(path), !isOurScript(text) {
+        if isForeign(path) {
             throw ControlError.failed(L("%@ 是别的程序的文件，没有覆盖", path))
         }
         return files
+    }
+
+    /// 这个位置上已经有别的东西：别的程序的脚本、读不出文字的可执行文件、指向别处的链接（比如 Homebrew 装的）。
+    private static func isForeign(_ file: String) -> Bool {
+        let fm = FileManager.default
+        if let destination = try? fm.destinationOfSymbolicLink(atPath: file) {
+            let resolved = URL(fileURLWithPath: destination, relativeTo: URL(fileURLWithPath: file).deletingLastPathComponent())
+                .standardizedFileURL.resolvingSymlinksInPath().path
+            return resolved != URL(fileURLWithPath: executablePath).resolvingSymlinksInPath().path
+        }
+        guard fm.fileExists(atPath: file) else { return false }
+        guard let text = contents(file) else { return true }
+        return !isOurScript(text)
     }
 
     /// 装上（装过 proxyswitch 的一起改好）；/usr/local/bin 不能直接写时请求管理员权限。

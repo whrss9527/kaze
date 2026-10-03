@@ -295,7 +295,7 @@ struct ConnectionsPage: View {
                 .disabled(closingAll || engine.connections.isEmpty)
             }
             if !engine.isRunning {
-                Text(L("内核没有运行。开启节点代理或局域网共享后，经内核的连接会列在这里。"))
+                Text(L("内核没有运行。在「节点与订阅」页启用代理引擎，或者打开局域网共享后，经内核的连接会列在这里。"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else if activeRecords.isEmpty {

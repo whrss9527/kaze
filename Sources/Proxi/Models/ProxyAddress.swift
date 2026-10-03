@@ -6,6 +6,9 @@ struct ProxyAddress: Equatable {
     var kind: ProxyKind?
     var host: String
     var port: Int?
+    /// 地址里带的用户名和密码（http://alice:secret@proxy:3128），已经按网址的规则解码；没带时是空的 / nil。
+    var username: String = ""
+    var password: String?
 
     static func parse(_ text: String) -> ProxyAddress? {
         var rest = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -24,8 +27,19 @@ struct ProxyAddress: Equatable {
         if let slash = rest.firstIndex(where: { $0 == "/" || $0 == "?" || $0 == "#" }) {
             rest = String(rest[..<slash])
         }
+        var username = ""
+        var password: String?
         if let at = rest.lastIndex(of: "@") {
+            let userInfo = String(rest[..<at])
             rest = String(rest[rest.index(after: at)...])
+            if let colon = userInfo.firstIndex(of: ":") {
+                let user = String(userInfo[..<colon])
+                let pass = String(userInfo[userInfo.index(after: colon)...])
+                username = user.removingPercentEncoding ?? user
+                password = pass.removingPercentEncoding ?? pass
+            } else {
+                username = userInfo.removingPercentEncoding ?? userInfo
+            }
         }
         var host = rest
         var port: Int?
@@ -51,9 +65,9 @@ struct ProxyAddress: Equatable {
         if let port, !(1...65535).contains(port) {
             return nil
         }
-        return ProxyAddress(kind: kind, host: host, port: port)
+        return ProxyAddress(kind: kind, host: host, port: port, username: username, password: password)
     }
 
-    /// 是否比单纯的主机名多带了信息（类型或端口），需要拆到别的字段里。
-    var splitsFields: Bool { kind != nil || port != nil }
+    /// 是否比单纯的主机名多带了信息（类型、端口或者用户名），需要拆到别的字段里。
+    var splitsFields: Bool { kind != nil || port != nil || !username.isEmpty }
 }

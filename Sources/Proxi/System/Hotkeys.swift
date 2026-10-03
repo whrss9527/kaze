@@ -78,6 +78,13 @@ enum KeyNames {
         names[keyCode] ?? L("键 %@", keyCode)
     }
 
+    /// F1~F20 的键码：这些键单独按也不会打出字来，可以不带修饰键当快捷键。
+    static let functionKeyCodes: Set<UInt32> = [122, 120, 99, 118, 96, 97, 98, 100, 101, 109, 103, 111, 105, 107, 113, 106, 64, 79, 80, 90]
+
+    static func isFunctionKey(_ keyCode: UInt32) -> Bool {
+        functionKeyCodes.contains(keyCode)
+    }
+
     /// AppKit 的修饰键转成 Carbon 的位。
     static func carbonModifiers(from flags: NSEvent.ModifierFlags) -> UInt32 {
         var modifiers: UInt32 = 0

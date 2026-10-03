@@ -100,7 +100,10 @@ enum Store {
         do {
             return try JSONDecoder().decode(type, from: data)
         } catch {
-            Log.error("读取 \(url.lastPathComponent) 失败：\(error)")
+            // 读不了的文件（不是 JSON、被截断了）先另存一份，不然下次保存时订阅和规则就被默认设置盖掉了。
+            let backup = url.deletingPathExtension().appendingPathExtension("unreadable-\(Int(Date().timeIntervalSince1970)).json")
+            try? FileManager.default.copyItem(at: url, to: backup)
+            Log.error("读取 \(url.lastPathComponent) 失败，原来的文件另存为 \(backup.lastPathComponent)：\(error)")
             return nil
         }
     }

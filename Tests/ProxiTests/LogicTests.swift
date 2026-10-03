@@ -48,8 +48,32 @@ final class DesiredProxyTests: XCTestCase {
         snapshot.exceptions = ["*.corp"]
         let desired = DesiredProxy(restoring: snapshot)
         XCTAssertEqual(desired.http, DesiredProxy.Endpoint(host: "proxy.corp", port: 3128))
+        XCTAssertNil(desired.https)
         XCTAssertTrue(desired.autoDiscovery)
         XCTAssertEqual(desired.bypassDomains, ["*.corp"])
+    }
+
+    /// 开启前 HTTP 和 HTTPS 是不同的地址（或者只开了 HTTPS）：恢复时各按各的，不把一个的地址套到另一个上。
+    func testRestoreKeepsHttpsSeparate() {
+        var snapshot = ProxySnapshot()
+        snapshot.httpEnabled = true
+        snapshot.httpHost = "a.corp"
+        snapshot.httpPort = 3128
+        snapshot.httpsEnabled = true
+        snapshot.httpsHost = "b.corp"
+        snapshot.httpsPort = 3129
+        let commands = DesiredProxy(restoring: snapshot).commands(service: "Wi-Fi").map { $0.joined(separator: " ") }
+        XCTAssertTrue(commands.contains("-setwebproxy Wi-Fi a.corp 3128"))
+        XCTAssertTrue(commands.contains("-setsecurewebproxy Wi-Fi b.corp 3129"))
+
+        var httpsOnly = ProxySnapshot()
+        httpsOnly.httpsEnabled = true
+        httpsOnly.httpsHost = "secure.corp"
+        httpsOnly.httpsPort = 8443
+        let httpsCommands = DesiredProxy(restoring: httpsOnly).commands(service: "Wi-Fi").map { $0.joined(separator: " ") }
+        XCTAssertTrue(httpsCommands.contains("-setwebproxystate Wi-Fi off"))
+        XCTAssertTrue(httpsCommands.contains("-setsecurewebproxy Wi-Fi secure.corp 8443"))
+        XCTAssertTrue(httpsCommands.contains("-setsecurewebproxystate Wi-Fi on"))
     }
 }
 
@@ -634,7 +658,10 @@ final class ParsingTests: XCTestCase {
     func testProxyAddressParse() {
         XCTAssertEqual(ProxyAddress.parse("127.0.0.1:7890"), ProxyAddress(kind: nil, host: "127.0.0.1", port: 7890))
         XCTAssertEqual(ProxyAddress.parse(" http://127.0.0.1:7890/ "), ProxyAddress(kind: .http, host: "127.0.0.1", port: 7890))
-        XCTAssertEqual(ProxyAddress.parse("socks5://user:pass@proxy.corp:1080"), ProxyAddress(kind: .socks5, host: "proxy.corp", port: 1080))
+        XCTAssertEqual(ProxyAddress.parse("socks5://user:pass@proxy.corp:1080"), ProxyAddress(kind: .socks5, host: "proxy.corp", port: 1080, username: "user", password: "pass"))
+        // 粘贴带用户名和密码的地址：按网址的规则解码，填到登录那一栏。
+        XCTAssertEqual(ProxyAddress.parse("http://alice%40corp:p%40ss%3Aword@proxy.corp:3128"), ProxyAddress(kind: .http, host: "proxy.corp", port: 3128, username: "alice@corp", password: "p@ss:word"))
+        XCTAssertEqual(ProxyAddress.parse("bob@proxy.corp:3128"), ProxyAddress(kind: nil, host: "proxy.corp", port: 3128, username: "bob", password: nil))
         XCTAssertEqual(ProxyAddress.parse("[::1]:1080"), ProxyAddress(kind: nil, host: "::1", port: 1080))
         XCTAssertEqual(ProxyAddress.parse("https://proxy.corp"), ProxyAddress(kind: .http, host: "proxy.corp", port: nil))
         XCTAssertEqual(ProxyAddress.parse("proxy.corp"), ProxyAddress(kind: nil, host: "proxy.corp", port: nil))
@@ -754,6 +781,44 @@ final class ParsingTests: XCTestCase {
         XCTAssertEqual(minimal.speedSide, .left)
         config.speedSide = .right
         XCTAssertEqual(try JSONDecoder().decode(AppConfig.self, from: try JSONEncoder().encode(config)).speedSide, .right)
+    }
+
+    /// 新版本加的取值（或者手改坏了的一项）不让整个配置读失败：那一项用默认值，读不出来的那条配置跳过，其余照样读出来。
+    func testConfigToleratesUnknownValues() throws {
+        let json = #"""
+        {"profiles":[
+          {"name":"公司代理","kind":"http","host":"proxy.corp.example","port":3128,"targets":["system","git","future"]},
+          {"name":"新类型","kind":"quic","host":"127.0.0.1","port":443,"targets":["future"]},
+          "坏掉的一条",
+          {"name":"调试","kind":"socks5","host":"127.0.0.1","port":1080}
+        ],
+        "offMode":"something-new","clickAction":42,"notifyLevel":"problems","speedSide":"middle"}
+        """#
+        let config = try JSONDecoder().decode(AppConfig.self, from: Data(json.utf8))
+        XCTAssertEqual(config.profiles.map(\.name), ["公司代理", "新类型", "调试"])
+        XCTAssertEqual(config.profiles[0].targets, [.system, .git])
+        XCTAssertEqual(config.profiles[1].kind, .http)
+        XCTAssertEqual(config.profiles[1].targets, [.system])
+        XCTAssertEqual(config.profiles[2].kind, .socks5)
+        XCTAssertEqual(config.offMode, .direct)
+        XCTAssertEqual(config.clickAction, .panel)
+        XCTAssertEqual(config.notifyLevel, .problems)
+        XCTAssertEqual(config.speedSide, .left)
+    }
+
+    /// 只改了名字或颜色的配置不用重新应用（重新写系统代理可能要输管理员密码）。
+    func testAppliesSameIgnoresNameAndColor() {
+        let profile = Profile(name: "公司代理", color: "#16a34a", kind: .http, host: "proxy.corp.example", port: 3128)
+        var renamed = profile
+        renamed.name = "办公室"
+        renamed.color = "#2563eb"
+        XCTAssertTrue(renamed.appliesSame(as: profile))
+        var moved = profile
+        moved.port = 8080
+        XCTAssertFalse(moved.appliesSame(as: profile))
+        var narrowed = profile
+        narrowed.targets = [.system, .git]
+        XCTAssertFalse(narrowed.appliesSame(as: profile))
     }
 }
 

@@ -288,11 +288,18 @@ enum ConfigImporter {
         let subscriptionNames = existing.engine.subscriptions + plan.subscriptions
         var groupNames = Set(existing.engine.groupNames)
         for item in json["groups"] as? [[String: Any]] ?? [] {
-            guard let name = item["name"] as? String else {
+            guard let rawName = item["name"] as? String else {
                 plan.warnings.append(L("有一个策略组没有写 name"))
                 continue
             }
-            groupNames.insert(name.trimmingCharacters(in: .whitespaces))
+            let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+            // 名字和筛选要和设置页里一样校验（只和这次导入的别的组比，和现有的同名是要合并）：
+            // 叫「节点」「DIRECT」、带逗号、重名或者筛选不是正则的话，生成的内核配置通不过，内核起不来。
+            if let problem = PolicyGroup.validate(name: name, filter: (item["filter"] as? String) ?? "", others: plan.groups) {
+                plan.warnings.append(L("策略组「%@」没有导入：%@", rawName, problem))
+                continue
+            }
+            groupNames.insert(name)
             var group = PolicyGroup(name: name, kind: groupKind(item["type"] as? String) ?? .select, filter: (item["filter"] as? String) ?? "")
             group.exclude = (item["exclude"] as? String) ?? ""
             group.includeGroups = (item["groups"] as? [String]) ?? []
@@ -521,10 +528,27 @@ enum ConfigImporter {
         }
         // 策略组：名字按规则整理，成员里的节点名变成筛选。
         let rawGroups = root["proxy-groups"]?.array ?? []
-        let renames = groupRenames(rawGroups.compactMap { $0["name"]?.string })
-        let groupNames = Set(renames.values)
+        var renames = groupRenames(rawGroups.compactMap { $0["name"]?.string })
+        // 第一个成员（默认用的那个）就是直连或拦截的组（「全球直连」「广告拦截」这类）：不建成组，用到它的规则直接直连、拦截。
+        // 建成组的话默认跟随「节点」，这些流量反而走了代理，拦截也选不到。
+        var builtinGroups: [String: String] = [:]
         for raw in rawGroups {
-            guard let original = raw["name"]?.string, let name = renames[original] else { continue }
+            guard let original = raw["name"]?.string, let first = raw["proxies"]?.stringArray?.first?.uppercased() else { continue }
+            if first == "DIRECT" {
+                builtinGroups[original] = "DIRECT"
+            } else if first == "REJECT" || first == "REJECT-DROP" {
+                builtinGroups[original] = "REJECT"
+            }
+        }
+        let groupNames = Set(renames.filter { builtinGroups[$0.key] == nil }.values)
+        for (original, target) in builtinGroups {
+            renames[original] = target
+        }
+        if !builtinGroups.isEmpty {
+            plan.warnings.append(L("这些策略组默认就是直连或拦截，没有建成组，用到它们的规则直接直连或拦截：%@", builtinGroups.keys.sorted().joined(separator: L("、"))))
+        }
+        for raw in rawGroups {
+            guard let original = raw["name"]?.string, builtinGroups[original] == nil, let name = renames[original] else { continue }
             guard let kind = clashGroupKind(raw["type"]?.string) else {
                 plan.warnings.append(L("策略组「%@」的类型 %@ 不支持，没有导入", original, raw["type"]?.string ?? "?"))
                 continue
@@ -614,8 +638,8 @@ enum ConfigImporter {
                 plan.warnings.append(L("%@ 个 .mrs 规则集单独加进了规则集列表，排在导入的规则前面", mrs.count))
                 plan.ruleSets += mrs
             }
-            if let sourceURL, lines.count == rules.count {
-                // 规则原样可用：直接用远程配置当规则集，跟着它更新。
+            if let sourceURL, lines == rules.map({ $0.trimmingCharacters(in: .whitespaces) }) {
+                // 规则原样可用（一条都没改写：没有展开规则集、没有改组名）：直接用远程配置当规则集，跟着它更新。
                 var set = RuleSet(name: L("%@ 的规则", subscriptionName(for: sourceURL, fallback: sourceName)), url: sourceURL, policy: nil)
                 set.converted = true
                 plan.ruleSets.append(set)

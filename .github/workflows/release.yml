@@ -3,11 +3,12 @@ name: release
 # 推送 v* 标签时：跑单元测试，打包通用二进制的 Proxi.app（版本号取自标签），
 # 用 CHANGELOG.md 里对应版本的内容创建 GitHub Release 并上传 zip 和校验和。
 # 改名前的版本（ProxySwitch）的一键更新按 ProxySwitch-macos*.zip 找安装包，所以同样的包再用旧名字各传一份。
-# Release 先以草稿创建，附件上传完才发布。
+# Release 先以草稿创建，附件上传完才发布。标签在测试、打包、公证都成功以后才推上去：中途失败不会留下一个没有发布的标签。
 # 也可以在 Actions 页面手动运行：填一个标签名，标签不存在时在所选分支的最新提交上创建并推送，存在时重新上传附件。
 # CI 在合并进 main、发现 CHANGELOG.md 最上面的版本还没有标签时，也会调用这里自动发布（见 ci.yml 的「发布新版本」）。
 # 仓库的 Secrets 里配了 Developer ID 证书和公证凭据时（见 docs/signing.md），用证书签名并提交苹果公证，
-# 用户下载后双击就能打开；没配时照旧 ad-hoc 签名。
+# 用户下载后双击就能打开。没配证书时不发布（ad-hoc 签名的版本装不上：一键更新要求和装着的程序是同一个开发者签名的），
+# 手动运行时勾上「允许 ad-hoc 签名」才发。
 on:
   push:
     tags: ["v*"]
@@ -17,6 +18,11 @@ on:
         description: "要发布的标签，例如 v0.1.0；不存在时在当前分支的最新提交上创建"
         required: true
         type: string
+      allow_adhoc:
+        description: "没配签名证书时也发布（ad-hoc 签名，已经装了开发者签名版本的用户没法一键更新到它）"
+        required: false
+        type: boolean
+        default: false
   workflow_call:
     inputs:
       tag:
@@ -53,9 +59,9 @@ jobs:
             git fetch --depth=1 origin "refs/tags/$TAG:refs/tags/$TAG"
             git checkout -q "$TAG"
           else
-            echo "标签 $TAG 不存在，在 $(git rev-parse --short HEAD) 上创建"
+            echo "标签 $TAG 不存在，在 $(git rev-parse --short HEAD) 上发布，发布前再推标签"
             git tag "$TAG"
-            git push origin "refs/tags/$TAG"
+            echo "PUSH_TAG=1" >> "$GITHUB_ENV"
           fi
       - name: 选择最新的 Xcode
         run: |
@@ -68,10 +74,15 @@ jobs:
         env:
           CERTIFICATE_P12_BASE64: ${{ secrets.MACOS_CERTIFICATE_P12 }}
           CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          ALLOW_ADHOC: ${{ inputs.allow_adhoc }}
         run: |
           if [ -z "$CERTIFICATE_P12_BASE64" ]; then
-            echo "::warning::没有配置 MACOS_CERTIFICATE_P12：这次用 ad-hoc 签名、不公证，用户第一次打开会被系统拦下。配置方法见 docs/signing.md"
-            exit 0
+            if [ "$ALLOW_ADHOC" = "true" ]; then
+              echo "::warning::没有配置 MACOS_CERTIFICATE_P12：这次用 ad-hoc 签名、不公证，用户第一次打开会被系统拦下。配置方法见 docs/signing.md"
+              exit 0
+            fi
+            echo "::error::没有配置 MACOS_CERTIFICATE_P12，不发布：ad-hoc 签名的版本，已经装了开发者签名版本的用户没法一键更新到它。配置方法见 docs/signing.md；确实要发 ad-hoc 版本时手动运行这个工作流并勾上「允许 ad-hoc 签名」。"
+            exit 1
           fi
           Scripts/import-certificate.sh
       - name: 打包通用二进制的 .app 和单架构的精简包
@@ -103,7 +114,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           VERSION="${TAG#v}"
-          awk -v version="$VERSION" '/^## /{ if (printing) exit; if (index($0, version)) { printing = 1; next } } printing' CHANGELOG.md > notes.md
+          # 只认标题正好是这个版本的那一节（「## 0.14.1（」不会匹配到「## 0.14.10（」）。
+          awk -v header="## ${VERSION}（" '/^## /{ if (printing) exit; if (index($0, header) == 1) { printing = 1; next } } printing' CHANGELOG.md > notes.md
+          [ -s notes.md ] || { echo "::error::CHANGELOG.md 里没有 ${VERSION} 这一节"; exit 1; }
           # 发布说明里不写可选扩展的内容（CI 也检查 CHANGELOG 最上面一节）。
           if grep -qiE '代理引擎|Proxi-Engine|mihomo|内核|机场|翻墙|科学上网|GFW|VPN|netflix|youtube|chatgpt|telegram|流媒体' notes.md; then
             echo "::error::发布说明里不该出现这些词"; cat notes.md; exit 1
@@ -111,12 +124,21 @@ jobs:
           if [ -n "${CODESIGN_IDENTITY:-}" ]; then
             printf '\n已用 Developer ID 签名并通过苹果公证，下载解压后双击就能打开。\n' >> notes.md
           fi
+          if [ "${PUSH_TAG:-}" = "1" ]; then
+            git push origin "refs/tags/$TAG"
+          fi
           if ! gh release view "$TAG" >/dev/null 2>&1; then
-            gh release create "$TAG" --draft --title "Proxi $TAG" --notes-file notes.md
+            gh release create "$TAG" --draft --verify-tag --title "Proxi $TAG" --notes-file notes.md
           fi
           gh release upload "$TAG" dist/Proxi-macos.zip dist/Proxi-macos-arm64.zip dist/Proxi-macos-x86_64.zip \
             dist/ProxySwitch-macos.zip dist/ProxySwitch-macos-arm64.zip dist/ProxySwitch-macos-x86_64.zip "dist/Proxi-Engine-${VERSION}.zip" dist/SHA256SUMS.txt --clobber
-          gh release edit "$TAG" --draft=false --latest
+          # 只有比已经发布的版本都新才标成「最新」：重新上传旧版本的附件时不能让它变成最新版，不然一键更新会退回去。
+          newest=$(gh release list --exclude-drafts --limit 100 --json tagName --jq '.[].tagName' | { cat; echo "$TAG"; } | sort -V | tail -1)
+          if [ "$newest" = "$TAG" ]; then
+            gh release edit "$TAG" --draft=false --latest
+          else
+            gh release edit "$TAG" --draft=false --latest=false
+          fi
           echo "已发布到 https://github.com/${GITHUB_REPOSITORY}/releases/tag/$TAG"
       - name: 删除临时钥匙串
         if: always() && env.CODESIGN_KEYCHAIN != ''

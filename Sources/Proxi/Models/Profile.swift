@@ -99,20 +99,26 @@ struct Profile: Codable, Identifiable, Equatable, Hashable {
         case engine
     }
 
+    /// 每一项单独容错：认不出的类型、生效范围（比如新版本加的）用默认值或者跳过，不让这条配置读失败。
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
-        name = try container.decodeIfPresent(String.self, forKey: .name) ?? L("新配置")
-        color = try container.decodeIfPresent(String.self, forKey: .color) ?? ProfilePalette.colors[0]
-        kind = try container.decodeIfPresent(ProxyKind.self, forKey: .kind) ?? .http
-        host = try container.decodeIfPresent(String.self, forKey: .host) ?? "127.0.0.1"
-        port = try container.decodeIfPresent(Int.self, forKey: .port) ?? 8080
-        pacURL = try container.decodeIfPresent(String.self, forKey: .pacURL) ?? ""
-        bypass = try container.decodeIfPresent(String.self, forKey: .bypass) ?? Profile.defaultBypass
-        noProxy = try container.decodeIfPresent(String.self, forKey: .noProxy) ?? Profile.defaultNoProxy
-        targets = try container.decodeIfPresent(Set<ProxyTarget>.self, forKey: .targets) ?? [.system]
-        username = try container.decodeIfPresent(String.self, forKey: .username) ?? ""
-        hasPassword = try container.decodeIfPresent(Bool.self, forKey: .hasPassword) ?? false
+        id = (try? container.decodeIfPresent(UUID.self, forKey: .id)) ?? UUID()
+        name = (try? container.decodeIfPresent(String.self, forKey: .name)) ?? L("新配置")
+        color = (try? container.decodeIfPresent(String.self, forKey: .color)) ?? ProfilePalette.colors[0]
+        kind = (try? container.decodeIfPresent(ProxyKind.self, forKey: .kind)) ?? .http
+        host = (try? container.decodeIfPresent(String.self, forKey: .host)) ?? "127.0.0.1"
+        port = (try? container.decodeIfPresent(Int.self, forKey: .port)) ?? 8080
+        pacURL = (try? container.decodeIfPresent(String.self, forKey: .pacURL)) ?? ""
+        bypass = (try? container.decodeIfPresent(String.self, forKey: .bypass)) ?? Profile.defaultBypass
+        noProxy = (try? container.decodeIfPresent(String.self, forKey: .noProxy)) ?? Profile.defaultNoProxy
+        if let names = try? container.decodeIfPresent([String].self, forKey: .targets) {
+            let known = Set(names.compactMap(ProxyTarget.init(rawValue:)))
+            targets = known.isEmpty && !names.isEmpty ? Set([ProxyTarget.system]) : known
+        } else {
+            targets = [.system]
+        }
+        username = (try? container.decodeIfPresent(String.self, forKey: .username)) ?? ""
+        hasPassword = (try? container.decodeIfPresent(Bool.self, forKey: .hasPassword)) ?? false
         let legacy = try decoder.container(keyedBy: LegacyKeys.self)
         engine = (try? legacy.decodeIfPresent(Bool.self, forKey: .engine)) ?? false
     }
@@ -171,6 +177,17 @@ struct Profile: Codable, Identifiable, Equatable, Hashable {
 
     /// 环境变量、git、npm 需要一个服务器地址；PAC 配置只能设置系统代理。
     var supportsNonSystemTargets: Bool { kind != .pac }
+
+    /// 开启时写进系统的部分一样（名字、颜色不算）：只改了名字或颜色的配置不用重新应用。
+    func appliesSame(as other: Profile) -> Bool {
+        var mine = self
+        var theirs = other
+        mine.name = ""
+        theirs.name = ""
+        mine.color = ""
+        theirs.color = ""
+        return mine == theirs
+    }
 
     /// 例外列表拆成 networksetup 需要的条目。
     var bypassDomains: [String] { BypassList.domains(from: bypass) }

@@ -52,11 +52,13 @@ struct HotkeyRecorder: NSViewRepresentable {
                 return
             }
             let modifiers = KeyNames.carbonModifiers(from: event.modifierFlags)
-            guard modifiers != 0 else {
+            let keyCode = UInt32(event.keyCode)
+            // 至少要有 ⌃ 或 ⌘（F1~F20 可以不带）：全局快捷键会把这个组合整个拿走，只带 ⇧ 或 ⌥ 的话，
+            // 在任何程序里打大写字母或者 ⌥ 出来的符号都会变成开关代理。
+            guard modifiers & (KeyNames.controlKey | KeyNames.cmdKey) != 0 || KeyNames.isFunctionKey(keyCode) else {
                 NSSound.beep()
                 return
             }
-            let keyCode = UInt32(event.keyCode)
             let display = KeyNames.display(keyCode: keyCode, modifiers: modifiers)
             onChange?(HotkeyBinding(keyCode: keyCode, modifiers: modifiers, display: display))
             window?.makeFirstResponder(nil)

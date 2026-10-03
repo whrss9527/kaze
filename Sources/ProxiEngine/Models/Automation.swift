@@ -26,7 +26,7 @@ enum ControlPermission: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .off: return L("命令行和 AI 助手都连不上")
         case .readOnly: return L("查看状态、节点、规则和连接，不能改动任何东西")
-        case .operate: return L("另外可以开关代理、切换节点和模式、测速、断开连接")
+        case .operate: return L("另外可以切换节点和模式、测速、更新订阅和规则、断开连接，开关局域网共享、增强模式和网关模式")
         case .full: return L("另外可以加规则、加订阅、导入配置；每次改动都记在操作记录里，可以撤销")
         }
     }

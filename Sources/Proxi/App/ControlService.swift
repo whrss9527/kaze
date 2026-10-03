@@ -122,7 +122,8 @@ final class ControlService: ObservableObject {
         if tool.permission != .readOnly {
             Log.info("\(Self.clientTitle(client)) 调用了 \(method)")
         }
-        return try await perform(tool, params: ControlParams(raw), state: state)
+        // URL 命令多半是用户自己点的（快捷指令、启动器），钥匙串里没有密码时可以弹窗问；命令行和 AI 助手不弹。
+        return try await perform(tool, params: ControlParams(raw), state: state, askForPassword: client == "url")
     }
 
     private static func unknownTool(_ name: String) -> ControlError {
@@ -131,7 +132,7 @@ final class ControlService: ObservableObject {
 
     // MARK: - 各个工具
 
-    private func perform(_ tool: ControlTool, params: ControlParams, state: AppState) async throws -> [String: Any] {
+    private func perform(_ tool: ControlTool, params: ControlParams, state: AppState, askForPassword: Bool) async throws -> [String: Any] {
         switch tool.name {
         case "get_status":
             return status(state)
@@ -155,15 +156,14 @@ final class ControlService: ObservableObject {
                 profile = try resolveProfile(name, state: state)
             } else if tool.name == "use_profile" {
                 throw ControlError.invalid(L("缺少参数 %@", "profile"))
-            } else if case .off(let next) = state.status, let next {
-                profile = next
-            } else if let current = state.status.profile {
+            } else if let current = state.status.profile ?? state.selectedProfile {
+                // 关着时是下次开启的那个，开着时是正在用的，系统代理被别的程序设置了时是上次用的。
                 profile = current
             } else {
                 throw ControlError.failed(L("还没有代理配置"))
             }
             await waitForIdle(state)
-            state.turnOn(profile, askForPassword: false)
+            state.turnOn(profile, askForPassword: askForPassword)
             await waitForIdle(state)
             if let error = state.lastError, !(state.status.isOn && state.status.profile?.id == profile.id) { throw ControlError.failed(L("开启失败：%@", error)) }
             return ["text": L("已开启「%@」（%@）", profile.name, profile.summary)]
@@ -174,7 +174,7 @@ final class ControlService: ObservableObject {
             return ["text": L("代理已关闭")]
         case "toggle":
             await waitForIdle(state)
-            state.toggle(askForPassword: false)
+            state.toggle(askForPassword: askForPassword)
             await waitForIdle(state)
             return ["text": state.status.isOn ? L("代理已开启：%@", state.status.profile?.name ?? "") : L("代理已关闭")]
         case "test_profiles":
@@ -184,7 +184,7 @@ final class ControlService: ObservableObject {
             }
             var results: [[String: Any]] = []
             for profile in profiles {
-                await state.test(profile)
+                await state.test(profile, askForPassword: askForPassword)
                 let result = state.testResults[profile.id]
                 var item: [String: Any] = ["profile": profile.name, "ok": result?.ok ?? false, "message": result?.message ?? ""]
                 if let latency = result?.latencyMs { item["latencyMs"] = latency }
@@ -243,9 +243,9 @@ final class ControlService: ObservableObject {
         throw ControlError.invalid(L("「%@」对上了 %@ 个配置：%@，写完整一点", name, matches.count, matches.map(\.name).joined(separator: L("、"))))
     }
 
-    /// 等开关代理的操作做完（最多 20 秒）。
+    /// 等开关代理的操作做完（最多 60 秒：开启「代理引擎」那条配置时要先等代理引擎的内核起来，最多 30 秒）。
     private func waitForIdle(_ state: AppState) async {
-        for _ in 0..<200 {
+        for _ in 0..<600 {
             if !state.busy { return }
             try? await Task.sleep(for: .milliseconds(100))
         }

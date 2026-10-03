@@ -265,33 +265,34 @@ struct EngineConfig: Codable, Equatable {
         case manualNodes, manualDialer, dns, hosts, ipv6, patch, favoriteNodes, nodeSort
     }
 
+    /// 每一项单独容错，列表一条条读：一条订阅、规则、策略组读不出来只跳过它，不让订阅和规则全都没了。
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        enabled = try container.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
-        subscriptions = try container.decodeIfPresent([Subscription].self, forKey: .subscriptions) ?? []
-        mode = try container.decodeIfPresent(EngineMode.self, forKey: .mode) ?? .rule
-        mixedPort = try container.decodeIfPresent(Int.self, forKey: .mixedPort) ?? 7890
-        apiPort = try container.decodeIfPresent(Int.self, forKey: .apiPort) ?? 9097
-        selectedNode = try container.decodeIfPresent(String.self, forKey: .selectedNode)
-        updateIntervalHours = try container.decodeIfPresent(Int.self, forKey: .updateIntervalHours) ?? 24
-        customRules = try container.decodeIfPresent([CustomRule].self, forKey: .customRules) ?? []
-        groups = try container.decodeIfPresent([PolicyGroup].self, forKey: .groups) ?? []
-        if let sets = try container.decodeIfPresent([RuleSet].self, forKey: .ruleSets) {
+        enabled = (try? container.decodeIfPresent(Bool.self, forKey: .enabled)) ?? true
+        subscriptions = (try? container.decodeIfPresent(LossyArray<Subscription>.self, forKey: .subscriptions))?.elements ?? []
+        mode = (try? container.decodeIfPresent(EngineMode.self, forKey: .mode)) ?? .rule
+        mixedPort = (try? container.decodeIfPresent(Int.self, forKey: .mixedPort)) ?? 7890
+        apiPort = (try? container.decodeIfPresent(Int.self, forKey: .apiPort)) ?? 9097
+        selectedNode = try? container.decodeIfPresent(String.self, forKey: .selectedNode)
+        updateIntervalHours = (try? container.decodeIfPresent(Int.self, forKey: .updateIntervalHours)) ?? 24
+        customRules = (try? container.decodeIfPresent(LossyArray<CustomRule>.self, forKey: .customRules))?.elements ?? []
+        groups = (try? container.decodeIfPresent(LossyArray<PolicyGroup>.self, forKey: .groups))?.elements ?? []
+        if let sets = (try? container.decodeIfPresent(LossyArray<RuleSet>.self, forKey: .ruleSets))?.elements {
             ruleSets = sets
-        } else if let source = try container.decodeIfPresent(RuleSource.self, forKey: .ruleSource) {
+        } else if let source = try? container.decodeIfPresent(RuleSource.self, forKey: .ruleSource) {
             // 旧配置：单一的规则来源变成一条规则集，行为和以前一样。
             ruleSets = RuleSet.migrated(from: source)
         } else {
             ruleSets = []
         }
-        finalPolicy = try container.decodeIfPresent(RuleTarget.self, forKey: .finalPolicy)
-        manualNodes = try container.decodeIfPresent([ManualNode].self, forKey: .manualNodes) ?? []
-        manualDialer = try container.decodeIfPresent(String.self, forKey: .manualDialer)
-        dns = try container.decodeIfPresent(DNSSettings.self, forKey: .dns) ?? DNSSettings()
-        hosts = try container.decodeIfPresent([HostEntry].self, forKey: .hosts) ?? []
-        ipv6 = try container.decodeIfPresent(Bool.self, forKey: .ipv6) ?? false
-        patch = try container.decodeIfPresent(String.self, forKey: .patch) ?? ""
-        favoriteNodes = try container.decodeIfPresent([String].self, forKey: .favoriteNodes) ?? []
+        finalPolicy = try? container.decodeIfPresent(RuleTarget.self, forKey: .finalPolicy)
+        manualNodes = (try? container.decodeIfPresent(LossyArray<ManualNode>.self, forKey: .manualNodes))?.elements ?? []
+        manualDialer = try? container.decodeIfPresent(String.self, forKey: .manualDialer)
+        dns = (try? container.decodeIfPresent(DNSSettings.self, forKey: .dns)) ?? DNSSettings()
+        hosts = (try? container.decodeIfPresent(LossyArray<HostEntry>.self, forKey: .hosts))?.elements ?? []
+        ipv6 = (try? container.decodeIfPresent(Bool.self, forKey: .ipv6)) ?? false
+        patch = (try? container.decodeIfPresent(String.self, forKey: .patch)) ?? ""
+        favoriteNodes = (try? container.decodeIfPresent([String].self, forKey: .favoriteNodes)) ?? []
         nodeSort = (try? container.decodeIfPresent(NodeSort.self, forKey: .nodeSort)) ?? .original
     }
 

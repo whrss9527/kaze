@@ -229,7 +229,8 @@ final class ControlService: ObservableObject {
             if let filter = params.string("filter") {
                 nodes = nodes.filter { $0.name.localizedCaseInsensitiveContains(filter) || $0.subscription.localizedCaseInsensitiveContains(filter) }
             }
-            let limit = params.int("limit") ?? 200
+            // 负数会让 prefix 直接崩溃（只能查看的客户端也能传）：限制在 0…5000。
+            let limit = min(5000, max(0, params.int("limit") ?? 200))
             let favorites = Set(state.config.engine.favoriteNodes)
             let list = nodes.prefix(limit).map { node -> [String: Any] in
                 var item: [String: Any] = ["name": node.name, "type": node.type, "source": node.subscription]
@@ -286,7 +287,7 @@ final class ControlService: ObservableObject {
             let manual = config.manualNodes.map { ["name": $0.name, "server": $0.server, "enabled": $0.enabled] as [String: Any] }
             return ["text": L("%@ 条订阅、%@ 个手动节点", subscriptions.count, manual.count), "subscriptions": subscriptions, "manualNodes": manual]
         case "list_connections":
-            let limit = params.int("limit") ?? 50
+            let limit = min(5000, max(0, params.int("limit") ?? 50))
             let filter = params.string("filter")
             func matches(_ record: ConnectionRecord) -> Bool {
                 guard let filter else { return true }

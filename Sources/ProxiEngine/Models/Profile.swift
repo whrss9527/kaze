@@ -93,19 +93,24 @@ struct Profile: Codable, Identifiable, Equatable, Hashable {
         id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
         name = try container.decodeIfPresent(String.self, forKey: .name) ?? L("新配置")
         color = try container.decodeIfPresent(String.self, forKey: .color) ?? ProfilePalette.colors[0]
-        kind = try container.decodeIfPresent(ProxyKind.self, forKey: .kind) ?? .http
+        kind = (try? container.decodeIfPresent(ProxyKind.self, forKey: .kind)) ?? .http
         host = try container.decodeIfPresent(String.self, forKey: .host) ?? "127.0.0.1"
         port = try container.decodeIfPresent(Int.self, forKey: .port) ?? 7890
         pacURL = try container.decodeIfPresent(String.self, forKey: .pacURL) ?? ""
         bypass = try container.decodeIfPresent(String.self, forKey: .bypass) ?? Profile.defaultBypass
         noProxy = try container.decodeIfPresent(String.self, forKey: .noProxy) ?? Profile.defaultNoProxy
-        targets = try container.decodeIfPresent(Set<ProxyTarget>.self, forKey: .targets) ?? [.system]
+        if let names = try? container.decodeIfPresent([String].self, forKey: .targets) {
+            let known = Set(names.compactMap(ProxyTarget.init(rawValue:)))
+            targets = known.isEmpty && !names.isEmpty ? Set([ProxyTarget.system]) : known
+        } else {
+            targets = [.system]
+        }
         engine = try container.decodeIfPresent(Bool.self, forKey: .engine) ?? false
     }
 
     /// 代理引擎对应的配置。
     static func engineProfile(port: Int) -> Profile {
-        var profile = Profile(name: L("节点代理"), color: ProfilePalette.colors[1], kind: .http, host: "127.0.0.1", port: port)
+        var profile = Profile(name: L("代理引擎"), color: ProfilePalette.colors[1], kind: .http, host: "127.0.0.1", port: port)
         profile.engine = true
         return profile
     }

@@ -7,6 +7,7 @@ struct ExtensionsPage: View {
     @ObservedObject var extensions: ExtensionManager
     @State private var showingDisclaimer = false
     @State private var working = false
+    @State private var confirmingRemove = false
 
     private var enabled: Bool { state.persisted.extensionState.enabled }
 
@@ -29,7 +30,7 @@ struct ExtensionsPage: View {
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                         Spacer()
-                        Toggle("", isOn: Binding(get: { enabled }, set: { toggle($0) }))
+                        Toggle(L("代理引擎（扩展）"), isOn: Binding(get: { enabled }, set: { toggle($0) }))
                             .toggleStyle(.switch)
                             .labelsHidden()
                             .disabled(working)
@@ -103,13 +104,20 @@ struct ExtensionsPage: View {
             .disabled(extensions.isBusy)
             Spacer()
             Button(L("关闭并移除…"), role: .destructive) {
-                working = true
-                Task { @MainActor in
-                    await state.disableExtension(removeApp: true)
-                    working = false
-                }
+                confirmingRemove = true
             }
             .disabled(working || extensions.isBusy)
+            .confirmationDialog(L("关闭并移除代理引擎？"), isPresented: $confirmingRemove) {
+                Button(L("关闭并移除"), role: .destructive) {
+                    working = true
+                    Task { @MainActor in
+                        await state.disableExtension(removeApp: true)
+                        working = false
+                    }
+                }
+            } message: {
+                Text(L("会先关掉正在用的「代理引擎」配置、恢复系统设置，再退出代理引擎、删掉下载的程序。它的数据留着，以后再开启时还在。"))
+            }
         }
         Text(L("关闭扩展会先关掉正在用的「代理引擎」配置、恢复系统设置，再退出代理引擎。「关闭并移除」还会删掉下载的程序；它的数据（%@）留着，以后再开启时还在。", ExtensionManager.dataDirectory.path))
             .font(.caption)

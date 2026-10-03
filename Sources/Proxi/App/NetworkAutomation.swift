@@ -29,9 +29,9 @@ final class NetworkAutomation: NSObject, ObservableObject, CLLocationManagerDele
         locationManager = manager
         locationStatus = manager.authorizationStatus
         watchNetwork()
-        // 规则改了马上按现在的网络再看一次。
+        // 规则改了马上按现在的网络再看一次（只看规则和总开关：改控制接口的权限不该把手动关掉的代理又开起来）。
         state.$config
-            .map(\.automation)
+            .map { RuleInputs(switching: $0.automation.networkSwitching, rules: $0.automation.networkRules) }
             .removeDuplicates()
             .dropFirst()
             .sink { [weak self] _ in
@@ -145,6 +145,12 @@ final class NetworkAutomation: NSObject, ObservableObject, CLLocationManagerDele
         }
         let key = "\(rule.id)|\(identity.ssid ?? "")|\(identity.routerIP ?? "")|\(identity.routerMAC ?? "")"
         guard key != lastKey else { return }
+        // 正在开关代理（比如等代理引擎的内核起来、管理员密码的对话框开着）时先不切，过一会儿再看：
+        // 这时开关会被忽略，记下「切过了」的话这个网络就再也不切了。
+        if state.busy {
+            schedule(delay: 3)
+            return
+        }
         lastKey = key
         apply(rule, identity: identity, state: state)
     }
@@ -159,6 +165,8 @@ final class NetworkAutomation: NSObject, ObservableObject, CLLocationManagerDele
             }
             if case .on(let current) = state.status, current.id == profile.id { break }
             state.turnOn(profile)
+            // 没有开始（比如钥匙串里没有密码、用户取消了输入）就不说切换了。
+            guard state.busy else { return }
             done = L("开启「%@」", profile.name)
         case .off:
             if case .on = state.status {
@@ -179,6 +187,12 @@ final class NetworkAutomation: NSObject, ObservableObject, CLLocationManagerDele
         if let mac = identity.routerMAC { return .router(mac) }
         if let ip = identity.routerIP { return .router(ip) }
         return nil
+    }
+
+    /// 影响按网络切换的设置。
+    private struct RuleInputs: Equatable {
+        var switching: Bool
+        var rules: [NetworkRule]
     }
 
     /// 是不是一个 IPv4 地址（只有这种才去查路由器的 MAC）。

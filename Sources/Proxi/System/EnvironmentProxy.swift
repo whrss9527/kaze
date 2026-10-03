@@ -142,7 +142,7 @@ enum NpmProxy {
     /// 现在的设置，密码已经隐藏。
     static func current() -> [String: String] {
         var values: [String: String] = [:]
-        for line in read().split(separator: "\n") {
+        for line in ((try? read()) ?? "").split(separator: "\n") {
             let parts = line.split(separator: "=", maxSplits: 1).map { $0.trimmingCharacters(in: .whitespaces) }
             if parts.count == 2, ["proxy", "https-proxy", "noproxy"].contains(parts[0]) {
                 values[parts[0]] = Redact.secrets(parts[1])
@@ -170,15 +170,35 @@ enum NpmProxy {
         return kept.isEmpty ? "" : kept.joined(separator: "\n") + "\n"
     }
 
-    private static func read() -> String {
-        (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
+    /// 读 .npmrc；没有这个文件时是空的。文件在但读不出来（没有权限、不是 UTF-8）时报错，
+    /// 不能当成空文件再整个写回去，那样里面的镜像地址、登录令牌就都没了。
+    private static func read() throws -> String {
+        guard FileManager.default.fileExists(atPath: path) else { return "" }
+        do {
+            return try String(contentsOfFile: path, encoding: .utf8)
+        } catch {
+            throw SystemProxyError.command(L("读不了 %@，没有改它：%@", path, error.localizedDescription))
+        }
     }
 
+    /// 写回 .npmrc：先写到同一个目录里的临时文件再换过去（写到一半不会留下半个文件）。
+    /// .npmrc 是指向 dotfiles 的链接时写到它指向的文件，链接本身不动；里面有密码时只让自己能读，没有时保留原来的权限。
     private static func write(_ content: String) throws {
-        try content.write(toFile: path, atomically: true, encoding: .utf8)
-        // 里面有密码时只让自己能读。
-        if Redact.secrets(content) != content {
-            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: path)
+        let fm = FileManager.default
+        let target = URL(fileURLWithPath: path).resolvingSymlinksInPath()
+        // 本来就没有 .npmrc、也没什么要写的：不凭空建一个空文件。
+        if content.isEmpty && !fm.fileExists(atPath: target.path) { return }
+        let secret = Redact.secrets(content) != content
+        let existing = (try? fm.attributesOfItem(atPath: target.path)[.posixPermissions] as? NSNumber)?.intValue
+        let mode = secret ? 0o600 : (existing ?? 0o644)
+        let temporary = target.deletingLastPathComponent().appendingPathComponent(".npmrc.proxi-\(UUID().uuidString)")
+        guard fm.createFile(atPath: temporary.path, contents: Data(content.utf8), attributes: [.posixPermissions: mode]) else {
+            throw SystemProxyError.command(L("写不了 %@", target.path))
+        }
+        if rename(temporary.path, target.path) != 0 {
+            let reason = String(cString: strerror(errno))
+            try? fm.removeItem(at: temporary)
+            throw SystemProxyError.command(L("写不了 %@：%@", target.path, reason))
         }
     }
 }

@@ -86,6 +86,7 @@ final class AppState: ObservableObject {
         refresh()
         engine.readConfig = { [weak self] in self?.config ?? AppConfig() }
         engine.writeEngine = { [weak self] engine in self?.config.engine = engine }
+        engine.coreReady = { [weak self] in self?.core.isReady ?? false }
         // 按出口累计的流量存在本机状态里，跨重启接着算。
         engine.loadTraffic(persisted.traffic)
         engine.persistTraffic = { [weak self] stats in
@@ -117,7 +118,15 @@ final class AppState: ObservableObject {
         helper.$state
             .removeDuplicates()
             .dropFirst()
-            .sink { [weak self] _ in Task { @MainActor in self?.shareStateChanged() } }
+            .sink { [weak self] state in
+                Task { @MainActor in
+                    // 助手重新装好、起来了：上次增强模式没开起来（比如重装助手时它正好停着）就再试一次。
+                    if case .ready = state {
+                        self?.engine.retryTunIfFailed()
+                    }
+                    self?.shareStateChanged()
+                }
+            }
             .store(in: &cancellables)
         $lanAddresses
             .removeDuplicates()

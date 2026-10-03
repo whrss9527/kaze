@@ -12,6 +12,8 @@ enum SettingsWindowSync {
     private static let frameKey = "settingsWindowFrame"
     /// 通知里标明是哪一边发的，自己发的不理。
     nonisolated private static let me = "proxi"
+    /// 另一边程序的 bundle identifier。
+    nonisolated private static let other = "com.whrss9527.proxyswitch.engine"
 
     /// 上次两边设置窗口的位置和大小；已经不在任何屏幕上（换了显示器）时不用。
     static func savedFrame() -> NSRect? {
@@ -24,6 +26,50 @@ enum SettingsWindowSync {
 
     static func save(_ frame: NSRect) {
         defaults?.set(NSStringFromRect(frame), forKey: frameKey)
+    }
+
+    /// 要切到另一边（让它打开设置窗口）之前调用。macOS 14 起程序不能自己抢到前台，要由在前台的程序先让出来，
+    /// 另一边的窗口出来时才会到前台。
+    static func yieldToOther() {
+        NSApp.yieldActivation(toApplicationWithBundleIdentifier: other)
+    }
+
+    private final class Handoff {
+        var observer: NSObjectProtocol?
+        var done = false
+    }
+
+    /// 这边的设置窗口因为另一边的设置窗口打开了而关掉：退回只有菜单栏图标（不在 Dock 里）。
+    /// 还在前台时先把前台交给另一边，等真的让出去了再退。马上退的话系统会把前台交给别的程序（常常是桌面），
+    /// 看起来就是闪一下跳到了桌面。
+    static func becomeAccessoryAfterHandoff() {
+        guard NSApp.isActive else {
+            NSApp.setActivationPolicy(.accessory)
+            return
+        }
+        if let app = NSRunningApplication.runningApplications(withBundleIdentifier: other).first {
+            NSApp.yieldActivation(to: app)
+            _ = app.activate(from: .current, options: [])
+        }
+        let handoff = Handoff()
+        let finish: @MainActor () -> Void = {
+            guard !handoff.done else { return }
+            handoff.done = true
+            if let observer = handoff.observer {
+                NotificationCenter.default.removeObserver(observer)
+            }
+            // 这期间又打开了设置窗口（或者别的窗口）就不退。
+            if !NSApp.windows.contains(where: { $0.isVisible && $0.styleMask.contains(.titled) }) {
+                NSApp.setActivationPolicy(.accessory)
+            }
+        }
+        handoff.observer = NotificationCenter.default.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { _ in
+            MainActor.assumeIsolated { finish() }
+        }
+        // 另一边一直没到前台（比如它刚好退出了）：两秒后照样退。
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            MainActor.assumeIsolated { finish() }
+        }
     }
 
     /// 这边的设置窗口显示出来了：让另一边关掉它的。

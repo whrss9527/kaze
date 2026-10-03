@@ -388,6 +388,8 @@ final class ExtensionManager: ObservableObject {
     /// page：打开哪一页（Proxi 侧边栏里点了代理引擎的某一页时传）。
     func showSettings(page: String? = nil) {
         if isInstalled && !isBusy {
+            // 把前台让给代理引擎，它的窗口出来时才会到前台（不然这边的窗口关掉后会落到桌面）。
+            SettingsWindowSync.yieldToOther()
             // 已经在运行时启动参数传不过去：先发通知让它切到这一页，再「重新打开」它（显示设置窗口、切到前台）。
             if let page {
                 SettingsWindowSync.requestEnginePage(page)

@@ -78,7 +78,10 @@ enum ProxiPage: String, CaseIterable {
     }
 
     /// 在 Proxi 里打开这一页；Proxi 的设置窗口显示出来后，这边的窗口随之关掉（见 SettingsWindowSync）。
+    @MainActor
     func open() {
+        // 把前台让给 Proxi，它的窗口出来时才会到前台（不然这边的窗口关掉后会落到桌面）。
+        SettingsWindowSync.yieldToOther()
         NSWorkspace.shared.open(URL(string: "proxi://settings?page=\(rawValue)")!)
     }
 }
@@ -131,12 +134,15 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     let navigation = SettingsNavigation()
     private var window: NSWindow?
     private var otherShownObserver: NSObjectProtocol?
+    /// 正在因为 Proxi 的设置窗口打开了而关掉这边的。
+    private var handingOff = false
 
     override init() {
         super.init()
         // Proxi 的设置窗口显示出来时关掉这边的：两边当成同一个窗口，同一时间只显示一个。
         otherShownObserver = SettingsWindowSync.observeOtherShown { [weak self] in
-            guard let window = self?.window, window.isVisible else { return }
+            guard let self, let window = self.window, window.isVisible else { return }
+            self.handingOff = true
             window.close()
         }
     }
@@ -177,7 +183,12 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     }
 
     func windowWillClose(_ notification: Notification) {
-        NSApp.setActivationPolicy(.accessory)
+        if handingOff {
+            handingOff = false
+            SettingsWindowSync.becomeAccessoryAfterHandoff()
+        } else {
+            NSApp.setActivationPolicy(.accessory)
+        }
     }
 
     private func makeWindow() -> NSWindow {

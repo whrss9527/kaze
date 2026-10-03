@@ -122,12 +122,15 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     let navigation = SettingsNavigation()
     private var window: NSWindow?
     private var otherShownObserver: NSObjectProtocol?
+    /// 正在因为代理引擎的设置窗口打开了而关掉这边的。
+    private var handingOff = false
 
     override init() {
         super.init()
         // 代理引擎的设置窗口显示出来时关掉这边的：两边当成同一个窗口，同一时间只显示一个。
         otherShownObserver = SettingsWindowSync.observeOtherShown { [weak self] in
-            guard let window = self?.window, window.isVisible else { return }
+            guard let self, let window = self.window, window.isVisible else { return }
+            self.handingOff = true
             window.close()
         }
     }
@@ -168,10 +171,16 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     }
 
     func windowWillClose(_ notification: Notification) {
+        let handoff = handingOff
+        handingOff = false
         // 别的窗口（后台助手的提示）还开着时留在 Dock 和 ⌘Tab 里，等它也关了再回到只有菜单栏图标。
         let others = NSApp.windows.contains { $0.isVisible && $0 !== notification.object as? NSWindow && $0.styleMask.contains(.titled) }
         if !others {
-            NSApp.setActivationPolicy(.accessory)
+            if handoff {
+                SettingsWindowSync.becomeAccessoryAfterHandoff()
+            } else {
+                NSApp.setActivationPolicy(.accessory)
+            }
         }
     }
 

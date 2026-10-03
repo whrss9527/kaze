@@ -19,9 +19,9 @@ VERSION=0.1.0 Scripts/build-app.sh   # 组装通用二进制的 dist/Proxi.app �
 | 目录 | 内容 |
 | --- | --- |
 | `Sources/Proxi/App` | 入口、`AppState`（配置、状态、开关逻辑）、本机控制接口、命令行、按网络自动切换、iCloud 同步、更新、从旧版本更新过来时的清理（`LegacyCleanup`） |
-| `Sources/Proxi/Models` | 配置、系统代理快照、networksetup 命令的生成、粘贴地址的解析、自动化、界面语言 |
+| `Sources/Proxi/Models` | 配置、系统代理快照、networksetup 命令的生成、粘贴地址的解析、引导里填的内容、自动化、界面语言 |
 | `Sources/Proxi/System` | 系统代理、环境变量、git / npm、测试连接与自动检测、快捷键、登录项、通知、URL 命令、更新、iCloud 文件、控制接口的套接字与 MCP、命令行工具的安装 |
-| `Sources/Proxi/UI` | 菜单栏图标与面板、设置窗口各页（代理配置、自动化、通用、快捷键、iCloud 同步、诊断、关于）、更新说明、毛玻璃样式、快捷键录制 |
+| `Sources/Proxi/UI` | 菜单栏图标与面板、第一次打开时的引导、设置窗口各页（代理配置、自动化、通用、快捷键、iCloud 同步、诊断、关于）、更新说明、毛玻璃样式、快捷键录制 |
 | `Tests` | XCTest |
 | `Scripts/build-app.sh` | 组装 .app（通用二进制）、签名、打 zip |
 | `Scripts/import-certificate.sh`、`Scripts/notarize.sh` | 发布时导入 Developer ID 证书、提交苹果公证并钉上票据 |

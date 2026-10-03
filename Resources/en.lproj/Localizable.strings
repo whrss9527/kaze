@@ -111,6 +111,10 @@
 /* Models/InterfaceLanguage.swift */
 "跟随系统" = "Follow System";
 
+/* Models/OnboardingDraft.swift */
+"请填写代理服务器的地址，比如 proxy.corp.example:3128" = "Enter the proxy server's address, e.g. proxy.corp.example:3128";
+"地址里要带端口，比如 %@:3128" = "Include the port in the address, e.g. %@:3128";
+
 /* Models/Profile.swift */
 "PAC 脚本" = "PAC Script";
 "环境变量" = "Environment Variables";
@@ -310,6 +314,26 @@
 "移除后台助手…" = "Remove Background Helper…";
 "知道了" = "OK";
 
+/* UI/OnboardingWindow.swift */
+"欢迎使用 Proxi" = "Welcome to Proxi";
+"第 %@ 步，共 %@ 步：%@" = "Step %1$@ of %2$@: %3$@";
+"Proxi 把系统代理、终端、git、npm 一起指向你自己的代理服务器：公司代理、内网网关，或者本机的 Charles、Proxyman、mitmproxy 这类调试代理。它只切换设置，自己不提供代理。" = "Proxi points the system proxy, the terminal, git and npm at your own proxy server: a company proxy, an internal gateway, or a debugging proxy on this Mac such as Charles, Proxyman or mitmproxy. It only switches settings and doesn't provide a proxy itself.";
+"地址" = "Address";
+"不填就按地址起名" = "Leave empty to name it after the address";
+"写成「主机:端口」，比如 proxy.corp.example:3128、127.0.0.1:8888，也可以粘贴 socks5://127.0.0.1:1080 这样的整段地址。常见的本机调试代理：Charles 是 8888，Proxyman 是 9090，mitmproxy 是 8080。" = "Write it as host:port, e.g. proxy.corp.example:3128 or 127.0.0.1:8888, or paste a full address like socks5://127.0.0.1:1080. Common debugging proxies on this Mac: Charles uses 8888, Proxyman 9090 and mitmproxy 8080.";
+"代理服务器要求登录" = "The proxy server requires a login";
+"密码只保存在这台 Mac 的钥匙串里。" = "The password is stored only in this Mac's keychain.";
+"用这个" = "Use This";
+"开启代理时把勾上的地方都指向它，关闭时一起改回来" = "When the proxy is on, everything checked points at it; turning it off changes them all back";
+"经这个代理访问测速地址，看看能不能连上。连不上也可以先添加，以后再改。" = "Opens the test URL through this proxy to see whether it connects. If it doesn't, you can still add it now and fix it later.";
+"现在就开启" = "Turn it on now";
+"以后点菜单栏的图标就能开关代理，也可以在任何程序里按 %@。改这条配置、再加别的（比如家里和公司各一套），在「设置 → 代理配置」里。" = "From now on, click the menu bar icon to turn the proxy on or off, or press %@ in any app. To change this profile or add more (say, one for home and one for work), go to Settings → Proxy Profiles.";
+"以后点菜单栏的图标就能开关代理。改这条配置、再加别的（比如家里和公司各一套），在「设置 → 代理配置」里。" = "From now on, click the menu bar icon to turn the proxy on or off. To change this profile or add more (say, one for home and one for work), go to Settings → Proxy Profiles.";
+"跳过" = "Skip";
+"到设置里自己填" = "Fill it in yourself in Settings";
+"上一步" = "Back";
+"下一步" = "Next";
+
 /* UI/PanelView.swift */
 "已开启 · %@" = "On · %@";
 "系统代理由其他程序设置" = "System proxy set by another app";
@@ -446,6 +470,8 @@
 "网址诊断" = "URL Diagnosis";
 "高级" = "Advanced";
 "内核" = "Core";
+"显示高级设置" = "Show advanced settings";
+"不常用的设置默认收起：关闭代理的方式、连通检查和测速地址、网速的位置和颜色、代理配置里不经代理的地址。" = "Less common settings are hidden by default: how the proxy is turned off, the connection check and test URL, where the speed is shown and its color, and the addresses a profile sends around the proxy.";
 
 /* UI/StatusItemController.swift */
 "Proxi\n已开启：%@\n代理服务器连不上" = "Proxi\nOn: %@\nCan't reach the proxy server";

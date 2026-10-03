@@ -284,8 +284,15 @@ struct PageHeader: View {
 
 // MARK: - 通用
 
+/// 「显示高级设置」：不常用的设置默认收起（关闭代理的方式、连通检查和测速地址、网速的位置和颜色、配置里不经代理的地址）。
+/// 只影响这台 Mac 的界面，不同步。
+enum AdvancedSettings {
+    static let key = "showAdvancedSettings"
+}
+
 struct GeneralPage: View {
     @ObservedObject var state: AppState
+    @AppStorage(AdvancedSettings.key) private var showAdvanced = false
     @State private var language = LanguageSetting.current
     @State private var relaunchError: String?
     @State private var removingHelper = false
@@ -342,36 +349,40 @@ struct GeneralPage: View {
                             Text(display.title).tag(display)
                         }
                     }
-                    Picker(L("网速位置"), selection: $state.config.speedSide) {
-                        ForEach(SpeedSide.allCases) { side in
-                            Text(side.title).tag(side)
+                    if showAdvanced {
+                        Picker(L("网速位置"), selection: $state.config.speedSide) {
+                            ForEach(SpeedSide.allCases) { side in
+                                Text(side.title).tag(side)
+                            }
                         }
-                    }
-                    .disabled(state.config.speedDisplay == .none)
-                    Toggle(L("网速文字跟着代理状态变色"), isOn: $state.config.speedColorFollowsStatus)
                         .disabled(state.config.speedDisplay == .none)
-                    Text(L("上行在上、下行在下，默认显示在图标左边、开关在右边。「关代理时只显示网速」：代理关着时菜单栏里只有网速，开启后开关出现在网速左边，网速本身的位置不动；点网速和点开关一样。"))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Text(L("变色：开着代理时网速用开关的颜色，系统代理是别的程序设置的时候是黄色，代理服务器连不上时是红色，关着时是普通的菜单栏文字颜色。颜色会按菜单栏深浅自动调深或调浅，保证看得清。"))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        Toggle(L("网速文字跟着代理状态变色"), isOn: $state.config.speedColorFollowsStatus)
+                            .disabled(state.config.speedDisplay == .none)
+                        Text(L("上行在上、下行在下，默认显示在图标左边、开关在右边。「关代理时只显示网速」：代理关着时菜单栏里只有网速，开启后开关出现在网速左边，网速本身的位置不动；点网速和点开关一样。"))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text(L("变色：开着代理时网速用开关的颜色，系统代理是别的程序设置的时候是黄色，代理服务器连不上时是红色，关着时是普通的菜单栏文字颜色。颜色会按菜单栏深浅自动调深或调浅，保证看得清。"))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                     Text(L("「系统网络总速度」统计有线和 Wi‑Fi 网卡的全部流量。"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                Section(L("代理")) {
-                    Picker(L("关闭代理时"), selection: $state.config.offMode) {
-                        ForEach(OffMode.allCases) { mode in
-                            Text(mode.title).tag(mode)
+                if showAdvanced {
+                    Section(L("代理")) {
+                        Picker(L("关闭代理时"), selection: $state.config.offMode) {
+                            ForEach(OffMode.allCases) { mode in
+                                Text(mode.title).tag(mode)
+                            }
                         }
+                        Toggle(L("定期检查代理服务器能否连上"), isOn: $state.config.healthCheck)
+                        TextField(L("测速地址"), text: $state.config.testURL)
+                            .textFieldStyle(.roundedBorder)
+                        Text(L("测试连接时经代理访问这个地址。默认是苹果的连通性检测页，也可以换成你自己内网里的地址。"))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
-                    Toggle(L("定期检查代理服务器能否连上"), isOn: $state.config.healthCheck)
-                    TextField(L("测速地址"), text: $state.config.testURL)
-                        .textFieldStyle(.roundedBorder)
-                    Text(L("测试连接时经代理访问这个地址。默认是苹果的连通性检测页，也可以换成你自己内网里的地址。"))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
                 }
                 if state.legacyHelperInstalled && !state.persisted.extensionState.enabled {
                     Section(L("以前版本的后台助手")) {
@@ -398,6 +409,12 @@ struct GeneralPage: View {
                 Section(L("更新‖标题")) {
                     Toggle(L("自动检查更新"), isOn: $state.config.autoCheckUpdates)
                     Text(L("启动后和之后每 6 小时检查一次 GitHub 上的新版本，有新版本时通知，不会自动安装。「关于」页里可以随时手动检查和一键更新。"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Section {
+                    Toggle(L("显示高级设置"), isOn: $showAdvanced)
+                    Text(L("不常用的设置默认收起：关闭代理的方式、连通检查和测速地址、网速的位置和颜色、代理配置里不经代理的地址。"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

@@ -59,9 +59,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Log.info("Proxi 已启动，版本 \(UpdateChecker.currentVersion)")
         // CI 按这一行确认界面语言（sample 是菜单里「设置…」的译文）。
         Log.info("界面语言 english=\(AppLanguage.isEnglish) setting=\(LanguageSetting.current.rawValue) sample=\"\(L("设置…"))\"")
-        // 还没有任何配置时直接打开设置引导添加。
+        // 还没有任何配置（第一次打开）时显示新手引导；已经有配置的不显示。
         if state.config.profiles.isEmpty {
-            SettingsWindowController.shared.show(page: .profiles)
+            OnboardingWindowController.shared.show(state: state)
         }
     }
 

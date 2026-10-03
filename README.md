@@ -63,6 +63,7 @@ If you're updating from 0.12 or earlier, see [updating from 0.12 and earlier](do
 
 | Action | Result |
 | --- | --- |
+| First launch | A three-step guide: enter your proxy server's address, choose what to take over (system proxy, terminal, git, npm), done |
 | Settings → Proxy Profiles → "New" or "Detect" | Enter your proxy server's address (for example `proxy.corp.example:3128` or `127.0.0.1:8888`) and choose where to apply it |
 | Left-click the menu bar icon | Opens the panel: the big switch, profiles, latency and one-click testing |
 | Right-click (or Control-click) | A compact menu |

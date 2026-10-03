@@ -149,6 +149,7 @@ struct ProfilesPage: View {
 /// 编辑一套配置。改动先放在草稿里，点「保存」才生效。
 struct ProfileEditor: View {
     @ObservedObject var state: AppState
+    @AppStorage(AdvancedSettings.key) private var showAdvanced = false
     @State var draft: Profile
     let original: Profile
     let onDelete: () -> Void
@@ -280,11 +281,14 @@ struct ProfileEditor: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                Section(L("不经代理的地址")) {
-                    TextField(L("系统代理的例外（逗号分隔）"), text: $draft.bypass, axis: .vertical)
-                        .lineLimit(2...4)
-                    if draft.supportsNonSystemTargets {
-                        TextField(L("NO_PROXY（环境变量和 npm）"), text: $draft.noProxy)
+                // 高级设置收起时，改过的（不是默认值）照样显示，免得看不到它在起作用。
+                if showAdvanced || draft.bypass != Profile.defaultBypass || draft.noProxy != Profile.defaultNoProxy {
+                    Section(L("不经代理的地址")) {
+                        TextField(L("系统代理的例外（逗号分隔）"), text: $draft.bypass, axis: .vertical)
+                            .lineLimit(2...4)
+                        if draft.supportsNonSystemTargets {
+                            TextField(L("NO_PROXY（环境变量和 npm）"), text: $draft.noProxy)
+                        }
                     }
                 }
                 if let result {

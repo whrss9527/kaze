@@ -204,12 +204,15 @@ struct PersistedState: Codable, Equatable {
     var noticeShown: Bool = false
     /// 可选扩展「代理引擎」：开没开、同意说明的版本和时间（本机的，不同步）。
     var extensionState = ExtensionState()
+    /// 退出时没清理完的代理设置（管理员密码没输完、命令出错或者超时）：下次启动时接着清理。
+    var pendingCleanup: PendingCleanup?
 
     init() {}
 
     private enum CodingKeys: String, CodingKey {
         case lastProfileID, enabledByUs, original, systemServices, syncEnabled, noticeShown
         case extensionState = "extension"
+        case pendingCleanup
     }
 
     init(from decoder: Decoder) throws {
@@ -222,5 +225,30 @@ struct PersistedState: Codable, Equatable {
         syncEnabled = (try? container.decodeIfPresent(Bool.self, forKey: .syncEnabled)) ?? false
         noticeShown = (try? container.decodeIfPresent(Bool.self, forKey: .noticeShown)) ?? false
         extensionState = (try? container.decodeIfPresent(ExtensionState.self, forKey: .extensionState)) ?? ExtensionState()
+        pendingCleanup = try? container.decodeIfPresent(PendingCleanup.self, forKey: .pendingCleanup)
+    }
+}
+
+/// 退出时没清理完的代理设置，下次启动时接着清理（见 AppState.handleExit、resumePendingCleanup）。
+struct PendingCleanup: Codable, Equatable {
+    /// 是哪个配置设的，告诉用户时用。
+    var profileName: String
+    var targets: [ProxyTarget]
+
+    init(profileName: String, targets: [ProxyTarget]) {
+        self.profileName = profileName
+        self.targets = targets
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case profileName, targets
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        profileName = (try? container.decodeIfPresent(String.self, forKey: .profileName)) ?? ""
+        // 认不出的项（以后的版本加的）跳过。
+        let names = (try? container.decodeIfPresent([String].self, forKey: .targets)) ?? []
+        targets = names.compactMap(ProxyTarget.init(rawValue:))
     }
 }

@@ -34,7 +34,7 @@ final class AppState: ObservableObject {
 
     @Published var config: AppConfig
     @Published private(set) var persisted: PersistedState
-    @Published private(set) var snapshot: ProxySnapshot = SystemProxy.current()
+    @Published private(set) var snapshot: ProxySnapshot
     @Published private(set) var health: Health = .unknown
     @Published private(set) var busy = false
     @Published var lastError: String?
@@ -71,11 +71,28 @@ final class AppState: ObservableObject {
     var onStatusChanged: (@MainActor () -> Void)?
     /// 从以前的版本更新过来时要收尾的事（读配置之前看过原始文件）。
     private let legacy: LegacyCleanup.Findings
+    /// 改系统代理、终端、git、npm 的地方（测试时换成假的）。
+    let backend: ProxyBackend
+    /// 配置和本机状态要不要写到磁盘上（测试时不写）。
+    private let persists: Bool
+    /// 退出时最多等清理多久（见 handleExit）。
+    var exitCleanupTimeout: TimeInterval = 10
 
-    private init() {
-        legacy = LegacyCleanup.inspect()
-        config = Store.loadConfig() ?? AppConfig()
-        persisted = Store.loadState()
+    private convenience init() {
+        // 先看以前版本留下的原始文件，再读配置。
+        let legacy = LegacyCleanup.inspect()
+        self.init(config: Store.loadConfig() ?? AppConfig(), persisted: Store.loadState(), backend: SystemBackend(), legacy: legacy, persists: true)
+    }
+
+    /// 测试时传假的系统后端，persists 为 false 时不写磁盘上的配置和本机状态。
+    init(config: AppConfig, persisted: PersistedState, backend: ProxyBackend, legacy: LegacyCleanup.Findings = LegacyCleanup.Findings(), persists: Bool) {
+        self.legacy = legacy
+        self.config = config
+        self.persisted = persisted
+        self.backend = backend
+        self.persists = persists
+        snapshot = backend.currentSystemProxy()
+        guard persists else { return }
         $config
             .dropFirst()
             .removeDuplicates()
@@ -102,7 +119,7 @@ final class AppState: ObservableObject {
         extensions.writeState = { [weak self] state in
             guard let self else { return }
             self.persisted.extensionState = state
-            Store.save(self.persisted)
+            self.savePersisted()
         }
         extensions.onChange = { [weak self] in self?.extensionChanged() }
         reconcileEngineProfile()
@@ -124,7 +141,12 @@ final class AppState: ObservableObject {
             .sink { [weak self] _ in Task { @MainActor in self?.registerHotkey() } }
             .store(in: &cancellables)
         refresh()
-        restoreEnvironment()
+        if persisted.pendingCleanup != nil {
+            // 上次退出时没清理完：先接着清理，不要再把终端的环境变量设回去。
+            Task { await resumePendingCleanup() }
+        } else {
+            restoreEnvironment()
+        }
         Task { await checkHealth() }
         updater.notify = { [weak self] title, body in
             self?.notify(title: title, body: body, problem: false, route: "about", category: Notifier.updateCategory)
@@ -149,7 +171,7 @@ final class AppState: ObservableObject {
         sync.onEnabledChanged = { [weak self] enabled in
             guard let self else { return }
             self.persisted.syncEnabled = enabled
-            Store.save(self.persisted)
+            self.savePersisted()
         }
         // 和上次同步的比较时也不算「代理引擎」那条配置（它不同步）：不然每次从 iCloud 拿到别的 Mac 的配置、
         // 加回这条以后都会被当成本机改了，又写回 iCloud，可能盖掉别的 Mac 刚改的。
@@ -187,7 +209,7 @@ final class AppState: ObservableObject {
         let url = profile.proxyURL(password: password)
         Task {
             do {
-                try await EnvironmentProxy.set(proxyURL: url, noProxy: profile.noProxy)
+                try await backend.setEnvironment(proxyURL: url, noProxy: profile.noProxy)
                 Log.info("启动时重新设置了「\(profile.name)」的环境变量")
             } catch {
                 Log.error("启动时重新设置环境变量失败：\(Redact.secrets(error.localizedDescription))")
@@ -224,14 +246,14 @@ final class AppState: ObservableObject {
                 persisted.noticeShown = true
             }
             persisted.extensionState = ext
-            Store.save(persisted)
+            savePersisted()
         }
         if legacyHelperInstalled {
             Log.info(ext.enabled ? "以前版本的后台助手还在，代理引擎开着，留着" : "以前版本的后台助手还在，扩展没开，等用户确认后移除")
         }
         if config.profile(id: persisted.lastProfileID) == nil, persisted.lastProfileID != nil {
             persisted.lastProfileID = config.profiles.first?.id
-            Store.save(persisted)
+            savePersisted()
         }
         if firstLaunch, let active = legacy.activeBuiltIn, !ext.enabled {
             Log.info("上次开着的「\(active.name)」是代理引擎，先关掉代理，用户开启扩展后再开回来")
@@ -247,7 +269,7 @@ final class AppState: ObservableObject {
                 persisted.enabledByUs = false
                 persisted.original = nil
                 persisted.lastProfileID = config.profiles.first { !$0.engine }?.id
-                Store.save(persisted)
+                savePersisted()
                 busy = false
                 refresh()
                 onStatusChanged?()
@@ -262,7 +284,7 @@ final class AppState: ObservableObject {
         }
         guard !persisted.noticeShown, legacyHelperInstalled, !persisted.extensionState.enabled else { return }
         persisted.noticeShown = true
-        Store.save(persisted)
+        savePersisted()
         Task { @MainActor in
             try? await Task.sleep(for: .seconds(1))
             NoticeWindowController.shared.showHelperNotice()
@@ -310,7 +332,7 @@ final class AppState: ObservableObject {
         // 正在开关代理时这次开启会被忽略：先不动，代理引擎下次更新状态时（最多 10 秒）再来。
         guard !busy else { return }
         persisted.extensionState.restoreActive = false
-        Store.save(persisted)
+        savePersisted()
         guard case .off = status else {
             Log.info("代理引擎运行起来了，现在开着别的配置，不开回以前开着的「\(profile.name)」")
             return
@@ -328,7 +350,7 @@ final class AppState: ObservableObject {
             }
             if let id = persisted.lastProfileID, ext.profile?.id == id {
                 persisted.lastProfileID = config.profiles.first?.id
-                Store.save(persisted)
+                savePersisted()
             }
             return
         }
@@ -339,7 +361,7 @@ final class AppState: ObservableObject {
         }
         if ext.profile != profile {
             persisted.extensionState.profile = profile
-            Store.save(persisted)
+            savePersisted()
         }
         if let index = config.profiles.firstIndex(where: { $0.engine }) {
             if config.profiles[index] != profile {
@@ -349,7 +371,7 @@ final class AppState: ObservableObject {
             config.profiles.insert(profile, at: 0)
             if config.profiles.count == 1 {
                 persisted.lastProfileID = profile.id
-                Store.save(persisted)
+                savePersisted()
             }
         }
     }
@@ -393,8 +415,15 @@ final class AppState: ObservableObject {
         return config.profiles.first { snapshot.matches($0) }
     }
 
+    /// 本机状态写回 state.json（测试时不写）。
+    private func savePersisted() {
+        if persists {
+            Store.save(persisted)
+        }
+    }
+
     func refresh() {
-        let current = SystemProxy.current()
+        let current = backend.currentSystemProxy()
         // 没变就不赋值：每次赋值都会让所有界面重画（设置窗口里的配置编辑页每次重画都要读一遍钥匙串）。
         guard current != snapshot else { return }
         snapshot = current
@@ -477,7 +506,9 @@ final class AppState: ObservableObject {
             }
             persisted.lastProfileID = profile.id
             persisted.enabledByUs = failures.count < profile.targets.count
-            Store.save(persisted)
+            // 用户重新开启了代理：上次退出时没清理完的不用再清（这次开启已经重新设过了）。
+            persisted.pendingCleanup = nil
+            savePersisted()
             finish(action: L("开启 %@", profile.name), failures: failures, successText: profile.summary)
         }
     }
@@ -506,7 +537,8 @@ final class AppState: ObservableObject {
             }
             persisted.enabledByUs = false
             persisted.original = nil
-            Store.save(persisted)
+            persisted.pendingCleanup = nil
+            savePersisted()
             finish(action: L("关闭代理"), failures: failures, successText: mode == .restore ? L("已恢复开启前的设置") : L("已改为直接连接"))
         }
     }
@@ -524,7 +556,8 @@ final class AppState: ObservableObject {
         }
         persisted.enabledByUs = false
         persisted.original = nil
-        Store.save(persisted)
+        persisted.pendingCleanup = nil
+        savePersisted()
         finish(action: L("清除所有代理设置"), failures: failures, successText: L("已改为直接连接"))
     }
 
@@ -559,14 +592,14 @@ final class AppState: ObservableObject {
         do {
             switch target {
             case .system:
-                let written = try await SystemProxy.apply(DesiredProxy(profile: profile, password: password), also: persisted.systemServices)
+                let written = try await backend.applySystemProxy(DesiredProxy(profile: profile, password: password), also: persisted.systemServices)
                 persisted.systemServices = written
             case .environment:
-                try await EnvironmentProxy.set(proxyURL: url, noProxy: profile.noProxy)
+                try await backend.setEnvironment(proxyURL: url, noProxy: profile.noProxy)
             case .git:
-                try await GitProxy.set(proxyURL: url)
+                try await backend.setGit(proxyURL: url)
             case .npm:
-                try NpmProxy.set(proxyURL: url, noProxy: profile.noProxy)
+                try backend.setNpm(proxyURL: url, noProxy: profile.noProxy)
             }
             return nil
         } catch {
@@ -584,14 +617,14 @@ final class AppState: ObservableObject {
             switch target {
             case .system:
                 // 开启时写过、现在没在用的网络服务也一起写（见 PersistedState.systemServices）。
-                try await SystemProxy.apply(offDesired(mode: mode), also: persisted.systemServices)
+                _ = try await backend.applySystemProxy(offDesired(mode: mode), also: persisted.systemServices)
                 persisted.systemServices = []
             case .environment:
-                try await EnvironmentProxy.clear()
+                try await backend.clearEnvironment()
             case .git:
-                try await GitProxy.clear()
+                try await backend.clearGit()
             case .npm:
-                try NpmProxy.clear()
+                try backend.clearNpm()
             }
             return nil
         } catch {
@@ -604,7 +637,7 @@ final class AppState: ObservableObject {
         if mode == .restore, let original = persisted.original {
             return DesiredProxy(restoring: original)
         }
-        let current = SystemProxy.current()
+        let current = backend.currentSystemProxy()
         return DesiredProxy(offWithAutoDiscovery: persisted.original?.autoDiscovery ?? current.autoDiscovery, bypassDomains: current.exceptions)
     }
 
@@ -614,7 +647,7 @@ final class AppState: ObservableObject {
         config.profiles.append(profile)
         if config.profiles.count == 1 {
             persisted.lastProfileID = profile.id
-            Store.save(persisted)
+            savePersisted()
         }
     }
 
@@ -630,7 +663,7 @@ final class AppState: ObservableObject {
         config.profiles[index] = profile
         if profile.engine, persisted.extensionState.profile != profile {
             persisted.extensionState.profile = profile
-            Store.save(persisted)
+            savePersisted()
         }
         // 正在使用的配置改了地址、生效范围或者密码：立即重新应用（只改名字和颜色不用）。
         if wasActive, !profile.appliesSame(as: previous) || passwordChanged {
@@ -648,7 +681,7 @@ final class AppState: ObservableObject {
         ProxyKeychain.delete(for: profile.id)
         if persisted.lastProfileID == profile.id {
             persisted.lastProfileID = config.profiles.first?.id
-            Store.save(persisted)
+            savePersisted()
         }
     }
 
@@ -686,7 +719,7 @@ final class AppState: ObservableObject {
         profile.color = ProfilePalette.color(at: config.profiles.count)
         addProfile(profile)
         persisted.lastProfileID = profile.id
-        Store.save(persisted)
+        savePersisted()
         refresh()
     }
 
@@ -772,31 +805,63 @@ final class AppState: ObservableObject {
             Log.info("注销或关机：设了登录时启动，登录后会再打开，「\(profile.name)」留着")
             return
         }
-        let desired = offDesired(mode: config.offMode)
-        let services = persisted.systemServices
-        let semaphore = DispatchSemaphore(value: 0)
-        Task.detached {
-            if profile.targets.contains(.system) {
-                try? await SystemProxy.apply(desired, also: services)
+        // 各项都清理好了才记下代理已经关了；没清理完的（管理员密码没输完、出错、超时）记下来，下次启动时接着清理，
+        // 开启前的设置也留着，到时候还能恢复。
+        let targets = ProxyTarget.allCases.filter { profile.targets.contains($0) }
+        let failures = ExitCleanup.run(targets, systemProxy: offDesired(mode: config.offMode), services: persisted.systemServices,
+                                       backend: backend, timeout: exitCleanupTimeout)
+        let remaining = targets.filter { failures[$0] != nil }
+        if remaining.isEmpty {
+            // 不然只设了终端、git、npm 的配置下次打开时还显示开着，下次开启时也会把这时的设置当成「开启前的设置」。
+            persisted.enabledByUs = false
+            persisted.original = nil
+            persisted.systemServices = []
+            persisted.pendingCleanup = nil
+            savePersisted()
+            Log.info("退出时关闭了「\(profile.name)」")
+        } else {
+            if !remaining.contains(.system) {
+                persisted.systemServices = []
             }
-            if profile.targets.contains(.environment) {
-                try? await EnvironmentProxy.clear()
-            }
-            if profile.targets.contains(.git) {
-                try? await GitProxy.clear()
-            }
-            if profile.targets.contains(.npm) {
-                try? NpmProxy.clear()
-            }
-            semaphore.signal()
+            persisted.pendingCleanup = PendingCleanup(profileName: profile.name, targets: remaining)
+            savePersisted()
+            let detail = remaining.map { "\($0.rawValue): \(failures[$0] ?? "")" }.joined(separator: "; ")
+            Log.error("退出时没清理完「\(profile.name)」（\(detail)），下次启动时接着清理")
         }
-        _ = semaphore.wait(timeout: .now() + 10)
-        // 记下代理已经关了：不然只设了终端、git、npm 的配置下次打开时还显示开着，下次开启时也会把这时的设置当成「开启前的设置」。
-        persisted.enabledByUs = false
-        persisted.original = nil
-        persisted.systemServices = []
-        Store.save(persisted)
-        Log.info("退出时关闭了「\(profile.name)」")
+    }
+
+    /// 上次退出时没清理完的代理设置（见 handleExit）：启动时接着清理，并告诉用户。
+    func resumePendingCleanup() async {
+        guard let pending = persisted.pendingCleanup, !busy else { return }
+        busy = true
+        Log.info("接着清理上次退出时没清理完的「\(pending.profileName)」：\(pending.targets.map(\.rawValue).joined(separator: "、"))")
+        var remaining: [ProxyTarget] = []
+        var problems: [String] = []
+        for target in pending.targets {
+            if let error = await clear(target: target, mode: config.offMode) {
+                remaining.append(target)
+                problems.append(L("%@：%@", target.title, error))
+            }
+        }
+        if remaining.isEmpty {
+            persisted.enabledByUs = false
+            persisted.original = nil
+            persisted.pendingCleanup = nil
+            savePersisted()
+            Log.info("已清理上次退出时没清理完的「\(pending.profileName)」")
+            notify(title: L("已清理上次退出时没清理完的代理设置"),
+                   body: L("「%@」：%@", pending.profileName, pending.targets.map(\.title).joined(separator: L("、"))), problem: false)
+        } else {
+            persisted.pendingCleanup?.targets = remaining
+            savePersisted()
+            let message = problems.joined(separator: "\n")
+            lastError = L("上次退出时的代理设置还没清理完：%@", message)
+            Log.error("上次退出时没清理完的「\(pending.profileName)」还是没清理好：\(message)")
+            notify(title: L("上次退出时的代理设置还没清理完"), body: message, problem: true)
+        }
+        busy = false
+        refresh()
+        onStatusChanged?()
     }
 
     private func registerHotkey() {

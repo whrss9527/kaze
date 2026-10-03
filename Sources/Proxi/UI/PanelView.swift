@@ -224,8 +224,15 @@ struct PanelView: View {
 
             if case .on(let profile) = state.status, profile.kind != .pac {
                 Menu {
-                    Button(L("zsh / bash（终端、iTerm）")) { copy(TerminalCommands.export(proxyURL: profile.proxyURL(password: state.savedPassword(for: profile)), noProxy: profile.noProxy)) }
-                    Button("fish") { copy(TerminalCommands.fish(proxyURL: profile.proxyURL(password: state.savedPassword(for: profile)), noProxy: profile.noProxy)) }
+                    Button(L("zsh / bash（终端、iTerm）")) { copyCommand(for: profile, fish: false, withPassword: true) }
+                    Button("fish") { copyCommand(for: profile, fish: true, withPassword: true) }
+                    // 要登录的代理：也可以复制不带密码的（剪贴板里不出现密码，用的时候自己补上）。
+                    if profile.needsPassword {
+                        Section(L("不带密码")) {
+                            Button(L("zsh / bash（终端、iTerm）")) { copyCommand(for: profile, fish: false, withPassword: false) }
+                            Button("fish") { copyCommand(for: profile, fish: true, withPassword: false) }
+                        }
+                    }
                 } label: {
                     Image(systemName: copied ? "checkmark" : "terminal")
                 }
@@ -277,8 +284,12 @@ struct PanelView: View {
         .padding(.horizontal, 2)
     }
 
-    private func copy(_ text: String) {
-        TerminalCommands.copy(text)
+    /// 复制在当前终端里用代理的命令。带着密码时给剪贴板加上「不要记下来」的标记。
+    private func copyCommand(for profile: Profile, fish: Bool, withPassword: Bool) {
+        let password = withPassword ? state.savedPassword(for: profile) : ""
+        let url = profile.proxyURL(password: password)
+        let text = fish ? TerminalCommands.fish(proxyURL: url, noProxy: profile.noProxy) : TerminalCommands.export(proxyURL: url, noProxy: profile.noProxy)
+        TerminalCommands.copy(text, concealed: !password.isEmpty)
         copied = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { copied = false }
     }

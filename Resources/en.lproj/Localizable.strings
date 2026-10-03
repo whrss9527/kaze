@@ -347,6 +347,7 @@
 "zsh / bash（终端、iTerm）" = "zsh / bash (Terminal, iTerm)";
 "复制在当前终端里使用代理的命令" = "Copy the command for using the proxy in the current terminal";
 "%@ 开关" = "%@ to toggle";
+"不带密码" = "Without Password";
 
 /* UI/PasswordPrompt.swift */
 "输入「%@」的代理密码" = "Enter the proxy password for “%@”";

@@ -183,10 +183,16 @@ enum TerminalCommands {
         return pairs.flatMap { ["set -gx \($0.0) \(shellQuote($0.1))", "set -gx \($0.0.uppercased()) \(shellQuote($0.1))"] }.joined(separator: "; ")
     }
 
-    static func copy(_ text: String) {
-        let pasteboard = NSPasteboard.general
+    /// 剪贴板历史工具认的「不要记下来」的标记（nspasteboard.org 的约定）。
+    static let concealedType = NSPasteboard.PasteboardType("org.nspasteboard.ConcealedType")
+
+    /// concealed：内容里有密码，加上标记，剪贴板历史工具就不会把它存下来。
+    static func copy(_ text: String, concealed: Bool = false, to pasteboard: NSPasteboard = .general) {
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
+        if concealed {
+            pasteboard.setString("", forType: concealedType)
+        }
     }
 }
 

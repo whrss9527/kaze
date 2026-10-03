@@ -208,6 +208,9 @@ struct GeneralPage: View {
                 Section(L("启动")) {
                     Toggle(L("登录时自动启动"), isOn: Binding(get: { state.loginItemEnabled }, set: { state.setLoginItem($0) }))
                     Toggle(L("退出 Proxi 时关闭代理"), isOn: $state.config.disableOnExit)
+                    Text(L("一键更新、换界面语言后重新启动时什么都不关，代理接着开着。"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
                 Section(L("菜单栏图标")) {
                     Picker(L("左键点击"), selection: $state.config.clickAction) {

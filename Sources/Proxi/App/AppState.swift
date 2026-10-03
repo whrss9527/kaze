@@ -53,11 +53,14 @@ final class AppState: ObservableObject {
     let network = NetworkAutomation()
     /// 可选扩展「代理引擎」（默认关闭，见 ExtensionManager）。
     let extensions = ExtensionManager()
-    /// 更新后正在重新启动：退出时不要按「退出时关闭代理」清理。
+    /// 正在重新启动（一键更新、换界面语言）：退出时什么都不关，新的实例接着用（见 handleExit）。
     var relaunching = false
     /// 一键更新后重新启动：代理引擎接着运行，新版本的 Proxi 下载好同版本的代理引擎、替换时才让它退出
     /// （下载经系统代理走，这时代理引擎还得在；换语言重新启动时让它退出，好按新的语言重新打开）。
     var relaunchingForUpdate = false
+    /// 系统要注销、重新启动或关机的时间（NSWorkspace.willPowerOffNotification），退出时用来判断是不是这种情况。
+    private var poweringOffAt: Date?
+    private var powerOffObserver: NSObjectProtocol?
 
     private var watcher: SystemWatcher?
     private var refreshTimer: Timer?
@@ -85,6 +88,9 @@ final class AppState: ObservableObject {
     func start() {
         watcher = SystemWatcher { [weak self] in self?.refresh() }
         watcher?.start()
+        powerOffObserver = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.willPowerOffNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.poweringOffAt = Date() }
+        }
         refreshTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.refresh() }
         }
@@ -746,15 +752,28 @@ final class AppState: ObservableObject {
 
     /// 退出时按设置关闭代理；代理引擎开着的话也让它退出（它自己停内核）。
     /// 正在用「代理引擎」那条配置时，不管「退出时关闭代理」开没开都关掉：代理引擎跟着退出，不关的话系统代理、终端、git、npm
-    /// 都指向一个没人监听的端口，再打开 Proxi 之前上不了网。重新启动（一键更新、换语言）时不关，新的实例接着用。
+    /// 都指向一个没人监听的端口，再打开 Proxi 之前上不了网。
+    /// 重新启动（一键更新、换语言）时什么都不关，新的实例接着用；注销、重新启动电脑、关机时设了登录时启动的话，
+    /// 登录后 Proxi 会再打开、接着启动代理引擎，「代理引擎」那条配置也留着（「退出时关闭代理」照旧）。
     func handleExit() {
         control.stop()
+        if relaunching {
+            // 同一个网络上按规则切过的记录交给新的实例：不然它启动时又按规则切一次，把手动改过的改回去。
+            network.saveForRelaunch()
+        }
         if !relaunchingForUpdate {
             for app in NSRunningApplication.runningApplications(withBundleIdentifier: ExtensionManager.bundleIdentifier) {
                 app.terminate()
             }
         }
-        guard !relaunching, case .on(let profile) = status, config.disableOnExit || profile.engine else { return }
+        guard !relaunching, case .on(let profile) = status else { return }
+        let reopensAtLogin = poweringOffAt.map { Date().timeIntervalSince($0) < 300 } == true && LoginItem.isEnabled
+        guard config.disableOnExit || (profile.engine && !reopensAtLogin) else {
+            if profile.engine {
+                Log.info("注销或关机：设了登录时启动，登录后会再打开，「\(profile.name)」留着")
+            }
+            return
+        }
         let desired = offDesired(mode: config.offMode)
         let services = persisted.systemServices
         let semaphore = DispatchSemaphore(value: 0)

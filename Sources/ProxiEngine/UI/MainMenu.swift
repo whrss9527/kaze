@@ -62,7 +62,6 @@ final class MenuActions: NSObject {
     }
 
     @objc func openProxiExtensions(_ sender: Any?) {
-        SettingsWindowSync.yieldToOther()
-        NSWorkspace.shared.open(URL(string: "proxi://settings?page=extensions")!)
+        NSWorkspace.shared.open(URL(string: "proxi://settings?page=extensions")!, configuration: SettingsWindowSync.handOffConfiguration())
     }
 }

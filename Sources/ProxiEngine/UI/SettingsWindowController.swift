@@ -80,9 +80,8 @@ enum ProxiPage: String, CaseIterable {
     /// 在 Proxi 里打开这一页；Proxi 的设置窗口显示出来后，这边的窗口随之关掉（见 SettingsWindowSync）。
     @MainActor
     func open() {
-        // 把前台让给 Proxi，它的窗口出来时才会到前台（不然这边的窗口关掉后会落到桌面）。
-        SettingsWindowSync.yieldToOther()
-        NSWorkspace.shared.open(URL(string: "proxi://settings?page=\(rawValue)")!)
+        // 不让系统马上把 Proxi 切到前台：等它的窗口出来，这边关窗口时把前台交过去（不然会落到桌面或者别的程序）。
+        NSWorkspace.shared.open(URL(string: "proxi://settings?page=\(rawValue)")!, configuration: SettingsWindowSync.handOffConfiguration())
     }
 }
 

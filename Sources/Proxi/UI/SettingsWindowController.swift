@@ -53,6 +53,16 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
 
     let navigation = SettingsNavigation()
     private var window: NSWindow?
+    private var otherShownObserver: NSObjectProtocol?
+
+    override init() {
+        super.init()
+        // 代理引擎的设置窗口显示出来时关掉这边的：两边当成同一个窗口，同一时间只显示一个。
+        otherShownObserver = SettingsWindowSync.observeOtherShown { [weak self] in
+            guard let window = self?.window, window.isVisible else { return }
+            window.close()
+        }
+    }
 
     func show(page: SettingsPage?) {
         if let page {
@@ -61,10 +71,32 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         if window == nil {
             window = makeWindow()
         }
+        // 从代理引擎的设置窗口切过来时放在同一个位置、同样大小。
+        if let window, !window.isVisible, let frame = SettingsWindowSync.savedFrame() {
+            window.setFrame(frame, display: false)
+        }
         // 设置窗口打开期间当普通应用：菜单栏显示编辑菜单，⌘Tab 能切到它；关闭后回到只有菜单栏图标。
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
+        if let window {
+            SettingsWindowSync.save(window.frame)
+        }
+        SettingsWindowSync.announceShown()
+    }
+
+    func windowDidMove(_ notification: Notification) {
+        saveFrame(of: notification)
+    }
+
+    func windowDidEndLiveResize(_ notification: Notification) {
+        saveFrame(of: notification)
+    }
+
+    private func saveFrame(of notification: Notification) {
+        if let window = notification.object as? NSWindow, window.isVisible {
+            SettingsWindowSync.save(window.frame)
+        }
     }
 
     func windowWillClose(_ notification: Notification) {

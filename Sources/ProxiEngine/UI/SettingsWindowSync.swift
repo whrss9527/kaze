@@ -6,6 +6,8 @@ import AppKit
 @MainActor
 enum SettingsWindowSync {
     nonisolated private static let notification = Notification.Name("com.whrss9527.proxyswitch.settingsWindowShown")
+    /// Proxi 侧边栏里点了代理引擎的某一页：请正在运行的代理引擎打开那一页。
+    nonisolated private static let pageRequest = Notification.Name("com.whrss9527.proxyswitch.engineSettingsPage")
     private static let defaults = UserDefaults(suiteName: "com.whrss9527.proxyswitch.shared")
     private static let frameKey = "settingsWindowFrame"
     /// 通知里标明是哪一边发的，自己发的不理。
@@ -27,6 +29,19 @@ enum SettingsWindowSync {
     /// 这边的设置窗口显示出来了：让另一边关掉它的。
     static func announceShown() {
         DistributedNotificationCenter.default().postNotificationName(notification, object: me, userInfo: nil, deliverImmediately: true)
+    }
+
+    /// Proxi 这边：请代理引擎打开设置窗口的某一页（代理引擎那边 SettingsPage 的 rawValue）。
+    static func requestEnginePage(_ page: String) {
+        DistributedNotificationCenter.default().postNotificationName(pageRequest, object: page, userInfo: nil, deliverImmediately: true)
+    }
+
+    /// 代理引擎这边：收到打开某一页的请求时调用 handler。
+    static func observeEnginePageRequests(_ handler: @escaping @MainActor (String) -> Void) -> NSObjectProtocol {
+        DistributedNotificationCenter.default().addObserver(forName: pageRequest, object: nil, queue: .main) { note in
+            guard let page = note.object as? String else { return }
+            MainActor.assumeIsolated { handler(page) }
+        }
     }
 
     /// 另一边的设置窗口显示出来时调用 handler。

@@ -138,7 +138,7 @@ final class ControlService: ObservableObject {
         }
         let permission = state.config.automation.permission
         guard permission.allows(tool.permission) else {
-            throw ControlError(code: JSONRPC.permissionDenied, message: L("权限不够：「%@」需要「%@」，现在是「%@」。在代理引擎设置的「通用」页可以调整。", tool.title, tool.permission.title, permission.title))
+            throw ControlError(code: JSONRPC.permissionDenied, message: L("权限不够：「%@」需要「%@」，现在是「%@」。在代理引擎设置的「高级」页可以调整。", tool.title, tool.permission.title, permission.title))
         }
         lastCall = (client, method, Date())
         let params = ControlParams(raw)

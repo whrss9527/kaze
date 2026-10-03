@@ -65,7 +65,7 @@
 "代理引擎还没准备好" = "The engine isn't ready yet";
 "没有这个工具：%@。可用的有：%@" = "No such tool: %@. Available tools: %@";
 "、" = ", ";
-"权限不够：「%@」需要「%@」，现在是「%@」。在代理引擎设置的「通用」页可以调整。" = "Not allowed: “%@” needs “%@”, and the current level is “%@”. You can change this in the engine's Settings → General.";
+"权限不够：「%@」需要「%@」，现在是「%@」。在代理引擎设置的「高级」页可以调整。" = "Not allowed: “%@” needs “%@”, and the current level is “%@”. You can change this in the engine's Settings → Advanced.";
 "可以用 undo 撤销这次改动" = "You can revert this change with undo";
 "没有能撤销的改动" = "Nothing to undo";
 "已撤销：%@" = "Undone: %@";
@@ -893,7 +893,7 @@
 
 /* UI/AdvancedPage.swift */
 "高级" = "Advanced";
-"导入导出配置、增强模式、DNS、Hosts、IPv6、内核配置补丁和实时日志；不常用，有需要时再改" = "Import and export, enhanced mode, DNS, Hosts, IPv6, the core configuration patch and live logs. Rarely needed; change them when you have to.";
+"导入导出配置、增强模式、DNS、Hosts、IPv6、内核配置补丁、实时日志、通知和本机控制接口；不常用，有需要时再改" = "Import and export, enhanced mode, DNS, Hosts, IPv6, the core configuration patch, live logs, notifications and the local control interface. Rarely needed; change them when you have to.";
 "允许 IPv6" = "Allow IPv6";
 "打开后内核会解析和连接 IPv6 地址（节点和网络都支持时更快一些）；网络的 IPv6 不稳定时关掉更省事。默认关。" = "When on, the core resolves and connects to IPv6 addresses (a bit faster when both the nodes and the network support it). Turn it off if your network's IPv6 is unstable. Off by default.";
 "导入与导出" = "Import & Export";
@@ -1032,7 +1032,7 @@
 "把备份里的订阅、节点、策略组、规则、代理配置加进现有设置，同名的更新。" = "Add the backup's subscriptions, nodes, policy groups, rules and proxy profiles to the current settings; items with the same name are updated.";
 "加进现有设置：同名的策略组、同地址的订阅和规则集会被更新，其余的保留。" = "Add to the current settings: policy groups with the same name and subscriptions and rule sets with the same URL are updated; everything else is kept.";
 "导入的内容替换同一类的现有设置（比如导入了策略组，原来的策略组都换掉）；没导入的类别不动。" = "The imported content replaces current settings of the same kind (for example, importing policy groups replaces all existing policy groups); kinds that aren't imported stay untouched.";
-"内核会自动重新加载。改错了可以在终端里运行代理引擎的 undo 命令撤销（用法见「通用」页）。" = "The core reloads automatically. If something went wrong, run the proxy engine's undo command in Terminal to revert it (see the General page for how).";
+"内核会自动重新加载。改错了可以在终端里运行代理引擎的 undo 命令撤销（用法见「高级」页）。" = "The core reloads automatically. If something went wrong, run the proxy engine's undo command in Terminal to revert it (see the Advanced page for how).";
 "返回修改" = "Back to Edit";
 "取消" = "Cancel";
 "导入" = "Import";
@@ -1228,9 +1228,14 @@
 /* UI/SettingsWindowController.swift */
 "通用" = "General";
 "关于" = "About";
-"界面语言" = "Language";
 "通知" = "Notifications";
-"返回 Proxi 设置" = "Back to Proxi Settings";
+"代理配置" = "Proxy Profiles";
+"自动化" = "Automation";
+"快捷键" = "Hotkey";
+"iCloud 同步" = "iCloud Sync";
+"扩展" = "Extensions";
+"诊断" = "Diagnose";
+"Proxi 设置" = "Proxi Settings";
 
 /* UI/SharePage.swift */
 "让 PS5、Switch、手机这些同一局域网里的设备把这台 Mac 当代理服务器，享受和本机一样的网络" = "Let devices on the same LAN, such as a PS5, Switch or phone, use this Mac as their proxy server and get the same network as this Mac";
@@ -1311,8 +1316,6 @@
 "下载地址：%@；下载后先核对写在程序里的 SHA-256，对不上就不用。删除后代理引擎不能运行，下次打开时重新下载。" = "Download URL: %@. After downloading, the SHA-256 built into the app is checked and the file isn't used if it doesn't match. Once deleted, the engine can't run until it's downloaded again the next time it opens.";
 "不支持这种芯片：%@" = "This chip isn't supported: %@";
 "代理引擎和内核最近的日志，排查问题用。" = "Recent logs from the engine and the core, for troubleshooting.";
-"代理引擎设置" = "Proxy Engine Settings";
-"代理引擎（Proxi 的扩展）" = "Proxy Engine (a Proxi extension)";
 "代理引擎：" = "Proxy Engine: ";
 "代理引擎：%@" = "Proxy Engine: %@";
 "位置" = "Location";
@@ -1353,7 +1356,6 @@
 "没在运行" = "Not running";
 "没有检测：内核没在运行，或者正在检测别的网址" = "Not checked: the core isn't running, or another URL is being checked";
 "版本" = "Version";
-"版本 %@ · 内核 %@" = "Version %@ · core %@";
 "筛选和排除按订阅里原始的名字匹配（不区分大小写），加前缀之前。前置代理：这个订阅的节点先经它再连出去（链式代理），比如先经公司的代理，或者先经另一个订阅的节点；不能选含这个订阅自己节点的组。" = "Filter and exclude match the original names in the subscription (case-insensitive), before the prefix is added. Front proxy: this subscription's nodes connect through it first (proxy chain), for example through your company proxy or a node from another subscription; a group containing this subscription's own nodes can't be chosen.";
 "经%@访问 %@：%@" = "Through %@, %@: %@";
 "经它检测网址…" = "Check a URL Through It…";
@@ -1378,13 +1380,11 @@
 "认不出这是什么配置：支持代理引擎的 JSON、mihomo 的 YAML、Surge / Quantumult X 格式的配置、节点链接和规则列表" = "Can't tell what kind of config this is. Supported: the engine's JSON, mihomo YAML, Surge / Quantumult X format configs, node links and rule lists";
 "说明" = "Documentation";
 "读不了" = "unreadable";
-"跟 Proxi 的界面语言一致，在 Proxi 的「设置 → 通用」里改。" = "Follows Proxi's interface language; change it in Proxi's Settings → General.";
 "运行中（%@）" = "Running (%@)";
 "还没有下载内核，到「内核」页下载" = "The core hasn't been downloaded yet; download it on the Core page";
 "还没有下载内核，到设置的「内核」页下载" = "The core hasn't been downloaded yet; download it on the Core page in Settings";
 "还没有订阅。把服务提供方给你的订阅地址粘到下面，节点由内核下载和解析。" = "No subscriptions yet. Paste the subscription URL from your provider below; the core downloads and parses the nodes.";
 "选一个应用，或者填它的完整路径，比如 /Applications/Safari.app" = "Choose an app, or enter its full path, e.g. /Applications/Safari.app";
-"通知、本机控制接口" = "Notifications and the local control interface";
 "重新下载" = "Download Again";
 "隐藏代理引擎" = "Hide Proxy Engine";
 "靠前的规则集先匹配，右边的菜单可以调顺序。纯规则列表（.list、.yaml、.mrs）由内核直接加载，更新不用重启；Surge 格式的完整配置（.conf）会转换后并入，默认按文件里写的策略走，添加后可以改成统一的去向。「走节点」用「节点与订阅」页里选中的节点，策略组的成员也在那一页设置。" = "Rule sets higher up match first; reorder them with the menu on the right. Plain rule lists (.list, .yaml, .mrs) are loaded by the core directly and update without a restart; full Surge-format configs (.conf) are converted and merged, following the policies in the file by default, which you can change to a single target after adding. “Through node” uses the node selected on the Nodes & Subscriptions page, where policy group members are set too.";

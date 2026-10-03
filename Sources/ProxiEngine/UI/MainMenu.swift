@@ -57,7 +57,8 @@ final class MenuActions: NSObject {
     }
 
     @objc func showAbout(_ sender: Any?) {
-        SettingsWindowController.shared.show(page: .about)
+        // 版本和许可证在「内核」页的第一节。
+        SettingsWindowController.shared.show(page: .core)
     }
 
     @objc func openProxiExtensions(_ sender: Any?) {

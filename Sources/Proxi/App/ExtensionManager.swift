@@ -92,6 +92,8 @@ final class ExtensionManager: ObservableObject {
     nonisolated static let appName = "Proxi Engine.app"
     /// 启动代理引擎时让它打开设置窗口的参数（和代理引擎那边的 AppDelegate.showSettingsArgument 一样，改的时候一起改）。
     nonisolated static let showSettingsArgument = "--show-settings"
+    /// 带在 showSettingsArgument 后面，指定打开哪一页（EnginePage 的 rawValue）。
+    nonisolated static let settingsPageArgument = "--settings-page"
     /// 测试用：把这个环境变量指向一个 GitHub releases 格式的 JSON（本机的 http:// 或 file://），从那里下载代理引擎。
     nonisolated static let feedVariable = "PROXI_EXTENSION_FEED"
     /// 测试用：设成 1 时启动就当作用户已经同意说明并开启了扩展（CI 用，界面上不会出现）。
@@ -351,7 +353,7 @@ final class ExtensionManager: ObservableObject {
 
     /// 启动代理引擎。它没有自己的菜单栏图标，平时在后台启动（不抢焦点、不开窗口）；showWindow 时打开它的设置窗口：
     /// 没在运行就带上参数启动，已经在运行时系统发给它的「重新打开」让它显示设置。界面语言跟 Proxi 一样。
-    func launch(showWindow: Bool = false) {
+    func launch(showWindow: Bool = false, page: String? = nil) {
         guard state.enabled, isInstalled else { return }
         // 已经在运行（或者几秒前刚启动、还没出现在运行的程序里）时再打开一次就会弹出它的设置窗口，后台启动时不用再打开。
         if !showWindow {
@@ -361,7 +363,14 @@ final class ExtensionManager: ObservableObject {
         let configuration = NSWorkspace.OpenConfiguration()
         configuration.activates = showWindow
         configuration.addsToRecentItems = false
-        configuration.arguments = ["-AppleLanguages", AppLanguage.isEnglish ? "(en)" : "(zh-Hans)"] + (showWindow ? [Self.showSettingsArgument] : [])
+        var arguments = ["-AppleLanguages", AppLanguage.isEnglish ? "(en)" : "(zh-Hans)"]
+        if showWindow {
+            arguments.append(Self.showSettingsArgument)
+            if let page {
+                arguments += [Self.settingsPageArgument, page]
+            }
+        }
+        configuration.arguments = arguments
         lastLaunch = Date()
         NSWorkspace.shared.openApplication(at: Self.appURL, configuration: configuration) { _, error in
             if let error {
@@ -376,9 +385,14 @@ final class ExtensionManager: ObservableObject {
     }
 
     /// 打开代理引擎的设置窗口（Proxi 的菜单、面板和扩展页里的「代理引擎设置…」）；还没装好、正在下载安装时打开扩展页看进度。
-    func showSettings() {
+    /// page：打开哪一页（Proxi 侧边栏里点了代理引擎的某一页时传）。
+    func showSettings(page: String? = nil) {
         if isInstalled && !isBusy {
-            launch(showWindow: true)
+            // 已经在运行时启动参数传不过去：先发通知让它切到这一页，再「重新打开」它（显示设置窗口、切到前台）。
+            if let page {
+                SettingsWindowSync.requestEnginePage(page)
+            }
+            launch(showWindow: true, page: page)
         } else {
             SettingsWindowController.shared.show(page: .extensions)
         }

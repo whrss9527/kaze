@@ -39,7 +39,7 @@ struct NodeListSection: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                Text(L("点一行就切换到那个节点；点星星收藏，收藏的排在最前面（面板和菜单里也是）。排序会记住，筛选条件只在这一页有效。"))
+                Text(L("点一行就切换到那个节点；点星星收藏，收藏的排在最前面。排序会记住，筛选条件只在这一页有效。"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

@@ -352,7 +352,7 @@ struct Verdict: Equatable {
                 return Verdict(headline: L("规则把它分到了直连，但直连不通"), explanation: explanation, actions: f.engineHasNodes ? [.pinToProxy(host), .copyReport] : [.turnOnEngine, .copyReport])
             }
             if trace.outbound == CoreConfigBuilder.upstreamProxy {
-                return Verdict(headline: L("转发给上游代理失败"), explanation: L("本机用的是别的代理，共享的流量转发给它时失败：%@。检查那个代理现在能不能用（面板里可以测速）。", trace.error ?? proxied.summary), actions: [.copyReport])
+                return Verdict(headline: L("转发给上游代理失败"), explanation: L("本机用的是别的代理，共享的流量转发给它时失败：%@。检查那个代理现在能不能用（Proxi 的面板里可以测速）。", trace.error ?? proxied.summary), actions: [.copyReport])
             }
             if f.nodeDelay == 0 {
                 return Verdict(headline: L("当前节点连不上"), explanation: L("它走的是节点 %@，但这个节点现在测不通：%@。换一个节点或者让程序自动选延迟最低的。", trace.outbound, trace.error ?? proxied.summary), actions: [.autoSelect, .testNodes, .copyReport])
@@ -362,7 +362,7 @@ struct Verdict: Equatable {
         if f.macRoute == .engine || f.perspective == .device {
             return Verdict(headline: L("经代理访问失败"), explanation: L("结果：%@。内核没有记录到这次连接的判定，可能是内核这时候重启了；再测一次。", proxied.summary), actions: [.copyReport])
         }
-        return Verdict(headline: L("经 %@ 访问失败", f.proxiedVia), explanation: L("结果：%@。检查那个代理现在能不能用（面板里可以测速），或者换成节点代理。", proxied.summary), actions: f.engineHasNodes ? [.turnOnEngine, .copyReport] : [.copyReport])
+        return Verdict(headline: L("经 %@ 访问失败", f.proxiedVia), explanation: L("结果：%@。检查那个代理现在能不能用（Proxi 的面板里可以测速），或者换成节点代理。", proxied.summary), actions: f.engineHasNodes ? [.turnOnEngine, .copyReport] : [.copyReport])
     }
 }
 

@@ -23,7 +23,7 @@ struct NodesPage: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            PageHeader(title: L("节点与订阅"), subtitle: L("填订阅地址或者添加节点，节点就会出现在面板里；策略组给某类流量单独选节点"))
+            PageHeader(title: L("节点与订阅"), subtitle: L("填订阅地址或者添加节点，节点就会出现在下面的列表里；策略组给某类流量单独选节点"))
             Form {
                 coreSection
                 subscriptionsSection
@@ -65,7 +65,7 @@ struct NodesPage: View {
                     .font(.caption)
                     .foregroundStyle(.orange)
             }
-            Text(L("Proxi 的配置列表里的「代理引擎」就是它：开启后系统代理指向 127.0.0.1:%@，这里和面板里可以选节点、切换模式。", String(state.config.engine.mixedPort)))
+            Text(L("Proxi 的配置列表里的「代理引擎」就是它：开启后系统代理指向 127.0.0.1:%@，在这里选节点、切换模式。", String(state.config.engine.mixedPort)))
                 .font(.caption)
                 .foregroundStyle(.secondary)
             HStack {
@@ -179,10 +179,21 @@ struct NodesPage: View {
 
     private var nodeNames: [String] { engine.nodes.map(\.name) }
 
+    /// 内核里这个组现在的状态（内核没在运行时是 nil）。
+    private func liveGroup(_ group: PolicyGroup) -> Engine.GroupState? {
+        engine.groupStates.first { $0.name == group.name }
+    }
+
+    /// 手动选择的组在内核里的候选成员；别的类型、内核没在运行时是空的。
+    private func selectableMembers(_ group: PolicyGroup) -> [String] {
+        guard let live = liveGroup(group), live.kind == .select else { return [] }
+        return live.members
+    }
+
     private var groupsSection: some View {
         Section(L("策略组")) {
             if state.config.engine.groups.isEmpty {
-                Text(L("给某类流量单独选节点：比如建一个组，分流规则里把某些域名指到它，面板里就能单独给它选节点。"))
+                Text(L("给某类流量单独选节点：比如建一个组，分流规则里把某些域名指到它，这里就能单独给它选节点。"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -190,7 +201,9 @@ struct NodesPage: View {
                 PolicyGroupRow(
                     group: group,
                     nodeNames: nodeNames,
-                    current: engine.groupStates.first { $0.name == group.name }?.now,
+                    current: liveGroup(group)?.now,
+                    members: selectableMembers(group),
+                    onSelect: { member in Task { await engine.select(group: group.name, member: member) } },
                     onSave: { engine.saveGroup($0) },
                     onEdit: { editingGroup = group },
                     onDelete: { engine.removeGroup(group.id) },
@@ -433,6 +446,9 @@ struct PolicyGroupRow: View {
     var nodeNames: [String]
     /// 内核里现在用的成员。
     var current: String?
+    /// 手动选择的组在内核里的候选成员（别的类型、内核没在运行时是空的）；选一个就切换过去。
+    var members: [String]
+    var onSelect: (String) -> Void
     var onSave: (PolicyGroup) -> String?
     var onEdit: () -> Void
     var onDelete: () -> Void
@@ -442,10 +458,12 @@ struct PolicyGroupRow: View {
     @State private var filter: String
     @State private var problem: String?
 
-    init(group: PolicyGroup, nodeNames: [String], current: String?, onSave: @escaping (PolicyGroup) -> String?, onEdit: @escaping () -> Void, onDelete: @escaping () -> Void, onMove: @escaping (Bool) -> Void) {
+    init(group: PolicyGroup, nodeNames: [String], current: String?, members: [String], onSelect: @escaping (String) -> Void, onSave: @escaping (PolicyGroup) -> String?, onEdit: @escaping () -> Void, onDelete: @escaping () -> Void, onMove: @escaping (Bool) -> Void) {
         self.group = group
         self.nodeNames = nodeNames
         self.current = current
+        self.members = members
+        self.onSelect = onSelect
         self.onSave = onSave
         self.onEdit = onEdit
         self.onDelete = onDelete
@@ -499,6 +517,26 @@ struct PolicyGroupRow: View {
                 .fixedSize()
                 .help(L("上移、下移、删除"))
             }
+            if !members.isEmpty {
+                Menu {
+                    ForEach(members, id: \.self) { member in
+                        Button {
+                            onSelect(member)
+                        } label: {
+                            if member == current {
+                                Label(Self.memberTitle(member), systemImage: "checkmark")
+                            } else {
+                                Text(Self.memberTitle(member))
+                            }
+                        }
+                    }
+                } label: {
+                    Text(L("现在用 %@", Self.memberTitle(current ?? "")))
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+                .help(L("给「%@」选节点", group.name))
+            }
             Text(detail)
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -524,8 +562,8 @@ struct PolicyGroupRow: View {
             let matched = draft.matches(nodeNames)
             parts.append(draft.filter.isEmpty ? L("全部 %@ 个节点", nodeNames.count) : L("筛选到 %@ 个节点", matched.count))
         }
-        if let current, !current.isEmpty {
-            parts.append(L("现在用 %@", current))
+        if let current, !current.isEmpty, members.isEmpty {
+            parts.append(L("现在用 %@", Self.memberTitle(current)))
         }
         if group.hasAdvancedOptions {
             var advanced: [String] = []
@@ -537,6 +575,13 @@ struct PolicyGroupRow: View {
             parts.append(advanced.joined(separator: L("，")))
         }
         return parts.joined(separator: " · ")
+    }
+
+    /// 成员的显示名：DIRECT 写成直连，内部的组名换成显示的名字。
+    private static func memberTitle(_ member: String) -> String {
+        if member.isEmpty { return L("…") }
+        if member == "DIRECT" { return L("直连") }
+        return CoreConfigBuilder.displayName(member)
     }
 
     private func save() {

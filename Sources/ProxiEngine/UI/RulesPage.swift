@@ -128,7 +128,7 @@ struct RulesPage: View {
                 Button(L("从规则库添加…")) { showLibrary = true }
                     .controlSize(.small)
             }
-            Text(L("靠前的规则集先匹配，右边的菜单可以调顺序。纯规则列表（.list、.yaml、.mrs）由内核直接加载，更新不用重启；Surge 格式的完整配置（.conf）会转换后并入，默认按文件里写的策略走，添加后可以改成统一的去向。「走节点」用面板里选中的节点，策略组的成员在「节点与订阅」页设置。"))
+            Text(L("靠前的规则集先匹配，右边的菜单可以调顺序。纯规则列表（.list、.yaml、.mrs）由内核直接加载，更新不用重启；Surge 格式的完整配置（.conf）会转换后并入，默认按文件里写的策略走，添加后可以改成统一的去向。「走节点」用「节点与订阅」页里选中的节点，策略组的成员也在那一页设置。"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }

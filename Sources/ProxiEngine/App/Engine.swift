@@ -120,7 +120,6 @@ final class Engine: ObservableObject {
 
     var readConfig: () -> AppConfig = { AppConfig() }
     var writeEngine: ((EngineConfig) -> Void)?
-    var onStatusChanged: (@MainActor () -> Void)?
     /// 流量统计变了（隔一会儿存一次），交给 AppState 写到本机状态里。
     var persistTraffic: ((TrafficStats) -> Void)?
 
@@ -217,11 +216,6 @@ final class Engine: ObservableObject {
         guard let currentSelection else { return nil }
         if currentSelection == Self.autoGroup { return autoNode }
         return currentSelection
-    }
-
-    var effectiveNodeInfo: Node? {
-        guard let name = effectiveNode else { return nil }
-        return nodes.first { $0.name == name }
     }
 
     var logTail: String { runningViaHelper ? helperRunner.logTail : runner.logTail }
@@ -342,7 +336,6 @@ final class Engine: ObservableObject {
                 tunFailedFor = tun
                 tunStatus = .failed(error.localizedDescription)
                 Log.error("增强模式没有开起来：\(error.localizedDescription)；先不用虚拟网卡")
-                onStatusChanged?()
                 scheduleReconcile()
                 return
             }
@@ -352,7 +345,6 @@ final class Engine: ObservableObject {
                 shareStatus = .failed(error.localizedDescription)
             }
             Log.error("代理引擎出错：\(error.localizedDescription)")
-            onStatusChanged?()
         }
     }
 
@@ -387,7 +379,6 @@ final class Engine: ObservableObject {
 
     private func startCore(with text: String) async throws {
         status = .starting
-        onStatusChanged?()
         CoreRunner.killStrays()
         try prepareDirectory()
         try write(text)
@@ -436,7 +427,6 @@ final class Engine: ObservableObject {
         startPolling()
         await refresh()
         await verifyShare()
-        onStatusChanged?()
     }
 
     func stopCore() {
@@ -461,7 +451,6 @@ final class Engine: ObservableObject {
         lastSpeedSample = nil
         manualNodeCount = nil
         updateTunStatus()
-        onStatusChanged?()
     }
 
     /// 停掉内核进程（本机的或者助手那边的）。
@@ -498,7 +487,6 @@ final class Engine: ObservableObject {
                 shareStatus = .failed(message)
             }
         }
-        onStatusChanged?()
     }
 
     /// 手动节点写进内核目录里的文件（一行一条链接），内容没变就不动它。
@@ -777,7 +765,6 @@ final class Engine: ObservableObject {
             shareStatus = .failed(message)
             Log.error("局域网共享出错：\(message)")
         }
-        onStatusChanged?()
     }
 
     // MARK: - 连接与流量
@@ -1336,7 +1323,6 @@ final class Engine: ObservableObject {
             if node != exitNode, !checkingExit {
                 scheduleExitCheck()
             }
-            onStatusChanged?()
         } catch {
             Log.error("读取节点列表失败：\(error.localizedDescription)")
         }

@@ -15,11 +15,6 @@ struct ProxyNode: Identifiable, Equatable, Hashable {
 
     var id: String { name }
 
-    var delayText: String {
-        guard let delay else { return "" }
-        return delay > 0 ? "\(delay) ms" : L("超时")
-    }
-
     /// 从名字认出来的地区。
     var region: NodeRegion? { NodeRegion.detect(name) }
 

@@ -24,7 +24,7 @@ enum PolicyGroupKind: String, Codable, CaseIterable, Identifiable {
 
     var detail: String {
         switch self {
-        case .select: return L("在面板里自己选，默认跟随「节点」的选择")
+        case .select: return L("在「节点与订阅」页自己选，默认跟随「节点」的选择")
         case .urlTest: return L("定期测延迟，自动用最低的那个")
         case .fallback: return L("按列表顺序用第一个可用的节点，坏了自动换下一个")
         case .loadBalance: return L("匹配到的节点轮流用，分摊流量")

@@ -65,8 +65,6 @@ final class AppState: ObservableObject {
     private var healthFailures = 0
     private var cancellables = Set<AnyCancellable>()
 
-    var onStatusChanged: (@MainActor () -> Void)?
-
     private init() {
         config = Store.loadConfig() ?? AppConfig()
         persisted = Store.loadState()
@@ -88,7 +86,6 @@ final class AppState: ObservableObject {
         refresh()
         engine.readConfig = { [weak self] in self?.config ?? AppConfig() }
         engine.writeEngine = { [weak self] engine in self?.config.engine = engine }
-        engine.onStatusChanged = { [weak self] in self?.onStatusChanged?() }
         // 按出口累计的流量存在本机状态里，跨重启接着算。
         engine.loadTraffic(persisted.traffic)
         engine.persistTraffic = { [weak self] stats in
@@ -185,7 +182,7 @@ final class AppState: ObservableObject {
         return profile
     }
 
-    /// 让代理引擎成为下次开启的配置（面板里选了节点时用）。
+    /// 让代理引擎成为下次开启的配置（选了节点时用）。
     func selectEngineProfile() {
         guard let profile = ensureEngineProfile() else { return }
         persisted.lastProfileID = profile.id
@@ -222,15 +219,10 @@ final class AppState: ObservableObject {
     }
 
     func refresh() {
-        let current = SystemProxy.current()
-        let changed = current != snapshot
-        snapshot = current
+        snapshot = SystemProxy.current()
         let addresses = LocalNetwork.addresses()
         if addresses != lanAddresses {
             lanAddresses = addresses
-        }
-        if changed {
-            onStatusChanged?()
         }
     }
 
@@ -438,7 +430,6 @@ final class AppState: ObservableObject {
         busy = false
         healthFailures = 0
         refresh()
-        onStatusChanged?()
         if failures.isEmpty {
             Log.info("\(action) 成功")
             lastError = nil
@@ -607,7 +598,6 @@ final class AppState: ObservableObject {
                 notify(title: L("连不上代理服务器"), body: L("%@（%@）没有响应，浏览器可能无法上网", profile.name, profile.summary), problem: true)
             }
         }
-        onStatusChanged?()
     }
 
     // MARK: - 通知与退出

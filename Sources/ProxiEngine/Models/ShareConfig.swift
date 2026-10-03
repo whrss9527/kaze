@@ -152,7 +152,7 @@ enum ShareUpstream: Equatable {
         }
     }
 
-    /// 面板里的一句话。
+    /// 一句话的说明（诊断页和日志里用）。
     var summary: String {
         switch self {
         case .direct: return L("设备经这台 Mac 直连")

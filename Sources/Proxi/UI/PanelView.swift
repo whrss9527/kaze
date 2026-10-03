@@ -3,6 +3,8 @@ import SwiftUI
 
 struct PanelActions {
     var openSettings: (SettingsPage?) -> Void
+    /// 打开扩展「代理引擎」的设置窗口（它没有自己的菜单栏图标）。
+    var openEngineSettings: () -> Void
     var close: () -> Void
     var quit: () -> Void
     /// 面板内容高度变了，窗口要跟着调整。
@@ -224,6 +226,16 @@ struct PanelView: View {
                 Text(L("%@ 开关", hotkey.display))
                     .font(.system(size: 11))
                     .foregroundStyle(.tertiary)
+            }
+
+            if state.persisted.extensionState.enabled {
+                Button {
+                    actions.openEngineSettings()
+                } label: {
+                    Image(systemName: "puzzlepiece.extension")
+                }
+                .buttonStyle(IconButtonStyle())
+                .help(L("代理引擎设置"))
             }
 
             Button {

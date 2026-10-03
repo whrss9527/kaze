@@ -82,6 +82,11 @@ jobs:
           markers='CoreConfigBuilder|ConfigImporter|HelperDaemon|RuleConverter|proxy-groups|rule-providers|mixed-port|PolicyGroupKind'
           if strings -a dist/Proxi.app/Contents/MacOS/Proxi | grep -E "$markers" | head -5 | grep .; then echo "Proxi.app 里有代理引擎的代码"; exit 1; fi
           [ "$(strings -a "$engine_app/Contents/MacOS/ProxiEngine" | grep -cE "$markers")" -gt 0 ] || { echo "检查方法不对：代理引擎的二进制里也找不到这些名字"; exit 1; }
+          # 菜单栏上只有 Proxi 一个图标：代理引擎不建自己的菜单栏图标（Proxi 的二进制里有，确认这个检查有效）。
+          proxi_imports=$(nm -u dist/Proxi.app/Contents/MacOS/Proxi)
+          engine_imports=$(nm -u "$engine_app/Contents/MacOS/ProxiEngine")
+          grep -qF 'OBJC_CLASS_$_NSStatusBar' <<< "$proxi_imports" || { echo "检查方法不对：Proxi 的二进制里也找不到 NSStatusBar"; exit 1; }
+          if grep -F 'OBJC_CLASS_$_NSStatusBar' <<< "$engine_imports"; then echo "代理引擎不该有自己的菜单栏图标"; exit 1; fi
           [ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$engine_app/Contents/Info.plist")" = "com.whrss9527.proxyswitch.engine" ] || { echo "代理引擎的标识不对"; exit 1; }
           [ -f dist/Proxi-Engine-0.0.0.zip ] || { echo "没有生成代理引擎的压缩包"; exit 1; }
           codesign -dv "$engine_app" 2>&1 | grep -q 'flags=.*runtime' || { echo "代理引擎没有开 hardened runtime"; exit 1; }
@@ -405,7 +410,7 @@ jobs:
           grep -q 'DOMAIN-SUFFIX,example.net,组 A' "$core" || { echo "以前的规则没有进内核配置"; exit 1; }
           grep -q 'exclude-filter: "(?i)过期"' "$core" || { echo "订阅的排除没有写进内核配置"; exit 1; }
           "$bin" check https://www.apple.com/library/test/success.html || true
-          # 截图：Proxi 的面板和扩展页，代理引擎的面板和设置。
+          # 截图：Proxi 的面板和扩展页，代理引擎的设置（它没有自己的菜单栏图标，再打开一次就显示设置）。
           open "proxi://panel"; sleep 3
           screencapture -x screenshots/ext-panel.png || true
           open "proxi://settings?page=extensions"; sleep 3

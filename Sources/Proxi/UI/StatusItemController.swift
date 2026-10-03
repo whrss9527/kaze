@@ -208,6 +208,10 @@ final class StatusItemController: NSObject {
         } else {
             menu.addItem(item(L("检查更新…"), action: #selector(menuCheckUpdates), key: ""))
         }
+        // 扩展「代理引擎」没有自己的菜单栏图标，它的设置从这里打开。
+        if state.persisted.extensionState.enabled {
+            menu.addItem(item(L("代理引擎设置…"), action: #selector(menuEngineSettings), key: ""))
+        }
         menu.addItem(item(L("设置…"), action: #selector(menuSettings), key: ","))
         menu.addItem(item(L("退出 Proxi"), action: #selector(menuQuit), key: "q"))
         statusItem.menu = menu
@@ -234,6 +238,7 @@ final class StatusItemController: NSObject {
     @objc private func menuTurnOff() { state.turnOff() }
     @objc private func menuSaveExternal() { state.saveExternalAsProfile() }
     @objc private func menuSettings() { SettingsWindowController.shared.show(page: nil) }
+    @objc private func menuEngineSettings() { state.extensions.showSettings() }
     @objc private func menuQuit() { NSApp.terminate(nil) }
 
     @objc private func menuCheckUpdates() {
@@ -269,6 +274,12 @@ final class StatusItemController: NSObject {
                     MainActor.assumeIsolated {
                         self?.closePanel()
                         SettingsWindowController.shared.show(page: page)
+                    }
+                },
+                openEngineSettings: { [weak self] in
+                    MainActor.assumeIsolated {
+                        self?.closePanel()
+                        self?.state.extensions.showSettings()
                     }
                 },
                 close: { [weak self] in

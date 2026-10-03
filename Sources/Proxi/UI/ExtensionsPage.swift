@@ -23,7 +23,7 @@ struct ExtensionsPage: View {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(L("代理引擎（扩展）"))
                                 .font(.system(size: 13, weight: .semibold))
-                            Text(L("一个在本机运行的代理引擎，作为单独的程序下载安装，不包含在 Proxi 里。开启后配置列表里会多一条「代理引擎」，用同一个开关使用；它自己的设置在它的菜单栏图标里。"))
+                            Text(L("一个在本机运行的代理引擎，作为单独的程序下载安装，不包含在 Proxi 里。开启后配置列表里会多一条「代理引擎」，用同一个开关使用。它在后台运行，菜单栏上不另放图标；它自己的设置从 Proxi 的右键菜单或面板底部的「代理引擎设置」打开。"))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -91,7 +91,7 @@ struct ExtensionsPage: View {
             LabeledContent(L("版本"), value: version)
         }
         HStack {
-            Button(L("打开代理引擎")) { extensions.launch(showWindow: true) }
+            Button(L("代理引擎设置…")) { extensions.showSettings() }
                 .disabled(!extensions.isInstalled || extensions.isBusy)
             Button(L("重新下载")) {
                 Task { @MainActor in

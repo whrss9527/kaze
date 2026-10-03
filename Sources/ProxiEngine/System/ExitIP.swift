@@ -39,7 +39,7 @@ struct ExitInfo: Equatable {
         return parts.joined(separator: " · ")
     }
 
-    /// 短的一句，放在面板里：🇯🇵 Tokyo。
+    /// 短的一句：🇯🇵 Tokyo。
     var short: String {
         let location = city.isEmpty ? country : city
         return [flag, location.isEmpty ? ip : location].filter { !$0.isEmpty }.joined(separator: " ")

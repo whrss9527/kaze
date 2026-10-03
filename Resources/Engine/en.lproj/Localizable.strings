@@ -337,7 +337,7 @@
 "自动选择" = "Auto Select";
 "故障转移" = "Fallback";
 "负载均衡" = "Load Balance";
-"在面板里自己选，默认跟随「节点」的选择" = "Choose in the panel yourself; follows the “Node” selection by default";
+"在「节点与订阅」页自己选，默认跟随「节点」的选择" = "Choose it yourself on the Nodes & Subscriptions page; follows the “Node” selection by default";
 "定期测延迟，自动用最低的那个" = "Tests latency regularly and uses the fastest";
 "按列表顺序用第一个可用的节点，坏了自动换下一个" = "Uses the first available node in list order and moves to the next when it fails";
 "匹配到的节点轮流用，分摊流量" = "Takes turns among the matching nodes to spread traffic";
@@ -700,7 +700,7 @@
 "常见原因是这个网站从这里直连不通，或者本机 DNS 给了一个连不上的地址；让它固定走节点就好。" = "A common cause is that the site can't be reached directly from here, or the local DNS returned an address that doesn't connect. Pinning it to a node fixes it.";
 "规则把它分到了直连，但直连不通" = "A rule sends it direct, but the direct connection fails";
 "转发给上游代理失败" = "Forwarding to the upstream proxy failed";
-"本机用的是别的代理，共享的流量转发给它时失败：%@。检查那个代理现在能不能用（面板里可以测速）。" = "This Mac uses another proxy, and forwarding shared traffic to it failed: %@. Check whether that proxy works right now (you can test it in the panel).";
+"本机用的是别的代理，共享的流量转发给它时失败：%@。检查那个代理现在能不能用（Proxi 的面板里可以测速）。" = "This Mac uses another proxy, and forwarding shared traffic to it failed: %@. Check whether that proxy works right now (you can test it in Proxi's panel).";
 "当前节点连不上" = "The current node can't be reached";
 "它走的是节点 %@，但这个节点现在测不通：%@。换一个节点或者让程序自动选延迟最低的。" = "It goes through node %@, but that node fails its test right now: %@. Switch to another node or let Proxi pick the lowest-latency one.";
 "节点能通，但这个网站经它打不开" = "The node works, but this site won't open through it";
@@ -709,7 +709,7 @@
 "经代理访问失败" = "Access through the proxy failed";
 "结果：%@。内核没有记录到这次连接的判定，可能是内核这时候重启了；再测一次。" = "Result: %@. The core didn't record a decision for this connection; it may have restarted just then. Test again.";
 "经 %@ 访问失败" = "Access through %@ failed";
-"结果：%@。检查那个代理现在能不能用（面板里可以测速），或者换成节点代理。" = "Result: %@. Check whether that proxy works right now (you can test it in the panel), or switch to the node proxy.";
+"结果：%@。检查那个代理现在能不能用（Proxi 的面板里可以测速），或者换成节点代理。" = "Result: %@. Check whether that proxy works right now (you can test it in Proxi's panel), or switch to the node proxy.";
 "共享状态" = "Sharing Status";
 "本机代理" = "Proxy on This Mac";
 "域名解析" = "DNS Lookup";
@@ -1058,7 +1058,7 @@
 "自动选延迟最低的节点" = "Automatically picks the node with the lowest latency";
 "自动" = "Auto";
 "还有 %@ 个没有列出，加个条件缩小范围。" = "%@ more not listed; add a condition to narrow it down.";
-"点一行就切换到那个节点；点星星收藏，收藏的排在最前面（面板和菜单里也是）。排序会记住，筛选条件只在这一页有效。" = "Click a row to switch to that node; click the star to favorite it, and favorites come first (in the panel and menu too). The sort order is remembered; filters only apply on this page.";
+"点一行就切换到那个节点；点星星收藏，收藏的排在最前面。排序会记住，筛选条件只在这一页有效。" = "Click a row to switch to that node; click the star to favorite it, and favorites come first. The sort order is remembered; filters only apply on this page.";
 "搜索节点" = "Search Nodes";
 "正在测速…" = "Testing…";
 "测速这些" = "Test These";
@@ -1178,32 +1178,7 @@
 "排除 %@" = "Excludes %@";
 "包含 %@" = "Includes %@";
 "单独测速" = "Own latency test";
-
-/* UI/PanelView.swift */
-"全局" = "Global";
-"全局：全部走节点；规则：按分流规则" = "Global: everything through a node; Rule: follows the routing rules";
-"收起" = "Collapse";
-"节点列表" = "Node List";
-"收起节点列表" = "Collapse the node list";
-"展开节点列表" = "Expand the node list";
-"代理引擎未运行" = "Proxy engine not running";
-"内核正在启动…" = "Core starting…";
-"内核出错" = "Core error";
-"自动选择 · %@" = "Auto Select · %@";
-"未选择节点" = "No node selected";
-"出口 %@" = "Exit %@";
-"%@ 个节点 · %@" = "%@ nodes · %@";
 "给「%@」选节点" = "Choose a node for “%@”";
-"测试全部节点的延迟" = "Test the latency of all nodes";
-"当前 %@" = "Current %@";
-"延迟最低的节点" = "Lowest-latency node";
-"PS5、Switch 等设备把这台 Mac 当代理服务器，享受和本机一样的网络。点击查看设置" = "Devices such as a PS5 or Switch use this Mac as their proxy server and get the same network as this Mac. Click to see the settings";
-"关闭局域网共享" = "Turn Off LAN Sharing";
-"局域网共享 · %@:%@" = "LAN Sharing · %@:%@";
-"局域网共享 · 没有连上局域网" = "LAN Sharing · Not on a local network";
-"诊断" = "Diagnose";
-"把链路走一遍，找出打不开的原因" = "Walk through the path to find out why it won't open";
-"网址诊断：某个网站打不开时查原因" = "URL diagnosis: find out why a website won't open";
 
 /* UI/ProfilesPage.swift */
 
@@ -1297,16 +1272,6 @@
 "设备经共享入口发起的连接会按时间列在这里：访问了哪个域名、走的是哪个节点还是直连、命中了哪条规则。" = "Connections made by devices through the sharing entry are listed here by time: which domain they accessed, whether they went through a node or direct, and which rule matched.";
 "让设备 %@ 的所有连接…" = "Route All Connections from Device %@…";
 
-/* UI/StatusItemController.swift */
-"局域网共享（PS5 等设备）" = "LAN Sharing (PS5 and Other Devices)";
-"设备上填 %@:%@" = "Devices use %@:%@";
-"增强模式（所有程序都经过代理）" = "Enhanced Mode (All Apps Through the Proxy)";
-"网关模式（设备的路由器填这台 Mac）" = "Gateway Mode (Devices Use This Mac as Router)";
-"设备的路由器和 DNS 填 %@" = "Devices set router and DNS to %@";
-"内核未运行" = "Core not running";
-"%@　%@" = "%@  %@";
-"　%@" = "  %@";
-
 /* UI/SyncPage.swift */
 
 /* UI/TunViews.swift */
@@ -1335,11 +1300,10 @@
 "HTTP %@" = "HTTP %@";
 "PS5 的代理设置只对系统流量（联网测试、PSN、商店）和浏览器生效。如果打开某个应用时这里没有出现它的连接，说明那个应用用的是自己的网络栈、没走代理；用 PS5 的浏览器打开同一个网站可以对照。域名一栏如果是 IP，说明设备自己解析了域名，内核会从 TLS 握手里取回域名再分流。本机和设备的全部连接在「连接」页。" = "The PS5's proxy setting only applies to system traffic (connection test, PSN, store) and the browser. If an app's connections don't show up here, that app uses its own network stack and bypasses the proxy; compare by opening the same site in the PS5 browser. If the domain column shows an IP, the device resolved the name itself, and the core recovers the domain from the TLS handshake before routing. All connections from this Mac and devices are on the Connections page.";
 "Proxi 的可选扩展：本机运行的代理引擎，由 Proxi 下载、启动和更新。在 Proxi 的「设置 → 扩展」里可以关闭或移除。" = "An optional Proxi extension: a proxy engine running on this Mac, downloaded, started and updated by Proxi. You can turn it off or remove it in Proxi's Settings → Extensions.";
-"Proxi 的配置列表里的「代理引擎」就是它：开启后系统代理指向 127.0.0.1:%@，这里和面板里可以选节点、切换模式。" = "This is the “Proxy Engine” profile in Proxi's profile list: when it's on, the system proxy points to 127.0.0.1:%@. Choose nodes and switch modes here and in the panel.";
+"Proxi 的配置列表里的「代理引擎」就是它：开启后系统代理指向 127.0.0.1:%@，在这里选节点、切换模式。" = "This is the “Proxy Engine” profile in Proxi's profile list: when it's on, the system proxy points to 127.0.0.1:%@. Choose nodes and switch modes here.";
 "Surge 格式的完整配置里有自己的 FINAL（其余流量的去向）。「跟随规则文件」用的是最后一个这样的规则集的 FINAL；纯规则列表没有 FINAL，全是列表时其余流量走节点。" = "Full Surge-format configs have their own FINAL (where everything else goes). “Follow Rule File” uses the FINAL of the last such rule set; plain rule lists have no FINAL, so with only lists everything else goes through a node.";
 "Surge 格式的配置" = "Surge-format config";
 "mihomo 配置" = "mihomo config";
-"。在 Proxi 里开启「代理引擎」配置来使用" = ". Turn on the “Proxy Engine” profile in Proxi to use it";
 "下载" = "Download";
 "下载地址：%@；下载后先核对写在程序里的 SHA-256，对不上就不用。删除后代理引擎不能运行，下次打开时重新下载。" = "Download URL: %@. After downloading, the SHA-256 built into the app is checked and the file isn't used if it doesn't match. Once deleted, the engine can't run until it's downloaded again the next time it opens.";
 "不支持这种芯片：%@" = "This chip isn't supported: %@";
@@ -1348,13 +1312,11 @@
 "代理引擎（Proxi 的扩展）" = "Proxy Engine (a Proxi extension)";
 "代理引擎：" = "Proxy Engine: ";
 "代理引擎：%@" = "Proxy Engine: %@";
-"代理引擎：%@\n本机端口 127.0.0.1:%@" = "Proxy Engine: %@\nLocal port 127.0.0.1:%@";
 "位置" = "Location";
 "关于代理引擎" = "About Proxy Engine";
 "内核" = "Core";
 "内核 %@" = "core %@";
 "内核 mihomo 和 GeoIP 数据库不打包在程序里，第一次运行时从上游的发布下载并校验" = "The mihomo core and GeoIP database aren't bundled; they're downloaded from the upstream releases and verified on first run";
-"内核‖页面" = "Core";
 "内核没有运行：先用 add_subscription 加订阅，或者 add_nodes 加节点" = "The core isn't running. Add a subscription with add_subscription or nodes with add_nodes first.";
 "内核的校验和不对（%@），没有安装" = "The core's checksum doesn't match (%@), so it wasn't installed";
 "内核项目主页" = "Core Project Page";
@@ -1366,13 +1328,11 @@
 "助手里的内核校验和不对，请重新安装助手" = "The core in the helper has the wrong checksum; reinstall the helper";
 "参数要是 JSON 对象，比如 '{\"name\":\"node-1\"}'" = "Arguments must be a JSON object, for example '{\"name\":\"node-1\"}'";
 "名字，比如 组 A" = "Name, e.g. Group A";
-"启用代理引擎" = "Enable Proxy Engine";
-"启用或停用代理引擎" = "Enable or disable the proxy engine";
 "在终端里直接运行代理引擎程序里的二进制并带上子命令（比如 status、nodes），经这个接口操作正在运行的代理引擎；只有你这个账户能连。完整的用法：" = "Run the binary inside the engine app in Terminal with a subcommand (such as status or nodes) to control the running engine through this interface; only your account can connect. Full usage:";
 "域名后缀，比如 example.com（含所有子域名）" = "Domain suffix, e.g. example.com (including all subdomains)";
 "域名里的关键词，比如 example" = "Keyword in the domain, e.g. example";
 "域名（含子域名）或 IP / 网段，比如 example.com、192.0.2.1、10.0.0.0/8" = "Domain (including subdomains) or IP / range, e.g. example.com, 192.0.2.1, 10.0.0.0/8";
-"填订阅地址或者添加节点，节点就会出现在面板里；策略组给某类流量单独选节点" = "Enter a subscription URL or add nodes and they appear in the panel; policy groups let you pick a node for certain traffic";
+"填订阅地址或者添加节点，节点就会出现在下面的列表里；策略组给某类流量单独选节点" = "Enter a subscription URL or add nodes and they appear in the list below; policy groups let you pick a node for certain traffic";
 "导入 mihomo / Surge / Quantumult X 格式的配置，或者代理引擎导出的配置" = "Import a mihomo, Surge or Quantumult X format config, or a config exported from the engine";
 "导入配置并生效（先用 preview_import 看看会改什么）。merge 加进现有设置、同名的更新；replace 用导入的内容替换同类设置。复杂的改动（DNS、Hosts、策略组的高级选项……）都可以写成代理引擎的配置描述 JSON 导入。" = "Import a config and apply it (use preview_import first to see what changes). merge adds to the current settings and updates items with the same name; replace replaces settings of the same kind. Complex changes (DNS, Hosts, advanced policy group options…) can all be written as an engine config description JSON and imported.";
 "导出配置：describe 是代理引擎的配置描述（JSON，可以改了再用 import_config 导入）；backup 是完整备份；core 是生成的内核配置（YAML，去掉了密钥）。" = "Export the config: describe is the engine's config description (JSON; edit it and import it back with import_config); backup is a full backup; core is the generated core config (YAML, with secrets removed).";
@@ -1382,16 +1342,13 @@
 "开关增强模式（虚拟网卡）：本机在用代理引擎时，不认系统代理的程序的流量也经过内核，DNS 也交给内核。要先在设置的「高级」页装特权助手（要管理员密码，只能由用户自己装）。" = "Turn enhanced mode (virtual network adapter) on or off: while this Mac uses the engine, traffic from apps that ignore the system proxy also goes through the core, and DNS is handled by the core. The privileged helper must be installed first on the Advanced page in Settings (it needs an administrator password, so only the user can install it).";
 "打开数据目录" = "Open Data Folder";
 "支持代理引擎的 JSON、mihomo 的 YAML、Surge / Quantumult X 格式的配置、节点链接和规则列表" = "Supports the engine's JSON, mihomo YAML, Surge / Quantumult X format configs, node links and rule lists";
-"本机端口 127.0.0.1:%@" = "Local port 127.0.0.1:%@";
 "查看代理引擎现在的状态：内核、节点和模式、局域网共享、增强模式、出口 IP。做任何操作前先看一下。" = "Show the engine's current state: core, node and mode, LAN sharing, enhanced mode and the exit IP. Check this before doing anything.";
 "正则，比如 node-a|node-b；空为全部" = "Regex, e.g. node-a|node-b; empty means all";
 "正在下载%@…" = "Downloading %@…";
 "正在校验…" = "Verifying…";
-"正在校验内核…" = "Verifying the core…";
 "比如「甲 」，几个订阅来源的节点同名时好区分" = "e.g. “A ”, to tell nodes with the same name from different subscription sources apart";
 "没在运行" = "Not running";
 "没有检测：内核没在运行，或者正在检测别的网址" = "Not checked: the core isn't running, or another URL is being checked";
-"添加订阅或节点" = "Add Subscription or Nodes";
 "版本" = "Version";
 "版本 %@ · 内核 %@" = "Version %@ · core %@";
 "筛选和排除按订阅里原始的名字匹配（不区分大小写），加前缀之前。前置代理：这个订阅的节点先经它再连出去（链式代理），比如先经公司的代理，或者先经另一个订阅的节点；不能选含这个订阅自己节点的组。" = "Filter and exclude match the original names in the subscription (case-insensitive), before the prefix is added. Front proxy: this subscription's nodes connect through it first (proxy chain), for example through your company proxy or a node from another subscription; a group containing this subscription's own nodes can't be chosen.";
@@ -1399,7 +1356,7 @@
 "经它检测网址…" = "Check a URL Through It…";
 "经某个节点访问一个你填的网址，看能不能打开、返回什么状态、花了多久。选别的节点检测时不会切换你正在用的节点。" = "Open a URL of your choice through a node to see whether it loads, what status it returns and how long it takes. Checking through another node doesn't switch the node you're using.";
 "经节点访问一个网址，看能不能打开、HTTP 状态和耗时。不写节点时用现在的节点；写了节点时临时经它检测，不影响正在用的。" = "Open a URL through a node and report whether it loads, the HTTP status and the time taken. Without a node, the current node is used; with a node, it's used just for the check without affecting the one in use.";
-"给某类流量单独选节点：比如建一个组，分流规则里把某些域名指到它，面板里就能单独给它选节点。" = "Pick a node for certain traffic: for example, create a group, point some domains to it in the routing rules, and choose its node separately in the panel.";
+"给某类流量单独选节点：比如建一个组，分流规则里把某些域名指到它，这里就能单独给它选节点。" = "Pick a node for certain traffic: for example, create a group, point some domains to it in the routing rules, and choose its node separately here.";
 "网址或域名，比如 example.com" = "URL or domain, e.g. example.com";
 "网址或域名，比如 https://example.com" = "URL or domain, e.g. https://example.com";
 "网址检测" = "URL Check";
@@ -1420,18 +1377,15 @@
 "读不了" = "unreadable";
 "跟 Proxi 的界面语言一致，在 Proxi 的「设置 → 通用」里改。" = "Follows Proxi's interface language; change it in Proxi's Settings → General.";
 "运行中（%@）" = "Running (%@)";
-"还没有下载内核" = "The core hasn't been downloaded yet";
 "还没有下载内核，到「内核」页下载" = "The core hasn't been downloaded yet; download it on the Core page";
 "还没有下载内核，到设置的「内核」页下载" = "The core hasn't been downloaded yet; download it on the Core page in Settings";
 "还没有订阅。把服务提供方给你的订阅地址粘到下面，节点由内核下载和解析。" = "No subscriptions yet. Paste the subscription URL from your provider below; the core downloads and parses the nodes.";
-"还没有订阅或节点" = "No subscriptions or nodes yet";
 "退出代理引擎" = "Quit Proxy Engine";
 "选一个应用，或者填它的完整路径，比如 /Applications/Safari.app" = "Choose an app, or enter its full path, e.g. /Applications/Safari.app";
 "通知、本机控制接口" = "Notifications and the local control interface";
 "重新下载" = "Download Again";
 "隐藏代理引擎" = "Hide Proxy Engine";
-"靠前的规则集先匹配，右边的菜单可以调顺序。纯规则列表（.list、.yaml、.mrs）由内核直接加载，更新不用重启；Surge 格式的完整配置（.conf）会转换后并入，默认按文件里写的策略走，添加后可以改成统一的去向。「走节点」用面板里选中的节点，策略组的成员在「节点与订阅」页设置。" = "Rule sets higher up match first; reorder them with the menu on the right. Plain rule lists (.list, .yaml, .mrs) are loaded by the core directly and update without a restart; full Surge-format configs (.conf) are converted and merged, following the policies in the file by default, which you can change to a single target after adding. “Through node” uses the node selected in the panel; policy group members are set on the Nodes & Subscriptions page.";
+"靠前的规则集先匹配，右边的菜单可以调顺序。纯规则列表（.list、.yaml、.mrs）由内核直接加载，更新不用重启；Surge 格式的完整配置（.conf）会转换后并入，默认按文件里写的策略走，添加后可以改成统一的去向。「走节点」用「节点与订阅」页里选中的节点，策略组的成员也在那一页设置。" = "Rule sets higher up match first; reorder them with the menu on the right. Plain rule lists (.list, .yaml, .mrs) are loaded by the core directly and update without a restart; full Surge-format configs (.conf) are converted and merged, following the policies in the file by default, which you can change to a single target after adding. “Through node” uses the node selected on the Nodes & Subscriptions page, where policy group members are set too.";
 "预览导入会改动什么，不会真的改。内容可以是代理引擎的配置描述（JSON）、mihomo 的 YAML、其他常见格式的配置、节点链接或规则列表；也可以给网址。" = "Preview what an import would change without changing anything. The content can be an engine config description (JSON), mihomo YAML, configs in other common formats, node links or rule lists; a URL also works.";
-"（Proxi 正在用）" = " (in use by Proxi)";
 "（在 Proxi 里开启「代理引擎」这个配置后生效）" = " (takes effect when the “Proxy Engine” profile is turned on in Proxi)";
 "，本机端口 %@" = ", local port %@";

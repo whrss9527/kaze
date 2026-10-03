@@ -41,7 +41,29 @@ final class NetworkAutomation: NSObject, ObservableObject, CLLocationManagerDele
                 }
             }
             .store(in: &cancellables)
+        // 一键更新、换界面语言后重新启动的：接着用上一个实例的记录，同一个网络不再按规则切一次（手动改过的不会被改回去）。
+        lastKey = Self.takeRelaunchKey()
         schedule(delay: 3)
+    }
+
+    // MARK: - 重新启动时交接
+
+    private static let relaunchDefaultsKey = "networkAutomation.relaunchKey"
+
+    /// 重新启动（一键更新、换界面语言）前调用：记下在这个网络上已经按规则切过了，交给新的实例。
+    func saveForRelaunch() {
+        guard let lastKey else { return }
+        let handoff: [String: Any] = ["key": lastKey, "at": Date().timeIntervalSince1970]
+        UserDefaults.standard.set(handoff, forKey: Self.relaunchDefaultsKey)
+    }
+
+    /// 新的实例启动时取一次：两分钟内存的才算，取了就删（正常退出再打开的不受影响）。
+    private static func takeRelaunchKey() -> String? {
+        let defaults = UserDefaults.standard
+        guard let saved = defaults.dictionary(forKey: relaunchDefaultsKey) else { return nil }
+        defaults.removeObject(forKey: relaunchDefaultsKey)
+        guard let at = saved["at"] as? Double, Date().timeIntervalSince1970 - at < 120 else { return nil }
+        return saved["key"] as? String
     }
 
     /// 读 Wi‑Fi 名字要定位权限（macOS 14 起）。

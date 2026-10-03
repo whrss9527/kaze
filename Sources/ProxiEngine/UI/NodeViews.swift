@@ -500,7 +500,7 @@ struct ManualNodesSection: View {
                     add(codes.joined(separator: "\n"))
                 }
             } catch {
-                problem = L("扫描屏幕失败：%@。在「系统设置 → 隐私与安全性 → 屏幕录制」里允许 Proxi 后再试。", error.localizedDescription)
+                problem = L("扫描屏幕失败：%@。在「系统设置 → 隐私与安全性 → 屏幕录制」里允许 Proxi Engine 后再试。", error.localizedDescription)
             }
             scanning = false
         }
@@ -662,7 +662,8 @@ struct GroupEditor: View {
                         Text(L("也放进来的策略组"))
                             .font(.system(size: 12))
                         ForEach(otherGroups, id: \.self) { name in
-                            Toggle(name, isOn: memberBinding(name))
+                            // 内置的组（节点、自动选择）按界面语言显示。
+                            Toggle(CoreConfigBuilder.displayName(name), isOn: memberBinding(name))
                                 .toggleStyle(.checkbox)
                         }
                     }
@@ -672,7 +673,7 @@ struct GroupEditor: View {
                 }
                 if draft.kind != .select {
                     Section(L("测速")) {
-                        TextField(L("测速地址"), text: $draft.testURL, prompt: Text(L("空为通用设置里的：%@", state.config.testURL)))
+                        TextField(L("测速地址"), text: $draft.testURL, prompt: Text(L("空为默认的：%@", state.config.testURL)))
                         TextField(L("间隔（秒）"), text: $intervalText, prompt: Text(L("默认 %@", PolicyGroup.defaultInterval)))
                         if draft.kind == .urlTest {
                             TextField(L("容差（毫秒）"), text: $toleranceText, prompt: Text(L("默认 %@：比现在用的快这么多以上才换", PolicyGroup.defaultTolerance)))
@@ -732,7 +733,7 @@ struct GroupEditor: View {
         let matched = draft.matches(candidates.map(\.name))
         var text = engine.nodes.isEmpty ? L("内核启动后能预览匹配到的节点") : L("匹配到 %@ 个节点", matched.count)
         if !draft.includeGroups.isEmpty {
-            text += L("，另外包含 %@", draft.includeGroups.joined(separator: L("、")))
+            text += L("，另外包含 %@", draft.includeGroups.map(CoreConfigBuilder.displayName).joined(separator: L("、")))
         }
         return text
     }

@@ -11,6 +11,8 @@ struct DesiredProxy: Equatable {
     }
 
     var http: Endpoint?
+    /// HTTPS（安全网页代理）；开启配置时和 http 一样，恢复开启前的设置时可能是别的地址或者关着。
+    var https: Endpoint?
     var socks: Endpoint?
     var pacURL: String?
     var autoDiscovery = false
@@ -22,6 +24,7 @@ struct DesiredProxy: Equatable {
         switch profile.kind {
         case .http:
             http = Endpoint(host: profile.host, port: profile.port, username: profile.username, password: password)
+            https = http
         case .socks5:
             socks = Endpoint(host: profile.host, port: profile.port, username: profile.username, password: password)
         case .pac:
@@ -36,12 +39,13 @@ struct DesiredProxy: Equatable {
         self.bypassDomains = bypassDomains
     }
 
-    /// 恢复到某个快照（关闭代理时的“恢复开启前的设置”）。
+    /// 恢复到某个快照（关闭代理时的“恢复开启前的设置”）：HTTP 和 HTTPS 各按各的恢复，原来只开了其中一个或者地址不同时也一样。
     init(restoring snapshot: ProxySnapshot) {
         if snapshot.httpActive {
             http = Endpoint(host: snapshot.httpHost, port: snapshot.httpPort)
-        } else if snapshot.httpsActive {
-            http = Endpoint(host: snapshot.httpsHost, port: snapshot.httpsPort)
+        }
+        if snapshot.httpsActive {
+            https = Endpoint(host: snapshot.httpsHost, port: snapshot.httpsPort)
         }
         if snapshot.socksActive {
             socks = Endpoint(host: snapshot.socksHost, port: snapshot.socksPort)
@@ -72,7 +76,7 @@ struct DesiredProxy: Equatable {
             }
         }
         set("-setwebproxy", "-setwebproxystate", http)
-        set("-setsecurewebproxy", "-setsecurewebproxystate", http)
+        set("-setsecurewebproxy", "-setsecurewebproxystate", https)
         set("-setsocksfirewallproxy", "-setsocksfirewallproxystate", socks)
         if let pacURL, !pacURL.isEmpty {
             commands.append(["-setautoproxyurl", service, pacURL])

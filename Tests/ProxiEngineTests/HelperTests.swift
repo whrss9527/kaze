@@ -37,6 +37,12 @@ final class HelperTests: XCTestCase {
         try HelperFiles.copy(["config.yaml", "rules/a.list"], from: source, to: target, owner: owner)
         XCTAssertEqual(try String(contentsOfFile: target + "/config.yaml", encoding: .utf8), "mixed-port: 7890\n")
         XCTAssertEqual(try String(contentsOfFile: target + "/rules/a.list", encoding: .utf8), "DOMAIN,a.com\n")
+        // 复制过去的文件和目录只有自己（助手里是 root）能读：配置里有控制接口的密钥，节点文件里有服务器的密码。
+        func mode(_ path: String) throws -> Int? {
+            (try FileManager.default.attributesOfItem(atPath: path)[.posixPermissions] as? NSNumber)?.intValue
+        }
+        XCTAssertEqual(try mode(target + "/config.yaml"), 0o600)
+        XCTAssertEqual(try mode(target + "/rules"), 0o700)
         // 再复制一次会覆盖，不留临时文件。
         try "mixed-port: 7891\n".write(toFile: source + "/config.yaml", atomically: true, encoding: .utf8)
         try HelperFiles.copy(["config.yaml"], from: source, to: target, owner: owner)

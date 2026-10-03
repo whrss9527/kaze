@@ -118,30 +118,31 @@ struct AppConfig: Codable, Equatable {
         case profiles, clickAction, toggleHotkey, offMode, notifyLevel, healthCheck, disableOnExit, testURL, autoCheckUpdates, speedDisplay, speedSide, speedColorFollowsStatus, automation
     }
 
+    /// 每一项单独容错：哪一项读不出来（新版本加的取值、手改坏了）就用默认值，不让整个配置读失败、所有配置都没了。
+    /// 配置列表一条条读，读不出来的那条跳过。以前版本里的其他设置（已经去掉的功能）直接忽略。
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         // 代理引擎那条配置不从文件里读（以前的版本写进去过）：扩展开着时由 ExtensionManager 加回来。
-        profiles = (try container.decodeIfPresent([Profile].self, forKey: .profiles) ?? []).filter { !$0.engine }
-        clickAction = try container.decodeIfPresent(ClickAction.self, forKey: .clickAction) ?? .panel
+        profiles = ((try? container.decodeIfPresent(LossyArray<Profile>.self, forKey: .profiles))?.elements ?? []).filter { !$0.engine }
+        clickAction = (try? container.decodeIfPresent(ClickAction.self, forKey: .clickAction)) ?? .panel
         if container.contains(.toggleHotkey) {
-            toggleHotkey = try container.decodeIfPresent(HotkeyBinding.self, forKey: .toggleHotkey)
+            toggleHotkey = try? container.decodeIfPresent(HotkeyBinding.self, forKey: .toggleHotkey)
         } else {
             toggleHotkey = HotkeyBinding.defaultToggle
         }
-        offMode = try container.decodeIfPresent(OffMode.self, forKey: .offMode) ?? .direct
-        notifyLevel = try container.decodeIfPresent(NotifyLevel.self, forKey: .notifyLevel) ?? .all
-        healthCheck = try container.decodeIfPresent(Bool.self, forKey: .healthCheck) ?? true
-        disableOnExit = try container.decodeIfPresent(Bool.self, forKey: .disableOnExit) ?? false
-        testURL = try container.decodeIfPresent(String.self, forKey: .testURL) ?? AppConfig.defaultTestURL
+        offMode = (try? container.decodeIfPresent(OffMode.self, forKey: .offMode)) ?? .direct
+        notifyLevel = (try? container.decodeIfPresent(NotifyLevel.self, forKey: .notifyLevel)) ?? .all
+        healthCheck = (try? container.decodeIfPresent(Bool.self, forKey: .healthCheck)) ?? true
+        disableOnExit = (try? container.decodeIfPresent(Bool.self, forKey: .disableOnExit)) ?? false
+        testURL = (try? container.decodeIfPresent(String.self, forKey: .testURL)) ?? AppConfig.defaultTestURL
         if AppConfig.legacyTestURLs.contains(testURL) {
             testURL = AppConfig.defaultTestURL
         }
-        autoCheckUpdates = try container.decodeIfPresent(Bool.self, forKey: .autoCheckUpdates) ?? true
-        // 以前版本里的其他设置（已经去掉的功能）直接忽略；认不出的网速显示方式按系统网络总速度算。
+        autoCheckUpdates = (try? container.decodeIfPresent(Bool.self, forKey: .autoCheckUpdates)) ?? true
         speedDisplay = (try? container.decodeIfPresent(SpeedDisplay.self, forKey: .speedDisplay)) ?? .system
-        speedSide = try container.decodeIfPresent(SpeedSide.self, forKey: .speedSide) ?? .left
-        speedColorFollowsStatus = try container.decodeIfPresent(Bool.self, forKey: .speedColorFollowsStatus) ?? true
-        automation = try container.decodeIfPresent(AutomationConfig.self, forKey: .automation) ?? AutomationConfig()
+        speedSide = (try? container.decodeIfPresent(SpeedSide.self, forKey: .speedSide)) ?? .left
+        speedColorFollowsStatus = (try? container.decodeIfPresent(Bool.self, forKey: .speedColorFollowsStatus)) ?? true
+        automation = (try? container.decodeIfPresent(AutomationConfig.self, forKey: .automation)) ?? AutomationConfig()
     }
 
     func encode(to encoder: Encoder) throws {
@@ -169,11 +170,34 @@ struct AppConfig: Codable, Equatable {
     }
 }
 
+/// 一个个元素地读的数组：读不出来的元素跳过，不让整个数组（和外面的整个配置）读失败。
+struct LossyArray<Element: Decodable>: Decodable {
+    var elements: [Element] = []
+
+    /// 什么都接受的占位：读失败的元素要用它跳过去，不然解码器停在原地。
+    private struct Skip: Decodable {
+        init(from decoder: Decoder) throws {}
+    }
+
+    init(from decoder: Decoder) throws {
+        var container = try decoder.unkeyedContainer()
+        while !container.isAtEnd {
+            if let element = try? container.decode(Element.self) {
+                elements.append(element)
+            } else {
+                _ = try? container.decode(Skip.self)
+            }
+        }
+    }
+}
+
 /// 运行状态：上次使用的配置、是否由本程序开启、开启前的系统代理快照（关闭时恢复用）。
 struct PersistedState: Codable, Equatable {
     var lastProfileID: UUID?
     var enabledByUs: Bool = false
     var original: ProxySnapshot?
+    /// 开启时写过系统代理的网络服务：关闭时这些也一起写，哪怕那时候没在用（比如开启时插着网线、关闭时拔掉了）。
+    var systemServices: [String] = []
     /// iCloud 同步的开关是本机的，不跟着配置同步。
     var syncEnabled: Bool = false
     /// 已经显示过从以前版本更新过来的提示（后台助手）。
@@ -184,17 +208,19 @@ struct PersistedState: Codable, Equatable {
     init() {}
 
     private enum CodingKeys: String, CodingKey {
-        case lastProfileID, enabledByUs, original, syncEnabled, noticeShown
+        case lastProfileID, enabledByUs, original, systemServices, syncEnabled, noticeShown
         case extensionState = "extension"
     }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        lastProfileID = try container.decodeIfPresent(UUID.self, forKey: .lastProfileID)
-        enabledByUs = try container.decodeIfPresent(Bool.self, forKey: .enabledByUs) ?? false
-        original = try container.decodeIfPresent(ProxySnapshot.self, forKey: .original)
-        syncEnabled = try container.decodeIfPresent(Bool.self, forKey: .syncEnabled) ?? false
-        noticeShown = try container.decodeIfPresent(Bool.self, forKey: .noticeShown) ?? false
+        // 每一项单独容错：哪一项读不出来都不影响别的。
+        lastProfileID = try? container.decodeIfPresent(UUID.self, forKey: .lastProfileID)
+        enabledByUs = (try? container.decodeIfPresent(Bool.self, forKey: .enabledByUs)) ?? false
+        original = try? container.decodeIfPresent(ProxySnapshot.self, forKey: .original)
+        systemServices = (try? container.decodeIfPresent([String].self, forKey: .systemServices)) ?? []
+        syncEnabled = (try? container.decodeIfPresent(Bool.self, forKey: .syncEnabled)) ?? false
+        noticeShown = (try? container.decodeIfPresent(Bool.self, forKey: .noticeShown)) ?? false
         extensionState = (try? container.decodeIfPresent(ExtensionState.self, forKey: .extensionState)) ?? ExtensionState()
     }
 }

@@ -7,7 +7,7 @@
    （扩展「代理引擎」Sources/ProxiEngine 的对应 Resources/Engine/<语言>.lproj，两套分开检查）；
 2. 各种语言的键完全一样，没有多出来的（代码里已经不用的）键；
 3. 译文里的占位（%@、%1$@）和键里的一样多；
-4. 代码里没有漏掉 L(...) 的中文字符串。日志（Log.info / Log.error）和行尾带 `// l10n-ignore` 的
+4. 代码里没有漏掉 L(...) 的中文字符串，L( 的第一个参数都是字符串字面量（L(变量) 查不到有没有翻译）。日志（Log.info / Log.error）和行尾带 `// l10n-ignore` 的
    数据（脚本内容、参数里认的中文写法这类）不算。命令行的输出（print）也是界面文字，要经过 L()。
    多行字符串（三个引号）里有中文时，上一行要写 `// l10n-ignore` 并说明英文版在哪里（比如按 AppLanguage.isEnglish 选的另一段）。
 
@@ -30,6 +30,8 @@ IGNORED_LINE = re.compile(r"Log\.(info|error)\(|Self\.log\(|l10n-ignore")
 # 整个文件都不是界面文字的，写在这里（现在没有）。
 IGNORED_FILES = set()
 PLACEHOLDER = re.compile(r"%(?:\d+\$)?@")
+# L( 后面不是字符串字面量（L(name)、L(prefix + x)）：查不到这个键有没有翻译。
+NON_LITERAL_L = re.compile(r"(?<![A-Za-z0-9_])L\(\s*(?!\")")
 
 
 def literal_end(line, start):
@@ -69,6 +71,22 @@ def literals(line):
         i += 1
 
 
+def mask_literals(line):
+    """把一行代码里字符串字面量的内容换成空格（保留引号），去掉 // 注释，用来查 L( 后面跟的是不是字面量。"""
+    out, i = [], 0
+    while i < len(line):
+        if line.startswith("//", i):
+            break
+        if line[i] == '"':
+            end = literal_end(line, i)
+            out.append('"' + " " * max(0, end - i - 2) + '"')
+            i = end
+            continue
+        out.append(line[i])
+        i += 1
+    return "".join(out)
+
+
 def scan(sources):
     keys, unwrapped = {}, []
     for folder in sources:
@@ -91,6 +109,8 @@ def scan(sources):
                 if line.strip().startswith("//"):
                     continue
                 where = f"{path.relative_to(ROOT)}:{number}"
+                if "func L(" not in line and not IGNORED_LINE.search(line) and NON_LITERAL_L.search(mask_literals(line)):
+                    unwrapped.append(f"{where}: L() 的第一个参数要直接写中文原文（字符串字面量），不然查不到它有没有翻译")
                 for start, text in literals(line):
                     wrapped = re.search(r"(?<![A-Za-z0-9_])L\(\s*$", line[:start]) is not None
                     if wrapped:

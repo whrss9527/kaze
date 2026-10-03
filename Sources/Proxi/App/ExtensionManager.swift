@@ -111,6 +111,9 @@ final class ExtensionManager: ObservableObject {
 
     private var timer: Timer?
     private var installTask: Task<Void, Never>?
+    /// 上次启动代理引擎的时间，和最近几次自动重新启动它的时间（见 keepRunning）。
+    private var lastLaunch: Date?
+    private var restarts: [Date] = []
 
     // MARK: - 位置
 
@@ -177,6 +180,7 @@ final class ExtensionManager: ObservableObject {
     /// 开启后（或者启动时开着）：没装或者版本不对就下载安装，然后启动。
     func prepareAndLaunch() {
         guard state.enabled, !isBusy else { return }
+        restarts = []
         installTask = Task { @MainActor [weak self] in
             guard let self else { return }
             do {
@@ -190,6 +194,11 @@ final class ExtensionManager: ObservableObject {
                 let message = error.localizedDescription
                 self.phase = .failed(message)
                 Log.error("扩展：安装代理引擎失败：\(message)")
+                // 下载不了同一个版本（比如更新 Proxi 后连不上 GitHub）时先用装着的旧版本，「代理引擎」那条配置照样能用。
+                if self.isInstalled {
+                    Log.info("扩展：先用已经装着的代理引擎 \(self.installedVersion ?? "")")
+                    self.launch()
+                }
             }
         }
     }
@@ -344,12 +353,16 @@ final class ExtensionManager: ObservableObject {
     /// 没在运行就带上参数启动，已经在运行时系统发给它的「重新打开」让它显示设置。界面语言跟 Proxi 一样。
     func launch(showWindow: Bool = false) {
         guard state.enabled, isInstalled else { return }
-        // 已经在运行时再打开一次就会弹出它的设置窗口，后台启动时不用再打开。
-        if !showWindow, !NSRunningApplication.runningApplications(withBundleIdentifier: Self.bundleIdentifier).isEmpty { return }
+        // 已经在运行（或者几秒前刚启动、还没出现在运行的程序里）时再打开一次就会弹出它的设置窗口，后台启动时不用再打开。
+        if !showWindow {
+            if !NSRunningApplication.runningApplications(withBundleIdentifier: Self.bundleIdentifier).isEmpty { return }
+            if let lastLaunch, Date().timeIntervalSince(lastLaunch) < 5 { return }
+        }
         let configuration = NSWorkspace.OpenConfiguration()
         configuration.activates = showWindow
         configuration.addsToRecentItems = false
         configuration.arguments = ["-AppleLanguages", AppLanguage.isEnglish ? "(en)" : "(zh-Hans)"] + (showWindow ? [Self.showSettingsArgument] : [])
+        lastLaunch = Date()
         NSWorkspace.shared.openApplication(at: Self.appURL, configuration: configuration) { _, error in
             if let error {
                 Task { @MainActor in
@@ -362,13 +375,32 @@ final class ExtensionManager: ObservableObject {
         }
     }
 
-    /// 打开代理引擎的设置窗口（Proxi 的菜单、面板和扩展页里的「代理引擎设置…」）；还没装好时打开扩展页看进度。
+    /// 打开代理引擎的设置窗口（Proxi 的菜单、面板和扩展页里的「代理引擎设置…」）；还没装好、正在下载安装时打开扩展页看进度。
     func showSettings() {
-        if isInstalled {
+        if isInstalled && !isBusy {
             launch(showWindow: true)
         } else {
             SettingsWindowController.shared.show(page: .extensions)
         }
+    }
+
+    /// 扩展开着、代理引擎却不在运行（崩溃了、被退出了、重新启动 Proxi 时旧的还没退完、新的就跳过了启动）：再启动它。
+    /// 不然「代理引擎」那条配置开着时，系统代理一直指向一个没人监听的端口。十分钟里自动启动了 3 次还不行就不再试。
+    private func keepRunning() {
+        guard state.enabled, isInstalled, !isBusy, status == nil,
+              NSRunningApplication.runningApplications(withBundleIdentifier: Self.bundleIdentifier).isEmpty else { return }
+        let now = Date()
+        if let lastLaunch, now.timeIntervalSince(lastLaunch) < 15 { return }
+        restarts = restarts.filter { now.timeIntervalSince($0) < 600 }
+        guard restarts.count < 3 else {
+            if case .failed = phase { return }
+            phase = .failed(L("代理引擎多次意外退出，没有再启动它"))
+            Log.error("扩展：代理引擎十分钟里意外退出了 3 次，不再自动启动")
+            return
+        }
+        restarts.append(now)
+        Log.info("扩展：代理引擎没在运行，重新启动它")
+        launch()
     }
 
     /// 退出正在运行的代理引擎（它退出时自己停掉内核），最多等 10 秒。
@@ -426,5 +458,6 @@ final class ExtensionManager: ObservableObject {
             }
             onChange?()
         }
+        keepRunning()
     }
 }

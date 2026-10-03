@@ -215,7 +215,7 @@ struct ImportSheet: View {
             Text(summary)
                 .font(.system(size: 13, weight: .medium))
                 .multilineTextAlignment(.center)
-            Text(L("内核会自动重新加载。改错了可以到「自动化」页的操作记录里撤销。"))
+            Text(L("内核会自动重新加载。改错了可以在终端里运行代理引擎的 undo 命令撤销（用法见「通用」页）。"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)

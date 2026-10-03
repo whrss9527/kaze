@@ -87,7 +87,7 @@ struct NodesPage: View {
     private var statusView: some View {
         switch engine.status {
         case .off:
-            Text(state.config.engine.wantsCore ? L("未运行") : L("还没有订阅"))
+            Text(!state.config.engine.enabled ? L("已停用") : (state.config.engine.wantsCore ? L("未运行") : L("还没有订阅")))
                 .foregroundStyle(.secondary)
         case .starting:
             HStack(spacing: 6) {
@@ -290,9 +290,11 @@ struct NodesPage: View {
 
     // MARK: - 端口
 
+    /// 1024~65535，两个不一样，也不能和局域网共享的端口撞上（两个入口抢同一个端口）。
     private var portsValid: Bool {
         guard let mixed = Int(mixedPortText), let api = Int(apiPortText) else { return false }
-        return (1024...65535).contains(mixed) && (1024...65535).contains(api) && mixed != api
+        let share = state.share.port
+        return (1024...65535).contains(mixed) && (1024...65535).contains(api) && mixed != api && mixed != share && api != share
     }
 
     private var portsChanged: Bool {
@@ -317,7 +319,7 @@ struct NodesPage: View {
                 }
                 .disabled(!portsValid || !portsChanged)
             }
-            Text(L("改端口后内核会重启，配置列表里「节点代理」的端口会跟着改。默认代理端口 7890、API 端口 9097。"))
+            Text(L("改端口后内核会重启，Proxi 配置列表里「代理引擎」的端口会跟着改。默认代理端口 7890、API 端口 9097。"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -547,6 +549,15 @@ struct PolicyGroupRow: View {
             }
         }
         .padding(.vertical, 2)
+        // 别处改了这个组（「高级」里、命令行、导入、撤销）：没在这里改过的话跟着更新，免得保存时把旧的名字和筛选写回去。
+        .onChange(of: group) { old, new in
+            if name == old.name, kind == old.kind, filter == old.filter {
+                name = new.name
+                kind = new.kind
+                filter = new.filter
+                problem = nil
+            }
+        }
     }
 
     private var detail: String {
@@ -569,7 +580,7 @@ struct PolicyGroupRow: View {
             var advanced: [String] = []
             if !group.sources.isEmpty { advanced.append(L("限定来源")) }
             if !group.exclude.isEmpty { advanced.append(L("排除 %@", group.exclude)) }
-            if !group.includeGroups.isEmpty { advanced.append(L("包含 %@", group.includeGroups.joined(separator: L("、")))) }
+            if !group.includeGroups.isEmpty { advanced.append(L("包含 %@", group.includeGroups.map(CoreConfigBuilder.displayName).joined(separator: L("、")))) }
             if !group.testURL.isEmpty || group.interval != 0 { advanced.append(L("单独测速")) }
             if group.kind == .loadBalance && group.strategy != .roundRobin { advanced.append(group.strategy.title) }
             parts.append(advanced.joined(separator: L("，")))

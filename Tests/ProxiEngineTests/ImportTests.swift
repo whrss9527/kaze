@@ -153,17 +153,18 @@ final class ImportTests: XCTestCase {
         XCTAssertEqual(plan.subscriptions.map(\.name), ["airport"])
         XCTAssertEqual(plan.subscriptions[0].filter, "港|日")
         XCTAssertEqual(plan.subscriptions[0].prefix, "A ")
-        XCTAssertEqual(plan.groups.map(\.name), ["Proxy", "自动选择组", "广告"])
+        // 「广告」默认就是拦截：不建成组，规则直接拦截（建成组的话默认跟随「节点」，广告反而走了代理）。
+        XCTAssertEqual(plan.groups.map(\.name), ["Proxy", "自动选择组"])
+        XCTAssertTrue(plan.warnings.contains { $0.contains("广告") })
         XCTAssertEqual(plan.groups[0].includeGroups, ["自动选择组"])
         XCTAssertEqual(plan.groups[0].filter, "^(香港01|日本01)$")
         XCTAssertEqual(plan.groups[1].sources, [plan.subscriptions[0].id])
         XCTAssertEqual(plan.groups[1].testURL, "http://www.gstatic.com/generate_204")
         XCTAssertEqual(plan.groups[1].interval, 300)
-        XCTAssertEqual(plan.groups[2].filter, "^$")
         let rules = try YAMLParser.parse(plan.ruleFile?.content ?? "")["rules"]?.stringArray ?? []
         XCTAssertEqual(rules, [
             "DOMAIN-SUFFIX,google.com,Proxy",
-            "RULE-SET,https://example.com/reject.yaml,广告",
+            "RULE-SET,https://example.com/reject.yaml,REJECT",
             "DOMAIN-SUFFIX,inline.example,DIRECT",
             "DOMAIN,exact.example,DIRECT",
             "AND,((DOMAIN,a.com),(NETWORK,UDP)),自动选择组",
@@ -204,6 +205,12 @@ final class ImportTests: XCTestCase {
         XCTAssertNil(remote.nodeFile)
         XCTAssertEqual(remote.ruleSets.map(\.url), ["https://sub.example.com/c"])
         XCTAssertEqual(remote.ruleSets.first?.converted, true)
+
+        // 来自网址、但规则要改写（规则集展开成网址、组名改了）：不能直接用远程配置，写成本机的规则文件。
+        let rewritten = try ConfigImporter.plan("proxies:\n  - {name: a, type: ss, server: x, port: 1, cipher: aes-128-gcm, password: p}\nrule-providers:\n  ad:\n    type: http\n    behavior: domain\n    url: https://example.com/ad.yaml\nrules:\n  - RULE-SET,ad,REJECT\n  - MATCH,DIRECT", sourceName: "x", sourceURL: "https://sub.example.com/c")
+        XCTAssertTrue(rewritten.ruleSets.isEmpty)
+        let rewrittenRules = try YAMLParser.parse(rewritten.ruleFile?.content ?? "")["rules"]?.stringArray ?? []
+        XCTAssertEqual(rewrittenRules, ["RULE-SET,https://example.com/ad.yaml,REJECT", "MATCH,DIRECT"])
     }
 
     func testSurgeConfig() throws {

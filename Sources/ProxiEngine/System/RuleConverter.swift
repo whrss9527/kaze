@@ -61,7 +61,10 @@ enum RuleConverter {
             if line.isEmpty || line.hasPrefix("#") || line.hasPrefix("//") || line.hasPrefix(";") { continue }
             if line.hasPrefix("- ") {
                 line = line.dropFirst(2).trimmingCharacters(in: .whitespaces)
-                if (line.hasPrefix("\"") && line.hasSuffix("\"")) || (line.hasPrefix("'") && line.hasSuffix("'")), line.count >= 2 {
+                // 带引号的要按 YAML 的规则解转义：导入时写出来的规则文件里，正则的 \. 写成了 "\\."。
+                if let value = YAMLParser.unquote(line) {
+                    line = value
+                } else if (line.hasPrefix("\"") && line.hasSuffix("\"")) || (line.hasPrefix("'") && line.hasSuffix("'")), line.count >= 2 {
                     line = String(line.dropFirst().dropLast())
                 }
             }
@@ -128,7 +131,9 @@ enum RuleConverter {
             // Clash 列表项：- "DOMAIN-SUFFIX,x,y" 或 - '+.x'
             if line.hasPrefix("- ") {
                 line = line.dropFirst(2).trimmingCharacters(in: .whitespaces)
-                if (line.hasPrefix("\"") && line.hasSuffix("\"")) || (line.hasPrefix("'") && line.hasSuffix("'")), line.count >= 2 {
+                if let value = YAMLParser.unquote(line) {
+                    line = value
+                } else if (line.hasPrefix("\"") && line.hasSuffix("\"")) || (line.hasPrefix("'") && line.hasSuffix("'")), line.count >= 2 {
                     line = String(line.dropFirst().dropLast())
                 }
             }

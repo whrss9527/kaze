@@ -411,7 +411,7 @@ struct RuleLibrarySheet: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(L("规则库"))
                         .font(.system(size: 16, weight: .semibold))
-                    Text(L("blackmatrix7、MetaCubeX、ACL4SSR 和 johnshall 维护的公开规则，点「添加」加进规则集，去向可以再改"))
+                    Text(L("MetaCubeX 和 ACL4SSR 维护的公开规则，点「添加」加进规则集，去向可以再改"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

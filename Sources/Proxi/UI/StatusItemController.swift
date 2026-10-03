@@ -55,6 +55,8 @@ final class StatusItemController: NSObject {
             button.image = StatusIcon.image(for: iconState, upload: SpeedFormatter.compact(bytesPerSecond: meter.upload), download: SpeedFormatter.compact(bytesPerSecond: meter.download), textColor: textColor, layout: layout)
         }
         button.imagePosition = .imageOnly
+        // 提示里的网速跟着图标一起更新。
+        button.toolTip = tooltip + (meter.mode == .none ? "" : "\n↑ \(SpeedFormatter.full(bytesPerSecond: meter.upload))  ↓ \(SpeedFormatter.full(bytesPerSecond: meter.download))")
     }
 
     /// 菜单栏现在是不是深色（深色模式，或者浅色模式下被桌面衬成深色）。
@@ -85,9 +87,7 @@ final class StatusItemController: NSObject {
     }
 
     func updateIcon() {
-        guard let button = statusItem.button else { return }
         updateSpeedLabel()
-        button.toolTip = tooltip + (state.speed.mode == .none ? "" : "\n↑ \(SpeedFormatter.full(bytesPerSecond: state.speed.upload))  ↓ \(SpeedFormatter.full(bytesPerSecond: state.speed.download))")
         if let panel, panel.isVisible {
             resizePanel()
         }
@@ -127,16 +127,15 @@ final class StatusItemController: NSObject {
 
     func perform(_ command: URLCommand) {
         switch command {
+        // 开关和切换也经控制接口：和命令行一样受「自动化」里的权限限制，名字也一样可以只写一部分。
         case .turnOn:
-            if case .off(let next) = state.status, let next { state.turnOn(next) }
+            runTool("turn_on", [:])
         case .turnOff:
-            state.turnOff()
+            runTool("turn_off", [:])
         case .toggle:
-            state.toggle()
+            runTool("toggle", [:])
         case .use(let name):
-            if !state.use(named: name) {
-                state.notify(title: L("没有找到配置"), body: L("没有叫「%@」的配置", name), problem: true)
-            }
+            runTool("use_profile", ["profile": name])
         case .settings(let page):
             SettingsWindowController.shared.show(page: page)
         case .panel:

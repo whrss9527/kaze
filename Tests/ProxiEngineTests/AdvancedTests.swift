@@ -96,6 +96,30 @@ final class YAMLTests: XCTestCase {
         XCTAssertThrowsError(try YAMLParser.parse("a:\n\tb: 1"))
     }
 
+    func testQuotesInsideFlowValues() throws {
+        let text = """
+        proxies:
+          - {name: Joe's HK, type: ss, server: hk.example.com, port: 443}
+          - {name: "it's [x]", type: ss,
+             server: jp.example.com, port: 443}
+          - {name: 'a''[b', type: ss, server: us.example.com, port: 443}
+        after: 1
+        """
+        let node = try YAMLParser.parse(text)
+        let proxies = try XCTUnwrap(node["proxies"]?.array)
+        XCTAssertEqual(proxies.count, 3)
+        XCTAssertEqual(proxies[0]["name"]?.string, "Joe's HK")
+        XCTAssertEqual(proxies[0]["port"]?.int, 443)
+        XCTAssertEqual(proxies[1]["name"]?.string, "it's [x]")
+        XCTAssertEqual(proxies[1]["server"]?.string, "jp.example.com")
+        XCTAssertEqual(proxies[2]["name"]?.string, "a'[b")
+        XCTAssertEqual(node["after"]?.int, 1)
+        XCTAssertEqual(YAMLParser.unquote("\"a\\\\.b\""), "a\\.b")
+        XCTAssertEqual(YAMLParser.unquote("'it''s'"), "it's")
+        XCTAssertNil(YAMLParser.unquote("plain"))
+        XCTAssertNil(YAMLParser.unquote("'a' b"))
+    }
+
     func testWriterRoundTrip() throws {
         let node = YAMLNode.mapping([
             YAMLPair(key: "port", value: .int(7890)),

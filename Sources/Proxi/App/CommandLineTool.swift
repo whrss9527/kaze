@@ -8,10 +8,9 @@ enum CommandLineTool {
         "call", "tools", "mcp", "help", "version",
     ]
 
-    /// 带了认识的子命令时由命令行处理。
+    /// 带了认识的子命令时由命令行处理。--json 写在子命令前面（proxi --json status）也认，不然会再打开一个图形界面的 Proxi。
     static func shouldHandle(_ arguments: [String]) -> Bool {
-        guard arguments.count > 1 else { return false }
-        let first = arguments[1]
+        guard let first = arguments.dropFirst().first(where: { $0 != "--json" }) else { return false }
         return commands.contains(first) || ["-h", "--help", "--version"].contains(first)
     }
 

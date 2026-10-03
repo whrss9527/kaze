@@ -31,7 +31,8 @@ enum HelperPaths {
 
 enum HelperProtocol {
     /// 程序和助手之间的协议版本。程序更新后发现助手的版本不同，会请用户重新安装助手。
-    static let version = 1
+    /// 2：内核目录只有 root 能读（里面的配置有控制接口的密钥和节点的密码），内核日志只给装助手的用户读。
+    static let version = 2
 }
 
 /// 助手报告的状态。
@@ -113,15 +114,16 @@ enum HelperFiles {
         return data
     }
 
-    /// 写进 root 的目录：先写临时文件再改名，别人看到的总是完整的文件。
+    /// 写进 root 的目录：先写临时文件再改名，别人看到的总是完整的文件。只有 root 能读：
+    /// 配置里有内核控制接口的密钥，节点文件里有服务器的密码。
     static func write(_ data: Data, to relative: String, in target: String) throws {
         guard isSafeRelativePath(relative) else { throw HelperError(L("文件名不对：%@", relative)) }
         let path = (target as NSString).appendingPathComponent(relative)
         let directory = (path as NSString).deletingLastPathComponent
-        try FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o755])
+        try FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         let temporary = path + ".ps-tmp"
         unlink(temporary)
-        guard FileManager.default.createFile(atPath: temporary, contents: data, attributes: [.posixPermissions: 0o644]) else {
+        guard FileManager.default.createFile(atPath: temporary, contents: data, attributes: [.posixPermissions: 0o600]) else {
             throw HelperError(L("写不了 %@", relative))
         }
         guard rename(temporary, path) == 0 else {
@@ -210,7 +212,8 @@ enum HelperInstaller {
         // 程序文件离开了 app 包，重新做一个独立的签名。
         _ = try? Shell.runSync("/usr/bin/codesign", ["--force", "--sign", "-", "--identifier", HelperPaths.label, HelperPaths.executable], timeout: 120)
         try rootDirectory(HelperPaths.dataDirectory)
-        try rootDirectory(HelperPaths.coreDirectory)
+        // 内核目录别人只能穿过、不能列出和读里面的文件（内核日志单独给装助手的用户读，见 launchCoreLocked）。
+        try rootDirectory(HelperPaths.coreDirectory, mode: 0o711)
         try plist(uid: uid, appVersion: appVersion).write(to: URL(fileURLWithPath: HelperPaths.plist), options: .atomic)
         try own(HelperPaths.plist, mode: 0o644)
         // 刚停掉的旧助手可能还没退干净，加载失败时稍等再试。
@@ -257,13 +260,13 @@ enum HelperInstaller {
     }
 
     /// root 所有、别人不能写的目录；原来是符号链接或者别人的就换掉。
-    private static func rootDirectory(_ path: String) throws {
+    private static func rootDirectory(_ path: String, mode: mode_t = 0o755) throws {
         var info = stat()
         if lstat(path, &info) == 0 && (info.st_mode & S_IFMT) != S_IFDIR {
             try FileManager.default.removeItem(atPath: path)
         }
         try FileManager.default.createDirectory(atPath: path, withIntermediateDirectories: true)
-        try own(path, mode: 0o755)
+        try own(path, mode: mode)
     }
 
     private static func installFile(from source: String, to target: String) throws {
@@ -319,6 +322,9 @@ final class HelperDaemon: @unchecked Sendable {
 
     func run() -> Never {
         signal(SIGPIPE, SIG_IGN)
+        // 内核（root）自己建的文件（缓存、下载的订阅和规则）也只给 root 读。
+        umask(0o077)
+        Self.tightenCoreDirectory(userID: allowedUID)
         restoreLeftoverForwarding()
         coreVersion = Self.readCoreVersion()
         installSignalHandlers()
@@ -512,7 +518,10 @@ final class HelperDaemon: @unchecked Sendable {
             throw HelperError(L("助手里的内核校验和不对，请重新安装助手"))
         }
         unlink(HelperPaths.coreLog)
-        guard fm.createFile(atPath: HelperPaths.coreLog, contents: nil, attributes: [.posixPermissions: 0o644]), let log = FileHandle(forWritingAtPath: HelperPaths.coreLog) else {
+        // 内核日志里有访问过的网址：只给装助手的用户读（程序的「内核」页显示它）。
+        guard fm.createFile(atPath: HelperPaths.coreLog, contents: nil, attributes: [.posixPermissions: 0o600]),
+              chown(HelperPaths.coreLog, allowedUID, 0) == 0,
+              let log = FileHandle(forWritingAtPath: HelperPaths.coreLog) else {
             throw HelperError(L("写不了内核日志"))
         }
         let process = Process()
@@ -634,8 +643,35 @@ final class HelperDaemon: @unchecked Sendable {
     }
 
     static func readCoreVersion() -> String {
-        guard let result = try? Shell.runSync(HelperPaths.core, ["-v"], timeout: 10) else { return "" }
+        // 和每次启动内核前一样，先核对校验和再运行它。
+        guard (try? HelperInstaller.verifyCore(HelperPaths.core, removeIfWrong: false)) != nil,
+              let result = try? Shell.runSync(HelperPaths.core, ["-v"], timeout: 10) else { return "" }
         return coreVersion(from: result.output) ?? ""
+    }
+
+    /// 以前的版本建的内核目录别人能读（里面的配置有控制接口的密钥、节点文件有服务器的密码）：
+    /// 启动时收紧成目录只能穿过、文件只有 root 能读，内核日志给装助手的用户。
+    static func tightenCoreDirectory(userID: UInt32) {
+        let directory = HelperPaths.coreDirectory
+        var info = stat()
+        guard lstat(directory, &info) == 0, (info.st_mode & S_IFMT) == S_IFDIR, info.st_uid == 0 else { return }
+        chmod(directory, 0o711)
+        guard let items = FileManager.default.enumerator(atPath: directory) else { return }
+        for case let relative as String in items {
+            let path = (directory as NSString).appendingPathComponent(relative)
+            guard lstat(path, &info) == 0 else { continue }
+            switch info.st_mode & S_IFMT {
+            case S_IFDIR:
+                chmod(path, 0o700)
+            case S_IFREG:
+                if path == HelperPaths.coreLog {
+                    chown(path, userID, 0)
+                }
+                chmod(path, 0o600)
+            default:
+                continue
+            }
+        }
     }
 
     /// 「Mihomo Meta v1.19.31 darwin arm64 …」里的版本号。

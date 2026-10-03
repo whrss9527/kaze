@@ -120,6 +120,8 @@ final class Engine: ObservableObject {
 
     var readConfig: () -> AppConfig = { AppConfig() }
     var writeEngine: ((EngineConfig) -> Void)?
+    /// 内核下载好、按写死的 SHA-256 校验过了（AppState 按 CoreDownload 提供）。没好之前不启动内核。
+    var coreReady: () -> Bool = { true }
     /// 流量统计变了（隔一会儿存一次），交给 AppState 写到本机状态里。
     var persistTraffic: ((TrafficStats) -> Void)?
 
@@ -295,6 +297,14 @@ final class Engine: ObservableObject {
                 status = .off
             }
             updateTunStatus()
+            return
+        }
+        // 内核还没下载好、校验过（第一次运行时正在下载，或者被删了）：先不启动，下好以后（CoreDownload.onInstalled）再来，
+        // 不然会报一串「还没有下载内核」的错，也可能运行一个没校验过的内核。
+        guard coreReady() else {
+            if api != nil || coreProcessRunning {
+                stopCore()
+            }
             return
         }
         do {
@@ -622,6 +632,14 @@ final class Engine: ObservableObject {
         if inputs != tunFailedFor {
             tunFailedFor = nil
         }
+        updateTunStatus()
+        scheduleReconcile()
+    }
+
+    /// 特权助手重新装好、起来了：上次增强模式没开起来的话再试一次（失败的记录只在参数变了时才清，这里也清掉）。
+    func retryTunIfFailed() {
+        guard tunFailedFor != nil else { return }
+        tunFailedFor = nil
         updateTunStatus()
         scheduleReconcile()
     }

@@ -53,10 +53,10 @@ struct RuleSet: Codable, Identifiable, Equatable, Hashable {
         id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
         name = try container.decodeIfPresent(String.self, forKey: .name) ?? L("规则")
         url = try container.decodeIfPresent(String.self, forKey: .url) ?? ""
-        policy = try container.decodeIfPresent(RuleTarget.self, forKey: .policy)
-        enabled = try container.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
-        behavior = try container.decodeIfPresent(RuleSetBehavior.self, forKey: .behavior)
-        converted = try container.decodeIfPresent(Bool.self, forKey: .converted)
+        policy = try? container.decodeIfPresent(RuleTarget.self, forKey: .policy)
+        enabled = (try? container.decodeIfPresent(Bool.self, forKey: .enabled)) ?? true
+        behavior = try? container.decodeIfPresent(RuleSetBehavior.self, forKey: .behavior)
+        converted = try? container.decodeIfPresent(Bool.self, forKey: .converted)
         if url == Self.chinaDirectURL, Self.legacyBuiltinNames.contains(name) {
             name = L("智能分流")
         }

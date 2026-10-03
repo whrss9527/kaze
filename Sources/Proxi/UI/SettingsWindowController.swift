@@ -68,7 +68,11 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     }
 
     func windowWillClose(_ notification: Notification) {
-        NSApp.setActivationPolicy(.accessory)
+        // 别的窗口（后台助手的提示）还开着时留在 Dock 和 ⌘Tab 里，等它也关了再回到只有菜单栏图标。
+        let others = NSApp.windows.contains { $0.isVisible && $0 !== notification.object as? NSWindow && $0.styleMask.contains(.titled) }
+        if !others {
+            NSApp.setActivationPolicy(.accessory)
+        }
     }
 
     private func makeWindow() -> NSWindow {
@@ -311,10 +315,10 @@ struct HotkeyPage: View {
                         Button(L("清除")) { state.config.toggleHotkey = nil }
                             .disabled(state.config.toggleHotkey == nil)
                     }
-                    Text(L("点击方框后按下新的组合键，至少包含 ⌃、⌥、⇧、⌘ 中的一个。"))
+                    Text(L("点击方框后按下新的组合键，至少包含 ⌃ 或 ⌘（F1~F20 可以单独用）。"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    if let error = state.lastError, error.contains(L("快捷键")) {
+                    if let error = state.hotkeyProblem {
                         Label(error, systemImage: "exclamationmark.triangle")
                             .font(.caption)
                             .foregroundStyle(.orange)
@@ -426,10 +430,7 @@ struct DiagnosticsPage: View {
     private func clearAll() {
         clearing = true
         Task { @MainActor in
-            state.turnOff()
-            try? await EnvironmentProxy.clear()
-            try? await GitProxy.clear()
-            try? NpmProxy.clear()
+            await state.clearAllProxySettings()
             clearing = false
             reload()
         }

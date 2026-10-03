@@ -34,6 +34,17 @@ enum SettingsWindowSync {
         NSApp.yieldActivation(toApplicationWithBundleIdentifier: other)
     }
 
+    /// 从这边的设置窗口切到另一边时打开对方用的配置：前台先让给它，但不让系统马上把它切到前台。
+    /// 它这时还只在菜单栏，先到前台再变成普通程序（显示窗口时）会把前台丢掉，系统就把前台交给排在后面的程序（桌面、浏览器……）。
+    /// 它的窗口出来以后，这边关窗口时再把前台交过去（见 becomeAccessoryAfterHandoff）。
+    static func handOffConfiguration() -> NSWorkspace.OpenConfiguration {
+        yieldToOther()
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = false
+        configuration.addsToRecentItems = false
+        return configuration
+    }
+
     private final class Handoff {
         var observer: NSObjectProtocol?
         var done = false

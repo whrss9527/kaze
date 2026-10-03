@@ -125,6 +125,9 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     /// 正在因为代理引擎的设置窗口打开了而关掉这边的。
     private var handingOff = false
 
+    /// 设置窗口正开着。
+    var isShowing: Bool { window?.isVisible == true }
+
     override init() {
         super.init()
         // 代理引擎的设置窗口显示出来时关掉这边的：两边当成同一个窗口，同一时间只显示一个。

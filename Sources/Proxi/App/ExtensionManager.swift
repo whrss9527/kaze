@@ -353,15 +353,15 @@ final class ExtensionManager: ObservableObject {
 
     /// 启动代理引擎。它没有自己的菜单栏图标，平时在后台启动（不抢焦点、不开窗口）；showWindow 时打开它的设置窗口：
     /// 没在运行就带上参数启动，已经在运行时系统发给它的「重新打开」让它显示设置。界面语言跟 Proxi 一样。
-    func launch(showWindow: Bool = false, page: String? = nil) {
+    func launch(showWindow: Bool = false, page: String? = nil, handOff: Bool = false) {
         guard state.enabled, isInstalled else { return }
         // 已经在运行（或者几秒前刚启动、还没出现在运行的程序里）时再打开一次就会弹出它的设置窗口，后台启动时不用再打开。
         if !showWindow {
             if !NSRunningApplication.runningApplications(withBundleIdentifier: Self.bundleIdentifier).isEmpty { return }
             if let lastLaunch, Date().timeIntervalSince(lastLaunch) < 5 { return }
         }
-        let configuration = NSWorkspace.OpenConfiguration()
-        configuration.activates = showWindow
+        let configuration = handOff ? SettingsWindowSync.handOffConfiguration() : NSWorkspace.OpenConfiguration()
+        configuration.activates = showWindow && !handOff
         configuration.addsToRecentItems = false
         var arguments = ["-AppleLanguages", AppLanguage.isEnglish ? "(en)" : "(zh-Hans)"]
         if showWindow {
@@ -388,13 +388,14 @@ final class ExtensionManager: ObservableObject {
     /// page：打开哪一页（Proxi 侧边栏里点了代理引擎的某一页时传）。
     func showSettings(page: String? = nil) {
         if isInstalled && !isBusy {
-            // 把前台让给代理引擎，它的窗口出来时才会到前台（不然这边的窗口关掉后会落到桌面）。
-            SettingsWindowSync.yieldToOther()
+            // 从这边开着的设置窗口切过去时，不让系统马上把代理引擎切到前台：等它的窗口出来，这边关窗口时把前台交过去
+            // （见 SettingsWindowSync.handOffConfiguration）。从菜单、面板打开时照旧让系统切到前台。
+            let handOff = NSApp.isActive && SettingsWindowController.shared.isShowing
             // 已经在运行时启动参数传不过去：先发通知让它切到这一页，再「重新打开」它（显示设置窗口、切到前台）。
             if let page {
                 SettingsWindowSync.requestEnginePage(page)
             }
-            launch(showWindow: true, page: page)
+            launch(showWindow: true, page: page, handOff: handOff)
         } else {
             SettingsWindowController.shared.show(page: .extensions)
         }

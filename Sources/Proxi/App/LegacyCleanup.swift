@@ -28,7 +28,7 @@ enum LegacyCleanup {
         "profiles", "clickAction", "toggleHotkey", "offMode", "notifyLevel", "healthCheck", "disableOnExit", "testURL",
         "autoCheckUpdates", "speedDisplay", "speedSide", "speedColorFollowsStatus", "automation",
     ]
-    static let knownStateKeys: Set<String> = ["lastProfileID", "enabledByUs", "original", "systemServices", "syncEnabled", "noticeShown", "extension"]
+    static let knownStateKeys: Set<String> = ["lastProfileID", "enabledByUs", "original", "systemServices", "syncEnabled", "noticeShown", "extension", "pendingCleanup"]
     /// 数据目录里以前版本用的子目录和文件：挪到代理引擎的数据目录。
     static let legacyDataItems = ["core", "imports", "journal.json"]
 

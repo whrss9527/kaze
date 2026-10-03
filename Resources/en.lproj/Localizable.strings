@@ -22,6 +22,10 @@
 "连不上代理服务器" = "Can't reach the proxy server";
 "%@（%@）没有响应，浏览器可能无法上网" = "%@ (%@) isn't responding. The browser may not be able to connect.";
 "快捷键 %@ 已被其他程序占用，请换一个" = "The hotkey %@ is already used by another app. Choose a different one.";
+"已清理上次退出时没清理完的代理设置" = "Finished clearing the proxy settings left over from the last quit";
+"「%@」：%@" = "“%@”: %@";
+"上次退出时的代理设置还没清理完：%@" = "The proxy settings from the last quit still aren't cleared: %@";
+"上次退出时的代理设置还没清理完" = "Proxy settings from the last quit still aren't cleared";
 
 /* App/CloudSync.swift */
 "读取 iCloud 失败：%@" = "Couldn't read iCloud: %@";
@@ -559,3 +563,6 @@
 "关闭并移除代理引擎？" = "Turn off and remove the proxy engine?";
 "关闭并移除" = "Turn Off and Remove";
 "会先关掉正在用的「代理引擎」配置、恢复系统设置，再退出代理引擎、删掉下载的程序。它的数据留着，以后再开启时还在。" = "This first turns off the “Proxy Engine” profile if it's in use and restores your system settings, then quits the proxy engine and deletes the downloaded app. Its data is kept and will still be there if you enable it again.";
+
+/* System/ProxyBackend.swift */
+"%@ 秒内没有做完" = "Didn't finish within %@ seconds";

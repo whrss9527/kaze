@@ -1230,6 +1230,7 @@
 "关于" = "About";
 "界面语言" = "Language";
 "通知" = "Notifications";
+"返回 Proxi 设置" = "Back to Proxi Settings";
 
 /* UI/SharePage.swift */
 "让 PS5、Switch、手机这些同一局域网里的设备把这台 Mac 当代理服务器，享受和本机一样的网络" = "Let devices on the same LAN, such as a PS5, Switch or phone, use this Mac as their proxy server and get the same network as this Mac";

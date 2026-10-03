@@ -53,6 +53,16 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
 
     let navigation = SettingsNavigation()
     private var window: NSWindow?
+    private var otherShownObserver: NSObjectProtocol?
+
+    override init() {
+        super.init()
+        // 代理引擎的设置窗口显示出来时关掉这边的：两边当成同一个窗口，同一时间只显示一个。
+        otherShownObserver = SettingsWindowSync.observeOtherShown { [weak self] in
+            guard let window = self?.window, window.isVisible else { return }
+            window.close()
+        }
+    }
 
     func show(page: SettingsPage?) {
         if let page {
@@ -61,10 +71,32 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         if window == nil {
             window = makeWindow()
         }
+        // 从代理引擎的设置窗口切过来时放在同一个位置、同样大小。
+        if let window, !window.isVisible, let frame = SettingsWindowSync.savedFrame() {
+            window.setFrame(frame, display: false)
+        }
         // 设置窗口打开期间当普通应用：菜单栏显示编辑菜单，⌘Tab 能切到它；关闭后回到只有菜单栏图标。
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
+        if let window {
+            SettingsWindowSync.save(window.frame)
+        }
+        SettingsWindowSync.announceShown()
+    }
+
+    func windowDidMove(_ notification: Notification) {
+        saveFrame(of: notification)
+    }
+
+    func windowDidEndLiveResize(_ notification: Notification) {
+        saveFrame(of: notification)
+    }
+
+    private func saveFrame(of notification: Notification) {
+        if let window = notification.object as? NSWindow, window.isVisible {
+            SettingsWindowSync.save(window.frame)
+        }
     }
 
     func windowWillClose(_ notification: Notification) {
@@ -208,7 +240,7 @@ struct GeneralPage: View {
                 Section(L("启动")) {
                     Toggle(L("登录时自动启动"), isOn: Binding(get: { state.loginItemEnabled }, set: { state.setLoginItem($0) }))
                     Toggle(L("退出 Proxi 时关闭代理"), isOn: $state.config.disableOnExit)
-                    Text(L("一键更新、换界面语言后重新启动时什么都不关，代理接着开着。"))
+                    Text(L("一键更新、换界面语言后重新启动时什么都不关；设了登录时启动的，注销、重新启动电脑或关机也不关，登录后接着用。"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

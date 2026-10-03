@@ -60,6 +60,16 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
 
     let navigation = SettingsNavigation()
     private var window: NSWindow?
+    private var otherShownObserver: NSObjectProtocol?
+
+    override init() {
+        super.init()
+        // Proxi 的设置窗口显示出来时关掉这边的：两边当成同一个窗口，同一时间只显示一个。
+        otherShownObserver = SettingsWindowSync.observeOtherShown { [weak self] in
+            guard let window = self?.window, window.isVisible else { return }
+            window.close()
+        }
+    }
 
     func show(page: SettingsPage?) {
         if let page {
@@ -68,10 +78,32 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         if window == nil {
             window = makeWindow()
         }
+        // 从 Proxi 的设置窗口切过来时放在同一个位置、同样大小。
+        if let window, !window.isVisible, let frame = SettingsWindowSync.savedFrame() {
+            window.setFrame(frame, display: false)
+        }
         // 设置窗口打开期间当普通应用：菜单栏显示编辑菜单，⌘Tab 能切到它；关闭后回到后台运行。
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
+        if let window {
+            SettingsWindowSync.save(window.frame)
+        }
+        SettingsWindowSync.announceShown()
+    }
+
+    func windowDidMove(_ notification: Notification) {
+        saveFrame(of: notification)
+    }
+
+    func windowDidEndLiveResize(_ notification: Notification) {
+        saveFrame(of: notification)
+    }
+
+    private func saveFrame(of notification: Notification) {
+        if let window = notification.object as? NSWindow, window.isVisible {
+            SettingsWindowSync.save(window.frame)
+        }
     }
 
     func windowWillClose(_ notification: Notification) {
@@ -110,13 +142,24 @@ struct SettingsRootView: View {
             .listStyle(.sidebar)
             .navigationSplitViewColumnWidth(min: AppLanguage.width(170, english: 190), ideal: AppLanguage.width(190, english: 215), max: 260)
             .safeAreaInset(edge: .top) {
-                HStack(spacing: 8) {
-                    Image(nsImage: NSApp.applicationIconImage)
-                        .resizable()
-                        .frame(width: 28, height: 28)
-                    Text(L("代理引擎"))
-                        .font(.system(size: 14, weight: .semibold))
-                    Spacer()
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 8) {
+                        Image(nsImage: NSApp.applicationIconImage)
+                            .resizable()
+                            .frame(width: 28, height: 28)
+                        Text(L("代理引擎"))
+                            .font(.system(size: 14, weight: .semibold))
+                        Spacer()
+                    }
+                    // 和 Proxi 的设置当成同一个窗口：切回 Proxi 的设置（扩展页），这个窗口随之关掉。
+                    Button {
+                        MenuActions.shared.openProxiExtensions(nil)
+                    } label: {
+                        Label(L("返回 Proxi 设置"), systemImage: "chevron.backward")
+                            .font(.system(size: 12))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
                 }
                 .padding(.horizontal, 14)
                 .padding(.top, 34)

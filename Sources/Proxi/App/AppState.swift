@@ -753,8 +753,8 @@ final class AppState: ObservableObject {
     /// 退出时按设置关闭代理；代理引擎开着的话也让它退出（它自己停内核）。
     /// 正在用「代理引擎」那条配置时，不管「退出时关闭代理」开没开都关掉：代理引擎跟着退出，不关的话系统代理、终端、git、npm
     /// 都指向一个没人监听的端口，再打开 Proxi 之前上不了网。
-    /// 重新启动（一键更新、换语言）时什么都不关，新的实例接着用；注销、重新启动电脑、关机时设了登录时启动的话，
-    /// 登录后 Proxi 会再打开、接着启动代理引擎，「代理引擎」那条配置也留着（「退出时关闭代理」照旧）。
+    /// 重新启动（一键更新、换语言）时什么都不关，新的实例接着用；注销、重新启动电脑、关机时设了登录时启动的话也一样
+    /// （「退出时关闭代理」开着也不关）：登录后 Proxi 会再打开、接着启动代理引擎，代理接着用。
     func handleExit() {
         control.stop()
         if relaunching {
@@ -766,12 +766,10 @@ final class AppState: ObservableObject {
                 app.terminate()
             }
         }
-        guard !relaunching, case .on(let profile) = status else { return }
-        let reopensAtLogin = poweringOffAt.map { Date().timeIntervalSince($0) < 300 } == true && LoginItem.isEnabled
-        guard config.disableOnExit || (profile.engine && !reopensAtLogin) else {
-            if profile.engine {
-                Log.info("注销或关机：设了登录时启动，登录后会再打开，「\(profile.name)」留着")
-            }
+        guard !relaunching, case .on(let profile) = status, config.disableOnExit || profile.engine else { return }
+        // 注销、重新启动电脑、关机时设了登录时启动：登录后 Proxi 会再打开（代理引擎也跟着启动），和重新启动一样什么都不关。
+        if poweringOffAt.map({ Date().timeIntervalSince($0) < 300 }) == true && LoginItem.isEnabled {
+            Log.info("注销或关机：设了登录时启动，登录后会再打开，「\(profile.name)」留着")
             return
         }
         let desired = offDesired(mode: config.offMode)

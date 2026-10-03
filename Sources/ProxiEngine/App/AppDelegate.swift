@@ -9,6 +9,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Proxi 启动代理引擎并要打开设置时带的参数（已经在运行时 Proxi 发的是「重新打开」，见 applicationShouldHandleReopen）。
     /// 和 Proxi 那边的 ExtensionManager.showSettingsArgument 一样，改的时候一起改。
     static let showSettingsArgument = "--show-settings"
+    /// 带在 showSettingsArgument 后面，指定打开哪一页（SettingsPage 的 rawValue）。和 Proxi 那边的 ExtensionManager.settingsPageArgument 一样。
+    static let settingsPageArgument = "--settings-page"
 
     static func main() {
         // 带子命令运行（status、nodes、helper……）时是命令行工具，不启动界面。
@@ -31,6 +33,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private var signalSources: [DispatchSourceSignal] = []
+    private var pageRequestObserver: NSObjectProtocol?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         installSignalHandlers()
@@ -44,11 +47,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Log.info("代理引擎已启动，版本 \(UpdateChecker.currentVersion)，数据目录 \(Store.directory.path)")
         // CI 按这一行确认界面语言（sample 是菜单里「设置…」的译文）。
         Log.info("界面语言 english=\(AppLanguage.isEnglish) sample=\"\(L("设置…"))\"")
+        // Proxi 的侧边栏里点了这边的某一页：运行中时经分布式通知打开那一页，刚启动时经启动参数。
+        pageRequestObserver = SettingsWindowSync.observeEnginePageRequests { page in
+            SettingsWindowController.shared.show(page: SettingsPage(rawValue: page))
+        }
         if CommandLine.arguments.contains(Self.showSettingsArgument) {
-            SettingsWindowController.shared.show(page: nil)
+            SettingsWindowController.shared.show(page: Self.requestedPage(CommandLine.arguments))
         } else if ProcessInfo.processInfo.environment["PROXI_ENGINE_SHOW_SETTINGS"] == "1" {
             SettingsWindowController.shared.show(page: .nodes)
         }
+    }
+
+    /// 启动参数里 settingsPageArgument 后面的那一页。
+    static func requestedPage(_ arguments: [String]) -> SettingsPage? {
+        guard let index = arguments.firstIndex(of: settingsPageArgument), index + 1 < arguments.count else { return nil }
+        return SettingsPage(rawValue: arguments[index + 1])
     }
 
     /// 再次打开程序（Proxi 的菜单、面板或扩展页里点「代理引擎设置…」、Finder 里双击）时打开设置。

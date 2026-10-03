@@ -46,6 +46,74 @@ final class SettingsNavigation: ObservableObject {
     @Published var selectedProfileID: UUID?
 }
 
+/// 扩展「代理引擎」设置窗口的各页。扩展开着时和 Proxi 自己的页平铺在同一个侧边栏里，点了切到代理引擎的设置窗口
+/// （同一个位置、同样大小，见 SettingsWindowSync）。名字、图标、顺序和代理引擎那边的 SettingsPage 一致，改的时候一起改。
+enum EnginePage: String, CaseIterable {
+    case nodes
+    case rules
+    case share
+    case connections
+    case diagnose
+    case advanced
+    case core
+
+    var title: String {
+        switch self {
+        case .nodes: return L("节点与订阅")
+        case .rules: return L("分流规则")
+        case .share: return L("局域网共享")
+        case .connections: return L("连接")
+        case .diagnose: return L("网址诊断")
+        case .advanced: return L("高级")
+        case .core: return L("内核")
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .nodes: return "antenna.radiowaves.left.and.right"
+        case .rules: return "arrow.triangle.branch"
+        case .share: return "wifi.router"
+        case .connections: return "list.bullet.rectangle"
+        case .diagnose: return "stethoscope"
+        case .advanced: return "slider.horizontal.3"
+        case .core: return "cpu"
+        }
+    }
+}
+
+/// 侧边栏里的一项：Proxi 自己的页，或者扩展开着时代理引擎的页。
+enum SidebarItem: Hashable {
+    case proxi(SettingsPage)
+    case engine(EnginePage)
+
+    /// 扩展开着时代理引擎的页接在「扩展」后面，和其他项平铺；关着时不显示。代理引擎那边的侧边栏是同样的顺序。
+    static func all(extensionEnabled: Bool) -> [SidebarItem] {
+        var items: [SidebarItem] = []
+        for page in SettingsPage.allCases {
+            items.append(.proxi(page))
+            if page == .extensions, extensionEnabled {
+                items += EnginePage.allCases.map { .engine($0) }
+            }
+        }
+        return items
+    }
+
+    var title: String {
+        switch self {
+        case .proxi(let page): return page.title
+        case .engine(let page): return page.title
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .proxi(let page): return page.symbol
+        case .engine(let page): return page.symbol
+        }
+    }
+}
+
 /// 设置窗口：透明标题栏、全尺寸内容，内容是 SwiftUI。
 @MainActor
 final class SettingsWindowController: NSObject, NSWindowDelegate {
@@ -132,9 +200,9 @@ struct SettingsRootView: View {
 
     var body: some View {
         NavigationSplitView {
-            List(SettingsPage.allCases, selection: pageSelection) { page in
-                Label(page.title, systemImage: page.symbol)
-                    .tag(page)
+            List(SidebarItem.all(extensionEnabled: state.persisted.extensionState.enabled), id: \.self, selection: sidebarSelection) { item in
+                Label(item.title, systemImage: item.symbol)
+                    .tag(item)
             }
             .listStyle(.sidebar)
             .navigationSplitViewColumnWidth(min: AppLanguage.width(170, english: 190), ideal: AppLanguage.width(190, english: 215), max: 260)
@@ -159,8 +227,15 @@ struct SettingsRootView: View {
         .frame(minWidth: 760, minHeight: 520)
     }
 
-    private var pageSelection: Binding<SettingsPage?> {
-        Binding(get: { navigation.page }, set: { if let page = $0 { navigation.page = page } })
+    /// 选中代理引擎的页时切到它的设置窗口（这个窗口随之关掉），选中的仍是这边的页。
+    private var sidebarSelection: Binding<SidebarItem?> {
+        Binding(get: { .proxi(navigation.page) }, set: { item in
+            switch item {
+            case .proxi(let page): navigation.page = page
+            case .engine(let page): state.extensions.showSettings(page: page.rawValue)
+            case nil: break
+            }
+        })
     }
 
     @ViewBuilder

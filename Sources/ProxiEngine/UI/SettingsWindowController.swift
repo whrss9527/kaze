@@ -2,6 +2,8 @@ import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
+/// 这边设置窗口的各页。和 Proxi 的页平铺在同一个侧边栏里（见 SidebarItem）；名字、图标、顺序和 Proxi 那边的 EnginePage 一致，改的时候一起改。
+/// 以前单独的「通用」（通知、本机控制接口）并进了「高级」，「关于」并进了「内核」，免得和 Proxi 的「通用」「关于」重复。
 enum SettingsPage: String, CaseIterable, Identifiable {
     case nodes
     case rules
@@ -10,8 +12,6 @@ enum SettingsPage: String, CaseIterable, Identifiable {
     case diagnose
     case advanced
     case core
-    case general
-    case about
 
     var id: String { rawValue }
 
@@ -24,8 +24,6 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         case .diagnose: return L("网址诊断")
         case .advanced: return L("高级")
         case .core: return L("内核")
-        case .general: return L("通用")
-        case .about: return L("关于")
         }
     }
 
@@ -38,8 +36,80 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         case .diagnose: return "stethoscope"
         case .advanced: return "slider.horizontal.3"
         case .core: return "cpu"
+        }
+    }
+}
+
+/// Proxi 设置窗口的各页（和 Proxi 那边的 SettingsPage 一致：名字、图标、顺序、rawValue），列在这边的侧边栏里，点了切回 Proxi 的设置窗口。
+enum ProxiPage: String, CaseIterable {
+    case profiles
+    case automation
+    case general
+    case hotkey
+    case sync
+    case extensions
+    case diagnostics
+    case about
+
+    var title: String {
+        switch self {
+        case .profiles: return L("代理配置")
+        case .automation: return L("自动化")
+        case .general: return L("通用")
+        case .hotkey: return L("快捷键")
+        case .sync: return L("iCloud 同步")
+        case .extensions: return L("扩展")
+        case .diagnostics: return L("诊断")
+        case .about: return L("关于")
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .profiles: return "point.3.connected.trianglepath.dotted"
+        case .automation: return "wand.and.stars"
         case .general: return "gearshape"
+        case .hotkey: return "keyboard"
+        case .sync: return "icloud"
+        case .extensions: return "puzzlepiece.extension"
+        case .diagnostics: return "stethoscope"
         case .about: return "info.circle"
+        }
+    }
+
+    /// 在 Proxi 里打开这一页；Proxi 的设置窗口显示出来后，这边的窗口随之关掉（见 SettingsWindowSync）。
+    func open() {
+        NSWorkspace.shared.open(URL(string: "proxi://settings?page=\(rawValue)")!)
+    }
+}
+
+/// 侧边栏里的一项。和 Proxi 的设置窗口当成同一个窗口：两边的侧边栏是同一份平铺的列表，这边的页接在 Proxi 的「扩展」后面。
+enum SidebarItem: Hashable {
+    case proxi(ProxiPage)
+    case engine(SettingsPage)
+
+    static var all: [SidebarItem] {
+        var items: [SidebarItem] = []
+        for page in ProxiPage.allCases {
+            items.append(.proxi(page))
+            if page == .extensions {
+                items += SettingsPage.allCases.map { .engine($0) }
+            }
+        }
+        return items
+    }
+
+    var title: String {
+        switch self {
+        case .proxi(let page): return page.title
+        case .engine(let page): return page.title
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .proxi(let page): return page.symbol
+        case .engine(let page): return page.symbol
         }
     }
 }
@@ -114,7 +184,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         let root = SettingsRootView(state: AppState.shared, navigation: navigation)
         let hosting = NSHostingController(rootView: root)
         let window = NSWindow(contentViewController: hosting)
-        window.title = L("代理引擎设置")
+        // 和 Proxi 的设置窗口同一个标题：两边当成同一个窗口。
+        window.title = L("Proxi 设置")
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
@@ -135,31 +206,21 @@ struct SettingsRootView: View {
 
     var body: some View {
         NavigationSplitView {
-            List(SettingsPage.allCases, selection: pageSelection) { page in
-                Label(page.title, systemImage: page.symbol)
-                    .tag(page)
+            List(SidebarItem.all, id: \.self, selection: sidebarSelection) { item in
+                Label(item.title, systemImage: item.symbol)
+                    .tag(item)
             }
             .listStyle(.sidebar)
             .navigationSplitViewColumnWidth(min: AppLanguage.width(170, english: 190), ideal: AppLanguage.width(190, english: 215), max: 260)
             .safeAreaInset(edge: .top) {
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(spacing: 8) {
-                        Image(nsImage: NSApp.applicationIconImage)
-                            .resizable()
-                            .frame(width: 28, height: 28)
-                        Text(L("代理引擎"))
-                            .font(.system(size: 14, weight: .semibold))
-                        Spacer()
-                    }
-                    // 和 Proxi 的设置当成同一个窗口：切回 Proxi 的设置（扩展页），这个窗口随之关掉。
-                    Button {
-                        MenuActions.shared.openProxiExtensions(nil)
-                    } label: {
-                        Label(L("返回 Proxi 设置"), systemImage: "chevron.backward")
-                            .font(.system(size: 12))
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.secondary)
+                // 和 Proxi 的设置窗口一样的抬头：两边当成同一个窗口。
+                HStack(spacing: 8) {
+                    Image(nsImage: NSApp.applicationIconImage)
+                        .resizable()
+                        .frame(width: 28, height: 28)
+                    Text("Proxi")
+                        .font(.system(size: 14, weight: .semibold))
+                    Spacer()
                 }
                 .padding(.horizontal, 14)
                 .padding(.top, 34)
@@ -185,8 +246,15 @@ struct SettingsRootView: View {
         }
     }
 
-    private var pageSelection: Binding<SettingsPage?> {
-        Binding(get: { navigation.page }, set: { if let page = $0 { navigation.page = page } })
+    /// 选中 Proxi 的页时切回 Proxi 的设置窗口（这个窗口随之关掉），选中的仍是这边的页。
+    private var sidebarSelection: Binding<SidebarItem?> {
+        Binding(get: { .engine(navigation.page) }, set: { item in
+            switch item {
+            case .engine(let page): navigation.page = page
+            case .proxi(let page): page.open()
+            case nil: break
+            }
+        })
     }
 
     @ViewBuilder
@@ -199,8 +267,6 @@ struct SettingsRootView: View {
         case .diagnose: DiagnosePage(state: state, engine: state.engine, navigation: navigation)
         case .advanced: AdvancedPage(state: state, engine: state.engine, navigation: navigation)
         case .core: CorePage(state: state, core: state.core, engine: state.engine)
-        case .general: GeneralPage(state: state)
-        case .about: AboutPage(state: state)
         }
     }
 }
@@ -225,43 +291,32 @@ struct PageHeader: View {
     }
 }
 
-// MARK: - 通用
+// MARK: - 通知与本机控制接口
 
-struct GeneralPage: View {
+/// 以前单独的「通用」页：通知和本机控制接口，现在放在「高级」页的最后。
+struct GeneralSections: View {
     @ObservedObject var state: AppState
 
     var body: some View {
-        VStack(spacing: 0) {
-            PageHeader(title: L("通用"), subtitle: L("通知、本机控制接口"))
-            Form {
-                Section(L("通知")) {
-                    Picker(L("通知"), selection: $state.config.notifyLevel) {
-                        ForEach(NotifyLevel.allCases) { level in
-                            Text(level.title).tag(level)
-                        }
-                    }
-                }
-                Section(L("本机控制接口")) {
-                    Picker(L("权限"), selection: $state.config.automation.permission) {
-                        ForEach(ControlPermission.allCases) { permission in
-                            Text(permission.title).tag(permission)
-                        }
-                    }
-                    Text(L("在终端里直接运行代理引擎程序里的二进制并带上子命令（比如 status、nodes），经这个接口操作正在运行的代理引擎；只有你这个账户能连。完整的用法："))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Text(Shell.shellQuote(AdminCommand.executablePath) + " help")
-                        .font(.system(size: 11, design: .monospaced))
-                        .textSelection(.enabled)
-                }
-                Section(L("界面语言")) {
-                    Text(L("跟 Proxi 的界面语言一致，在 Proxi 的「设置 → 通用」里改。"))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+        Section(L("通知")) {
+            Picker(L("通知"), selection: $state.config.notifyLevel) {
+                ForEach(NotifyLevel.allCases) { level in
+                    Text(level.title).tag(level)
                 }
             }
-            .formStyle(.grouped)
-            .scrollContentBackground(.hidden)
+        }
+        Section(L("本机控制接口")) {
+            Picker(L("权限"), selection: $state.config.automation.permission) {
+                ForEach(ControlPermission.allCases) { permission in
+                    Text(permission.title).tag(permission)
+                }
+            }
+            Text(L("在终端里直接运行代理引擎程序里的二进制并带上子命令（比如 status、nodes），经这个接口操作正在运行的代理引擎；只有你这个账户能连。完整的用法："))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text(Shell.shellQuote(AdminCommand.executablePath) + " help")
+                .font(.system(size: 11, design: .monospaced))
+                .textSelection(.enabled)
         }
     }
 }
@@ -279,6 +334,7 @@ struct CorePage: View {
         VStack(spacing: 0) {
             PageHeader(title: L("内核"), subtitle: L("内核 mihomo 和 GeoIP 数据库不打包在程序里，第一次运行时从上游的发布下载并校验"))
             Form {
+                AboutSection()
                 Section(L("内核")) {
                     LabeledContent(L("版本"), value: CorePin.version)
                     LabeledContent(L("状态")) { phaseView }
@@ -355,39 +411,19 @@ struct CorePage: View {
 
 // MARK: - 关于
 
-struct AboutPage: View {
-    @ObservedObject var state: AppState
-
+/// 以前单独的「关于」页：代理引擎的版本、说明和许可证，现在是「内核」页的第一节。
+struct AboutSection: View {
     var body: some View {
-        VStack(spacing: 0) {
-            PageHeader(title: L("关于"), subtitle: L("代理引擎（Proxi 的扩展）"))
-            ScrollView {
-                VStack(spacing: 16) {
-                    Image(nsImage: NSApp.applicationIconImage)
-                        .resizable()
-                        .frame(width: 96, height: 96)
-                    Text(L("代理引擎"))
-                        .font(.system(size: 20, weight: .bold))
-                    Text(L("版本 %@ · 内核 %@", UpdateChecker.currentVersion, CorePin.version))
-                        .foregroundStyle(.secondary)
-                    Text(L("Proxi 的可选扩展：本机运行的代理引擎，由 Proxi 下载、启动和更新。在 Proxi 的「设置 → 扩展」里可以关闭或移除。"))
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: 380)
-                    HStack(spacing: 10) {
-                        Button(L("说明")) { NSWorkspace.shared.open(AppInfo.documentationURL) }
-                        Button(L("内核项目主页")) { NSWorkspace.shared.open(AppInfo.coreProjectURL) }
-                    }
-                    Text("GPL-3.0 License")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(28)
-                .glassCard(cornerRadius: 20)
-                .padding(24)
+        Section(L("代理引擎")) {
+            LabeledContent(L("版本"), value: UpdateChecker.currentVersion)
+            Text(L("Proxi 的可选扩展：本机运行的代理引擎，由 Proxi 下载、启动和更新。在 Proxi 的「设置 → 扩展」里可以关闭或移除。"))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            HStack {
+                Button(L("说明")) { NSWorkspace.shared.open(AppInfo.documentationURL) }
+                Text("GPL-3.0 License")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
     }

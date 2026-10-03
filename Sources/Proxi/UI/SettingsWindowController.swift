@@ -208,7 +208,7 @@ struct GeneralPage: View {
                 Section(L("启动")) {
                     Toggle(L("登录时自动启动"), isOn: Binding(get: { state.loginItemEnabled }, set: { state.setLoginItem($0) }))
                     Toggle(L("退出 Proxi 时关闭代理"), isOn: $state.config.disableOnExit)
-                    Text(L("一键更新、换界面语言后重新启动时什么都不关，代理接着开着。"))
+                    Text(L("一键更新、换界面语言后重新启动时什么都不关；设了登录时启动的，注销、重新启动电脑或关机也不关，登录后接着用。"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
